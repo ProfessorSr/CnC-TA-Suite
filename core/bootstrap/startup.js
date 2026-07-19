@@ -6,6 +6,7 @@ import { NotificationService } from '../windows/notifications.js';
 import { UIService } from '../ui/ui.js';
 import { GameService } from '../game/game.js';
 import { HookRegistry } from '../hooks/hooks.js';
+import { ObserverRegistry } from '../hooks/observers.js';
 import { ModuleLoader } from './loader.js';
 
 export async function createApplication({ eventBus, logger }) {
@@ -31,6 +32,7 @@ export async function createApplication({ eventBus, logger }) {
   const notifications = new NotificationService();
   const ui = new UIService({ windowManager: windows, notifications });
   const hooks = new HookRegistry(logger.child('Hooks'));
+  const observers = new ObserverRegistry(logger.child('Observers'));
   const game = new GameService({ eventBus, logger: logger.child('Game') });
 
   const context = {
@@ -43,6 +45,7 @@ export async function createApplication({ eventBus, logger }) {
     notifications,
     ui,
     hooks,
+    observers,
     game
   };
 

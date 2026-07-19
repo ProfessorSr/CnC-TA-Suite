@@ -4,6 +4,7 @@ import { logger } from '../utils/logger.js';
 import { Lifecycle } from './lifecycle.js';
 import { createApplication } from './startup.js';
 
+const VERSION = '0.3.0-dev';
 let applicationPromise = null;
 
 export function bootstrap() {
@@ -20,19 +21,23 @@ export function bootstrap() {
     try {
       await context.game.initialize();
     } catch (error) {
-      logger.warn('Game integration is not ready yet. Core UI will still start.', error);
+      logger.warn(
+        'Game integration is not ready yet. Core UI will still start.',
+        error
+      );
     }
 
     await context.modules.startEnabled();
     lifecycle.transition('ready');
 
     window.CnCTASuite = Object.freeze({
-      version: '0.2.0',
-      context
+      version: VERSION,
+      context,
+      game: context.game.api
     });
 
-    eventBus.emit(Events.SUITE_READY, { version: '0.2.0' });
-    context.notifications.show('CnC-TA-Suite v0.2.0 is ready.');
+    eventBus.emit(Events.SUITE_READY, { version: VERSION });
+    context.notifications.show(`CnC-TA-Suite ${VERSION} is ready.`);
     logger.info('CnC-TA-Suite is ready.');
     return context;
   })().catch((error) => {

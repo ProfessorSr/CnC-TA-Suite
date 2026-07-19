@@ -1,31 +1,36 @@
-import { ClientLibService } from '../clientlib/clientlib.js';
-import { PlayerService } from './player.js';
-import { CityService } from './city.js';
-import { WorldService } from './world.js';
-import { GameScanner } from './scanner.js';
-import { getGameVersion } from './version.js';
-import { Events } from '../events/eventTypes.js';
+import { GameIntegration } from './gameIntegration.js';
 
 export class GameService {
   constructor({ eventBus, logger }) {
-    this.eventBus = eventBus;
-    this.logger = logger;
-    this.clientLib = new ClientLibService(logger.child('ClientLib'));
-    this.ready = false;
+    this.integration = new GameIntegration({ eventBus, logger });
   }
 
+  get ready() { return this.integration.ready; }
+  get version() { return this.integration.version?.normalized || 'unknown'; }
+  get compatibility() { return this.integration.compatibility; }
+  get services() { return this.integration.services; }
+  get objects() { return this.integration.objects; }
+  get api() { return this.integration.getPublicApi(); }
+
+  get player() { return this.api?.player; }
+  get city() { return this.api?.city; }
+  get world() { return this.api?.world; }
+  get alliance() { return this.api?.alliance; }
+  get base() { return this.api?.base; }
+  get battle() { return this.api?.battle; }
+  get selection() { return this.api?.selection; }
+  get events() { return this.integration.eventBus; }
+
   async initialize() {
-    await this.clientLib.initialize();
-    this.player = new PlayerService(this.clientLib);
-    this.city = new CityService(this.clientLib);
-    this.world = new WorldService(this.clientLib);
-    this.scanner = new GameScanner({ world: this.world, logger: this.logger });
-    this.version = getGameVersion();
-    this.ready = true;
-    this.eventBus.emit(Events.GAME_READY, {
-      version: this.version,
-      playerName: this.player.getName()
-    });
+    await this.integration.initialize();
     return this;
   }
+
+  shutdown() {
+    this.integration.shutdown();
+  }
+
+  getService(name) { return this.integration.getService(name); }
+  getObject(name) { return this.integration.getObject(name); }
+  getStatus() { return this.integration.getStatus(); }
 }
