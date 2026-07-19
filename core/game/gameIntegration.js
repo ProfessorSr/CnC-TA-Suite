@@ -19,6 +19,7 @@ import { registerBattleServices } from './battle/registerBattleServices.js';
 import { createGameApi } from './public/gameApi.js';
 import { GameStateMonitor } from './events/gameStateMonitor.js';
 import { Events } from '../events/eventTypes.js';
+import { IntegrationWatchdog } from './recovery/integrationWatchdog.js';
 
 export class GameIntegration {
   constructor({ eventBus, logger }) {
@@ -30,6 +31,8 @@ export class GameIntegration {
     this.compatibility = null;
     this.api = null;
     this.monitor = null;
+    this.watchdog = null;
+    this.initializing = null;
 
     this.services = new ServiceRegistry({
       logger: logger.child('Services')
@@ -103,6 +106,18 @@ export class GameIntegration {
   }
 
   async initialize() {
+    if (this.ready) return this;
+    if (this.initializing) return this.initializing;
+
+    this.initializing = this.performInitialize();
+    try {
+      return await this.initializing;
+    } finally {
+      this.initializing = null;
+    }
+  }
+
+  async performInitialize() {
     this.eventBus.emit(Events.GAME_DISCOVERY_STARTED);
 
     try {
@@ -181,23 +196,41 @@ export class GameIntegration {
         logger: this.logger.child('StateMonitor')
       });
 
+      this.watchdog = new IntegrationWatchdog({
+        integration: this,
+        eventBus: this.eventBus,
+        logger: this.logger.child('Watchdog')
+      });
+
       this.ready = true;
       this.monitor.start();
+      this.watchdog.start();
 
       const payload = this.getStatus();
       this.eventBus.emit(Events.GAME_READY, payload);
       this.logger.info('Game integration layer initialized.');
       return this;
     } catch (error) {
+      this.watchdog?.stop();
+      this.monitor?.stop();
+      this.watchdog = null;
+      this.monitor = null;
+      this.ready = false;
+      this.services.clear();
+      this.objects.clear();
+      this.api = null;
       this.eventBus.emit(Events.GAME_ERROR, { error });
       throw error;
     }
   }
 
   shutdown() {
+    this.watchdog?.stop();
     this.monitor?.stop();
+    this.services.tryGet('cache')?.clear?.();
+    this.watchdog = null;
     this.monitor = null;
-    this.services.get('cache')?.clear?.();
+    this.initializing = null;
     this.ready = false;
   }
 
@@ -220,7 +253,9 @@ export class GameIntegration {
       compatibility: this.compatibility,
       services: this.services.snapshot(),
       objects: this.objects.snapshot(),
-      monitoring: Boolean(this.monitor)
+      monitoring: Boolean(this.monitor),
+      monitor: this.monitor?.getStatus?.() ?? null,
+      watchdog: this.watchdog?.getStatus?.() ?? null
     });
   }
 }

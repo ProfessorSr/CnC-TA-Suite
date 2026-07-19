@@ -1,5 +1,7 @@
 # Project Tree
 
+Generated from the source repository. Build output in `dist/` and local metadata such as `.git/` and `.DS_Store` are intentionally omitted.
+
 ```text
 CnC-TA-Suite/
 ├── .github/
@@ -9,20 +11,114 @@ CnC-TA-Suite/
 │   └── workflows/
 │       └── validate.yml
 ├── assets/
-│   ├── icons/
-│   ├── images/
-│   └── themes/
+│   └── .gitkeep
 ├── core/
 │   ├── bootstrap/
+│   │   ├── bootstrap.js
+│   │   ├── lifecycle.js
+│   │   ├── loader.js
+│   │   └── startup.js
 │   ├── clientlib/
+│   │   ├── clientLibManager.js
+│   │   ├── clientlib.js
+│   │   ├── discovery.js
+│   │   ├── qxManager.js
+│   │   └── wrappers.js
+│   ├── diagnostics/
+│   │   └── diagnosticsService.js
 │   ├── events/
+│   │   ├── eventBus.js
+│   │   ├── eventTypes.js
+│   │   ├── publisher.js
+│   │   └── subscriber.js
 │   ├── game/
+│   │   ├── alliance/
+│   │   │   └── allianceService.js
+│   │   ├── base/
+│   │   │   └── baseService.js
+│   │   ├── battle/
+│   │   │   ├── battleObjectRegistry.js
+│   │   │   ├── battleService.js
+│   │   │   ├── formationModel.js
+│   │   │   ├── registerBattleServices.js
+│   │   │   └── unitModel.js
+│   │   ├── cache/
+│   │   │   └── cacheManager.js
+│   │   ├── city/
+│   │   │   └── cityService.js
+│   │   ├── compatibility/
+│   │   │   ├── compatibilityDetector.js
+│   │   │   ├── compatibilityRules.js
+│   │   │   └── versionManager.js
+│   │   ├── discovery/
+│   │   │   ├── environmentDiscovery.js
+│   │   │   ├── objectDiscovery.js
+│   │   │   └── readinessProbe.js
+│   │   ├── events/
+│   │   │   └── gameStateMonitor.js
+│   │   ├── player/
+│   │   │   └── playerService.js
+│   │   ├── public/
+│   │   │   └── gameApi.js
+│   │   ├── recovery/
+│   │   │   └── integrationWatchdog.js
+│   │   ├── registry/
+│   │   │   ├── gameObjectRegistry.js
+│   │   │   └── serviceRegistry.js
+│   │   ├── selection/
+│   │   │   └── selectionManager.js
+│   │   ├── startup/
+│   │   │   └── startupSynchronizer.js
+│   │   ├── world/
+│   │   │   └── worldService.js
+│   │   ├── city.js
+│   │   ├── game.js
+│   │   ├── gameIntegration.js
+│   │   ├── objects.js
+│   │   ├── player.js
+│   │   ├── scanner.js
+│   │   ├── version.js
+│   │   └── world.js
 │   ├── hooks/
+│   │   ├── hooks.js
+│   │   ├── injector.js
+│   │   └── observers.js
+│   ├── settings/
+│   │   ├── defaults.js
+│   │   ├── schema.js
+│   │   ├── settings.js
+│   │   └── validator.js
 │   ├── storage/
+│   │   ├── chromeStorage.js
+│   │   ├── localStorage.js
+│   │   ├── migration.js
+│   │   └── storage.js
 │   ├── theme/
+│   │   ├── colors.js
+│   │   ├── fonts.js
+│   │   ├── icons.js
+│   │   ├── spacing.js
+│   │   └── theme.js
 │   ├── ui/
+│   │   ├── components.js
+│   │   ├── contextMenu.js
+│   │   ├── controls.js
+│   │   ├── dialogs.js
+│   │   ├── toolbar.js
+│   │   └── ui.js
 │   ├── utils/
+│   │   ├── dom.js
+│   │   ├── helpers.js
+│   │   ├── logger.js
+│   │   ├── timers.js
+│   │   └── version.js
 │   └── windows/
+│       ├── docking.js
+│       ├── draggable.js
+│       ├── modal.js
+│       ├── notifications.js
+│       ├── resizable.js
+│       └── windowManager.js
 ├── docs/
 │   ├── 01 - Project/
 │   │   ├── Goals.md
@@ -64,8 +160,15 @@ CnC-TA-Suite/
 │   │   ├── JavaScript.md
 │   │   ├── Releases.md
 │   │   ├── Reviews.md
-│   │   └── Testing.md
+│   │   ├── Testing.md
+│   │   ├── v0.3.0 Integration Audit.md
+│   │   └── v0.3.0 Part 5 Validation.md
 │   ├── 05 - Modules/
+│   │   ├── Game Integration/
+│   │   │   ├── Part 1 - Core Discovery.md
+│   │   │   ├── Part 2 - Services.md
+│   │   │   ├── Part 3 - Battle and Selection.md
+│   │   │   └── Part 4 - Events and Hooks.md
 │   │   ├── API.md
 │   │   ├── Battle Simulator.md
 │   │   ├── Defense.md
@@ -89,33 +192,47 @@ CnC-TA-Suite/
 │       ├── ADR-0003.md
 │       └── ADR-Template.md
 ├── manifest/
-│   ├── chrome/
-│   │   ├── bridge.js
-│   │   ├── manifest.json
-│   │   ├── suite.css
-│   │   └── suite.js
-│   └── userscript/
+│   └── chrome/
+│       ├── bridge.js
+│       ├── manifest.json
+│       ├── suite.css
+│       └── suite.js
 ├── modules/
-│   ├── battle-simulator/
-│   ├── formations/
 │   ├── launcher/
-│   ├── settings/
-│   ├── statistics/
+│   │   ├── launcher.css
+│   │   ├── launcher.js
+│   │   └── launcherWindow.js
 │   └── suite-status/
+│       ├── suiteStatus.css
+│       ├── suiteStatus.js
+│       └── suiteStatusWindow.js
 ├── scripts/
-│   ├── build/
-│   ├── development/
-│   └── release/
+│   └── build/
+│       └── build-extension.mjs
 ├── tests/
 │   ├── integration/
+│   │   ├── bootstrap.test.md
+│   │   ├── gameIntegration.test.md
+│   │   └── part3-battle-api.test.md
 │   ├── mocks/
+│   │   └── gameGlobals.js
 │   └── unit/
+│       ├── battleObjectRegistry.test.js
+│       ├── cacheManager.test.js
+│       ├── compatibilityDetector.test.js
+│       ├── eventBus.test.js
+│       ├── eventBusDiagnostics.test.js
+│       ├── formationModel.test.js
+│       ├── gameObjectRegistry.test.js
+│       ├── serviceRegistry.test.js
+│       └── unitModel.test.js
 ├── .editorconfig
 ├── .gitignore
 ├── CHANGELOG.md
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
 ├── LICENSE
+├── PART
 ├── PROJECT_TREE.md
 ├── README.md
 ├── SECURITY.md

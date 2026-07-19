@@ -8,6 +8,7 @@ import { GameService } from '../game/game.js';
 import { HookRegistry } from '../hooks/hooks.js';
 import { ObserverRegistry } from '../hooks/observers.js';
 import { ModuleLoader } from './loader.js';
+import { DiagnosticsService } from '../diagnostics/diagnosticsService.js';
 
 export async function createApplication({ eventBus, logger }) {
   const storage = new StorageService(logger.child('Storage'));
@@ -56,6 +57,13 @@ export async function createApplication({ eventBus, logger }) {
   });
   modules.registerBuiltIns();
   context.modules = modules;
+  context.diagnostics = new DiagnosticsService({
+    eventBus,
+    game,
+    hooks,
+    observers,
+    logger: logger.child('Diagnostics')
+  });
 
   return context;
 }

@@ -33,7 +33,11 @@ export function bootstrap() {
     window.CnCTASuite = Object.freeze({
       version: VERSION,
       context,
-      game: context.game.api
+      game: context.game.api,
+      diagnostics: Object.freeze({
+        snapshot: () => context.diagnostics.snapshot(),
+        health: () => context.diagnostics.health()
+      })
     });
 
     eventBus.emit(Events.SUITE_READY, { version: VERSION });

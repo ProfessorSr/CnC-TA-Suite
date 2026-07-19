@@ -25,6 +25,9 @@ export class GameStateMonitor {
     this.interval = interval;
     this.timer = null;
     this.previous = null;
+    this.tickCount = 0;
+    this.errorCount = 0;
+    this.lastTickAt = null;
   }
 
   capture() {
@@ -117,11 +120,14 @@ export class GameStateMonitor {
 
   tick() {
     try {
+      this.lastTickAt = Date.now();
+      this.tickCount += 1;
       const current = this.capture();
       this.emitChanges(this.previous, current);
       this.previous = current;
       this.eventBus.emit(Events.GAME_TICK, current);
     } catch (error) {
+      this.errorCount += 1;
       this.logger.warn('Game state monitor tick failed.', error);
     }
   }
@@ -132,6 +138,16 @@ export class GameStateMonitor {
     this.timer = window.setInterval(() => this.tick(), this.interval);
     this.logger.info('Central game state monitor started.', {
       interval: this.interval
+    });
+  }
+
+  getStatus() {
+    return Object.freeze({
+      running: Boolean(this.timer),
+      interval: this.interval,
+      tickCount: this.tickCount,
+      errorCount: this.errorCount,
+      lastTickAt: this.lastTickAt
     });
   }
 

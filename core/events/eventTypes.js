@@ -8,6 +8,8 @@ export const Events = Object.freeze({
   GAME_COMPATIBILITY_CHECKED: 'game:compatibility-checked',
   GAME_READY: 'game:ready',
   GAME_ERROR: 'game:error',
+  GAME_CONNECTION_LOST: 'game:connection-lost',
+  GAME_CONNECTION_RESTORED: 'game:connection-restored',
   GAME_STATE_INITIALIZED: 'game:state-initialized',
   GAME_TICK: 'game:tick',
 

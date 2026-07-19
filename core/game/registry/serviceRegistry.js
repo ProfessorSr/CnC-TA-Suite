@@ -46,6 +46,15 @@ export class ServiceRegistry {
     return this.services.has(name) || this.factories.has(name);
   }
 
+  tryGet(name) {
+    return this.has(name) ? this.get(name) : null;
+  }
+
+  clear() {
+    this.services.clear();
+    this.factories.clear();
+  }
+
   entries() {
     return [...this.services.entries()];
   }
