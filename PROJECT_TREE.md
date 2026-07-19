@@ -83,6 +83,19 @@ CnC-TA-Suite/
 │   │   ├── hooks.js
 │   │   ├── injector.js
 │   │   └── observers.js
+│   ├── interfaces/
+│   │   └── module.js
+│   ├── modules/
+│   │   ├── dependencyResolver.js
+│   │   ├── index.js
+│   │   ├── moduleContext.js
+│   │   ├── moduleEvents.js
+│   │   ├── moduleLoader.js
+│   │   ├── moduleManager.js
+│   │   ├── moduleManifest.js
+│   │   ├── modulePermissions.js
+│   │   ├── moduleRegistry.js
+│   │   └── moduleSettings.js
 │   ├── settings/
 │   │   ├── defaults.js
 │   │   ├── schema.js
@@ -220,12 +233,19 @@ CnC-TA-Suite/
 │       ├── battleObjectRegistry.test.js
 │       ├── cacheManager.test.js
 │       ├── compatibilityDetector.test.js
+│       ├── dependencyResolver.test.js
 │       ├── eventBus.test.js
 │       ├── eventBusDiagnostics.test.js
 │       ├── formationModel.test.js
 │       ├── gameObjectRegistry.test.js
+│       ├── moduleEvents.test.js
+│       ├── moduleManager.test.js
+│       ├── moduleManifest.test.js
+│       ├── modulePermissions.test.js
+│       ├── moduleSettings.test.js
 │       ├── serviceRegistry.test.js
-│       └── unitModel.test.js
+│       ├── unitModel.test.js
+│       └── versionManager.test.js
 ├── .editorconfig
 ├── .gitignore
 ├── CHANGELOG.md

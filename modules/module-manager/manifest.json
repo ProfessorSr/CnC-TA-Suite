@@ -1,0 +1,16 @@
+{
+  "id": "module-manager",
+  "name": "Module Manager",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "author": "CnC-TA-Suite",
+  "description": "Lists installed modules and allows them to be enabled or disabled at runtime.",
+  "dependencies": [],
+  "permissions": [
+    "modules",
+    "settings",
+    "windows",
+    "notifications"
+  ],
+  "settings": {}
+}

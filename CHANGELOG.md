@@ -2,6 +2,36 @@
 
 Notable changes to CnC-TA-Suite are recorded here. The project uses semantic versioning; development-part labels describe milestones and are not releases by themselves.
 
+## [0.4.0] - 2026-07-19
+
+### Added
+
+- Full module lifecycle with manifest validation, registration, loading, enabling, disabling, unloading, and destruction.
+- Dependency ordering with missing-dependency and circular-dependency detection.
+- Module-scoped permissions, settings, logging, events, and automatic event-subscription cleanup.
+- Automatic module discovery and generated module catalog during extension builds.
+- Native Qooxdoo Module Manager for viewing, opening, enabling, and disabling installed modules.
+- Native Module Manager entry in the game's top navigation bar with delayed attachment while the game UI initializes.
+- Qooxdoo readiness synchronization before suite services start.
+- Reference Sample module and automated module-loading integration coverage.
+- Unit coverage for the module runtime, Qooxdoo window content, delayed top-bar discovery, and game-UI readiness.
+
+### Changed
+
+- Migrated shared windows, notifications, dialogs, controls, menus, toolbar components, and status views to the game's Qooxdoo UI system.
+- Updated suite windows to use readable white foreground text with the native game theme.
+- Moved Suite Status access into Module Manager and removed its redundant top-bar and Launcher entries.
+- Stopped Launcher from opening automatically; it remains available on demand through Module Manager.
+- Unified persisted module enabled states with the boolean settings format used during startup.
+- Reworked bootstrap to wait for the Qooxdoo application and start automatically discovered modules.
+
+### Fixed
+
+- Fatal startup failures when the extension loaded before Qooxdoo was available.
+- Launcher failures caused by passing HTML elements to the Qooxdoo window manager.
+- Module toggles attempting to create an `enabled` property on boolean settings.
+- Top-bar links failing to appear when navigation was created after module registration.
+
 ## [0.3.0] - Release candidate
 
 Live-game verification remains mandatory before 0.3.0 is tagged.

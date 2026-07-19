@@ -1,20 +1,24 @@
-import { element } from '../../core/utils/dom.js';
 import { button } from '../../core/ui/components.js';
 
 export function buildLauncherWindow(context) {
-  const content = element('div', { className: 'cnc-suite-grid' });
+  const qx = globalThis.qx;
+  const content = new qx.ui.container.Composite(
+    new qx.ui.layout.VBox(10)
+  );
 
-  content.append(
-    element('div', {
-      text: 'CnC-TA-Suite',
-      attributes: { style: 'font-size:18px;font-weight:800;' }
-    }),
-    element('div', {
-      className: 'cnc-suite-muted',
-      text: 'Core framework launcher'
-    }),
-    button('Suite Status', () => context.modules.modules.get('suite-status')?.open(context), { accent: true }),
-    button('Show Notification', () => context.notifications.show('Core services are operational.'))
+  const heading = new qx.ui.basic.Label('CnC-TA-Suite');
+  heading.set({ font: 'bold', rich: true });
+
+  const description = new qx.ui.basic.Label('Core framework launcher');
+  description.set({ wrap: true });
+
+  content.add(heading);
+  content.add(description);
+  content.add(
+    button(
+      'Show Notification',
+      () => context.notifications.show('Core services are operational.')
+    )
   );
 
   return content;

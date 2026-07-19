@@ -3,8 +3,9 @@ import { Events } from '../events/eventTypes.js';
 import { logger } from '../utils/logger.js';
 import { Lifecycle } from './lifecycle.js';
 import { createApplication } from './startup.js';
+import { waitForGameUi } from './gameUiReady.js';
 
-const VERSION = '0.3.0-dev';
+const VERSION = '0.4.0';
 let applicationPromise = null;
 
 export function bootstrap() {
@@ -15,6 +16,7 @@ export function bootstrap() {
     lifecycle.transition('bootstrapping');
     eventBus.emit(Events.SUITE_BOOTSTRAP_STARTED);
 
+    await waitForGameUi();
     const context = await createApplication({ eventBus, logger });
     context.lifecycle = lifecycle;
 

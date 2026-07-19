@@ -4,11 +4,14 @@ import { ThemeService } from '../theme/theme.js';
 import { WindowManager } from '../windows/windowManager.js';
 import { NotificationService } from '../windows/notifications.js';
 import { UIService } from '../ui/ui.js';
+import { TopBarService } from '../ui/topBar.js';
+import { DialogService } from '../ui/dialogs.js';
 import { GameService } from '../game/game.js';
 import { HookRegistry } from '../hooks/hooks.js';
 import { ObserverRegistry } from '../hooks/observers.js';
-import { ModuleLoader } from './loader.js';
+import { ModuleManager } from '../modules/moduleManager.js';
 import { DiagnosticsService } from '../diagnostics/diagnosticsService.js';
+import { registeredModules } from '../modules/moduleCatalog.generated.js';
 
 export async function createApplication({ eventBus, logger }) {
   const storage = new StorageService(logger.child('Storage'));
@@ -31,7 +34,14 @@ export async function createApplication({ eventBus, logger }) {
   });
 
   const notifications = new NotificationService();
-  const ui = new UIService({ windowManager: windows, notifications });
+  const topBar = new TopBarService({ logger: logger.child('TopBar') });
+  const dialogs = new DialogService();
+  const ui = new UIService({
+    windowManager: windows,
+    notifications,
+    topBar,
+    dialogs
+  });
   const hooks = new HookRegistry(logger.child('Hooks'));
   const observers = new ObserverRegistry(logger.child('Observers'));
   const game = new GameService({ eventBus, logger: logger.child('Game') });
@@ -44,25 +54,36 @@ export async function createApplication({ eventBus, logger }) {
     theme,
     windows,
     notifications,
+    topBar,
+    dialogs,
     ui,
     hooks,
     observers,
     game
   };
 
-  const modules = new ModuleLoader({
+  const modules = new ModuleManager({
     eventBus,
     logger: logger.child('Modules'),
     context
   });
-  modules.registerBuiltIns();
+  modules.registerMany(registeredModules.map((ModuleClass) => new ModuleClass()));
   context.modules = modules;
+  context.modulePermissions = modules.permissions;
+  context.moduleSettings = modules.moduleSettings;
   context.diagnostics = new DiagnosticsService({
     eventBus,
     game,
     hooks,
     observers,
     logger: logger.child('Diagnostics')
+  });
+
+  topBar.registerLink({
+    id: 'module-manager',
+    label: 'Module Manager',
+    order: 10,
+    onExecute: () => modules.open('module-manager')
   });
 
   return context;

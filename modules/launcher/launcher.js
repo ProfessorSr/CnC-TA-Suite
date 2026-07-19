@@ -6,10 +6,8 @@ export class LauncherModule {
     this.settingsKey = 'launcher';
   }
 
-  async start(context) {
-    if (context.settings.get('general.showLauncherOnStartup', true)) {
-      await this.open(context);
-    }
+  async start() {
+    // Launcher is available on demand from Module Manager.
   }
 
   async open(context) {

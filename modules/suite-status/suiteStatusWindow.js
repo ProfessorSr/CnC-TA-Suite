@@ -1,14 +1,22 @@
-import { element } from '../../core/utils/dom.js';
 import { statusRow } from '../../core/ui/components.js';
 
 export function buildSuiteStatusWindow(context) {
-  const list = element('ul', { className: 'cnc-suite-status-list' });
+  const qx = globalThis.qx;
+  const content = new qx.ui.container.Composite(
+    new qx.ui.layout.VBox(8)
+  );
   const diagnostics = context.diagnostics.snapshot();
   const health = context.diagnostics.health();
   const gameStatus = diagnostics.game;
   const compatible = gameStatus.compatibility?.compatible ?? false;
 
-  list.append(
+  const description = new qx.ui.basic.Label(
+    'Live framework, integration, cache, event, and lifecycle diagnostics'
+  );
+  description.set({ wrap: true });
+  content.add(description);
+
+  const rows = [
     statusRow('Overall Health', health.healthy ? 'Healthy' : 'Needs Attention', health.healthy),
     statusRow('Bootstrap', 'Ready', true),
     statusRow('Game Integration', gameStatus.ready ? 'Ready' : 'Waiting', gameStatus.ready),
@@ -35,16 +43,8 @@ export function buildSuiteStatusWindow(context) {
     statusRow('Event Listeners', String(diagnostics.eventBus?.listenerCount ?? 0), true),
     statusRow('Event Errors', String(diagnostics.eventBus?.failed ?? 0), (diagnostics.eventBus?.failed ?? 0) === 0),
     statusRow('Hooks / Observers', `${diagnostics.hooks.length} / ${diagnostics.observers.length}`, true)
-  );
+  ];
 
-  return element('div', {
-    className: 'cnc-suite-grid',
-    children: [
-      element('p', {
-        className: 'cnc-suite-muted',
-        text: 'Live framework, integration, cache, event, and lifecycle diagnostics'
-      }),
-      list
-    ]
-  });
+  for (const row of rows) content.add(row);
+  return content;
 }
