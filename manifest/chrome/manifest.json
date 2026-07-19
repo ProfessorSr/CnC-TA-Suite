@@ -1,15 +1,44 @@
 {
   "manifest_version": 3,
   "name": "CnC-TA-Suite",
-  "version": "0.1.0",
-  "description": "Modern modular tools for Command & Conquer: Tiberium Alliances.",
-  "content_scripts": [{
-    "matches": ["https://*.alliances.commandandconquer.com/*", "http://*.alliances.commandandconquer.com/*"],
-    "js": ["bridge.js"],
-    "run_at": "document_start"
-  }],
-  "web_accessible_resources": [{
-    "resources": ["suite.js", "suite.css"],
-    "matches": ["https://*.alliances.commandandconquer.com/*", "http://*.alliances.commandandconquer.com/*"]
-  }]
+  "version": "0.2.0",
+  "description": "A modular Chrome extension framework for Command & Conquer: Tiberium Alliances.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.alliances.commandandconquer.com/*",
+    "https://*.tiberiumalliances.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.alliances.commandandconquer.com/*",
+        "https://*.tiberiumalliances.com/*"
+      ],
+      "js": [
+        "manifest/chrome/bridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "manifest/chrome/suite.js",
+        "manifest/chrome/suite.css",
+        "core/**/*.js",
+        "modules/**/*.js",
+        "modules/**/*.css",
+        "assets/**/*"
+      ],
+      "matches": [
+        "https://*.alliances.commandandconquer.com/*",
+        "https://*.tiberiumalliances.com/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_title": "CnC-TA-Suite"
+  }
 }
