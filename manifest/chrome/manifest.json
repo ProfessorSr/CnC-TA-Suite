@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "CnC-TA-Suite",
+  "version": "0.1.0",
+  "description": "Modern modular tools for Command & Conquer: Tiberium Alliances.",
+  "content_scripts": [{
+    "matches": ["https://*.alliances.commandandconquer.com/*", "http://*.alliances.commandandconquer.com/*"],
+    "js": ["bridge.js"],
+    "run_at": "document_start"
+  }],
+  "web_accessible_resources": [{
+    "resources": ["suite.js", "suite.css"],
+    "matches": ["https://*.alliances.commandandconquer.com/*", "http://*.alliances.commandandconquer.com/*"]
+  }]
+}
