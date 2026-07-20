@@ -17,11 +17,13 @@ export class GameStateMonitor {
     eventBus,
     services,
     logger,
+    performance,
     interval = 500
   }) {
     this.eventBus = eventBus;
     this.services = services;
     this.logger = logger;
+    this.performance = performance;
     this.interval = interval;
     this.timer = null;
     this.previous = null;
@@ -119,6 +121,7 @@ export class GameStateMonitor {
   }
 
   tick() {
+    const started = globalThis.performance?.now?.() ?? Date.now();
     try {
       this.lastTickAt = Date.now();
       this.tickCount += 1;
@@ -129,6 +132,8 @@ export class GameStateMonitor {
     } catch (error) {
       this.errorCount += 1;
       this.logger.warn('Game state monitor tick failed.', error);
+    } finally {
+      this.performance?.record?.('game-state.tick', (globalThis.performance?.now?.() ?? Date.now()) - started);
     }
   }
 

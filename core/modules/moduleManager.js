@@ -94,7 +94,10 @@ export class ModuleManager {
     if (typeof module.open !== 'function') {
       throw new Error(`Module does not expose an open() method: ${id}`);
     }
-    return module.open(this.context);
+    const profiler = this.context.game?.services?.tryGet?.('performance');
+    return profiler?.measureAsync
+      ? profiler.measureAsync('module.open', () => module.open(this.context))
+      : module.open(this.context);
   }
 
   getModuleContext(module) {
@@ -136,7 +139,9 @@ export class ModuleManager {
     try {
       const moduleContext = this.getModuleContext(module);
       if (typeof module.enable === 'function') {
-        await module.enable(moduleContext);
+        const profiler = this.context.game?.services?.tryGet?.('performance');
+        if (profiler?.measureAsync) await profiler.measureAsync('module.enable', () => module.enable(moduleContext));
+        else await module.enable(moduleContext);
       } else if (typeof module.start === 'function') {
         // Compatibility with v0.3 built-in modules.
         await module.start(this.context);

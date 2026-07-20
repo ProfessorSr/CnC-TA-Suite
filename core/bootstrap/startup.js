@@ -81,7 +81,10 @@ export async function createApplication({ eventBus, logger }) {
     game,
     hooks,
     observers,
-    logger: logger.child('Diagnostics')
+    logger: logger.child('Diagnostics'),
+    rootLogger: logger,
+    modules,
+    hub
   });
 
   topBar.registerLink({

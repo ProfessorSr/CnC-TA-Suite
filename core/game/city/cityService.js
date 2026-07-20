@@ -1,9 +1,10 @@
 export class CityService {
-  constructor({ clientLib, cache, objectDiscovery, logger }) {
+  constructor({ clientLib, cache, objectDiscovery, logger, performance }) {
     this.clientLib = clientLib;
     this.cache = cache;
     this.objectDiscovery = objectDiscovery;
     this.logger = logger;
+    this.performance = performance;
   }
 
   manager() {
@@ -65,7 +66,8 @@ export class CityService {
   }
 
   all() {
-    return this.allRaw().map((city) => this.describe(city)).filter(Boolean);
+    const operation = () => this.allRaw().map((city) => this.describe(city)).filter(Boolean);
+    return this.performance?.measure?.('city.normalize-all', operation) ?? operation();
   }
 
   find(id) {

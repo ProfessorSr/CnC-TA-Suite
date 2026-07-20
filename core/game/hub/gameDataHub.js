@@ -2,6 +2,8 @@ function firstCall(clientLib, target, methodNames, ...args) {
   return clientLib?.call?.(target, methodNames, ...args) ?? null;
 }
 
+import { HUB_API_VERSION, validateHubSnapshot } from './hubContract.js';
+
 function freezeRecord(value) {
   return Object.freeze({ ...value });
 }
@@ -127,6 +129,7 @@ export class GameDataHub {
   }
 
   snapshot() {
+    const started = globalThis.performance?.now?.() ?? Date.now();
     const services = this.game?.services;
     const playerService = services?.tryGet?.('player');
     const clientLib = services?.tryGet?.('clientLib');
@@ -206,7 +209,8 @@ export class GameDataHub {
       ? Math.ceil((creditsRemaining / creditGrowthPerHour) * 3600)
       : null;
 
-    return Object.freeze({
+    const snapshot = Object.freeze({
+      schemaVersion: HUB_API_VERSION,
       ready: Boolean(this.game?.ready),
       generatedAt: Date.now(),
       player: freezeRecord({
@@ -248,6 +252,10 @@ export class GameDataHub {
       selection: this.game?.selection?.snapshot?.() ?? null,
       battle: this.game?.battle?.state?.() ?? null
     });
+    const contract = validateHubSnapshot(snapshot);
+    if (!contract.valid) this.logger?.warn?.('Hub snapshot contract failed.', contract);
+    services?.tryGet?.('performance')?.record?.('hub.snapshot', (globalThis.performance?.now?.() ?? Date.now()) - started);
+    return snapshot;
   }
 
   getSnapshot() {

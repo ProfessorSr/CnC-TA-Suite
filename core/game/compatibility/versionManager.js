@@ -1,3 +1,5 @@
+import { assessClientBuild } from './clientBuildRegistry.js';
+
 function firstPresent(candidates) {
   return candidates.find(
     (value) => value !== undefined
@@ -113,7 +115,7 @@ export class VersionManager {
     const normalized = known ? String(raw).trim() : 'unknown';
     const runtimeFingerprint = this.createRuntimeFingerprint(server);
 
-    const result = Object.freeze({
+    const detected = {
       raw: raw ?? null,
       normalized,
       known,
@@ -122,7 +124,8 @@ export class VersionManager {
       display: known
         ? normalized
         : `Unknown (${runtimeFingerprint})`
-    });
+    };
+    const result = Object.freeze({ ...detected, support: assessClientBuild(detected) });
 
     this.logger.info('Game version detected.', result);
     return result;

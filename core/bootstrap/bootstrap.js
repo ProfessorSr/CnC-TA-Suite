@@ -38,7 +38,9 @@ export function bootstrap() {
       game: context.game.api,
       diagnostics: Object.freeze({
         snapshot: () => context.diagnostics.snapshot(),
-        health: () => context.diagnostics.health()
+        health: () => context.diagnostics.health(),
+        supportBundle: () => context.diagnostics.supportBundle(),
+        exportJson: () => context.diagnostics.exportJson()
       })
     });
 

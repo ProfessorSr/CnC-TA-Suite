@@ -1,6 +1,8 @@
 const ID_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+import { apiCompatibility, moduleApiCompatibility } from './moduleApiPolicy.js';
+import { HUB_API_VERSION } from '../game/hub/hubContract.js';
 
 function asStringArray(value, field) {
   if (value === undefined) return [];
@@ -21,6 +23,7 @@ export class ModuleManifest {
     const name = source.name ?? module.name ?? id;
     const version = source.version ?? module.version ?? '0.0.0';
     const apiVersion = source.apiVersion ?? module.apiVersion ?? '1.0.0';
+    const hubApiVersion = source.hubApiVersion ?? module.hubApiVersion ?? '1.0.0';
     const dependencies = asStringArray(source.dependencies ?? module.dependencies, 'dependencies');
     const permissions = asStringArray(source.permissions ?? module.permissions, 'permissions');
     const settings = source.settings ?? module.settingsSchema ?? {};
@@ -38,6 +41,17 @@ export class ModuleManifest {
     if (typeof apiVersion !== 'string' || !VERSION_PATTERN.test(apiVersion)) {
       throw new TypeError(`Module "${id}" has an invalid API version: ${apiVersion}`);
     }
+    if (typeof hubApiVersion !== 'string' || !VERSION_PATTERN.test(hubApiVersion)) {
+      throw new TypeError(`Module "${id}" has an invalid Hub API version: ${hubApiVersion}`);
+    }
+    const suiteApiCompatibility = moduleApiCompatibility(apiVersion);
+    if (!suiteApiCompatibility.compatible) {
+      throw new TypeError(`Module "${id}" requires Suite API ${apiVersion}; this Suite supports ${suiteApiCompatibility.supported}.`);
+    }
+    const hubCompatibility = apiCompatibility(hubApiVersion, HUB_API_VERSION);
+    if (!hubCompatibility.compatible) {
+      throw new TypeError(`Module "${id}" requires Hub API ${hubApiVersion}; this Suite publishes ${HUB_API_VERSION}.`);
+    }
     if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
       throw new TypeError(`Module "${id}" settings must be an object.`);
     }
@@ -50,6 +64,9 @@ export class ModuleManifest {
       name: name.trim(),
       version,
       apiVersion,
+      hubApiVersion,
+      apiCompatibility: suiteApiCompatibility,
+      hubCompatibility,
       author: typeof source.author === 'string' ? source.author.trim() : '',
       lastUpdated,
       description: typeof source.description === 'string' ? source.description.trim() : '',

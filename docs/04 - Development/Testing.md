@@ -10,7 +10,7 @@ Run:
 node --test tests/unit/*.test.js tests/integration/*.test.js
 ```
 
-The v0.4.0 release review completed with **29 passing tests and no failures**. The current post-release suite contains **66 passing automated tests**.
+The stabilization suite contains **81 automated tests** covering feature behavior, compatibility contracts, diagnostics, and performance budgets.
 
 Automated coverage includes:
 
@@ -24,6 +24,9 @@ Automated coverage includes:
 - battle unit and formation models.
 - War Room formation recommendation, native-result ranking, resource labels, health normalization, and Qooxdoo-shaped simulation callback normalization;
 - API Inspector snapshot cloning, mutable-object omission, cyclic-data handling, and sensitive-field redaction;
+- versioned Client API capability fixtures and graceful optional-capability loss;
+- Hub schema validation and module/Hub API compatibility enforcement;
+- structured logger history and large-account performance budgets;
 
 ## Build validation
 

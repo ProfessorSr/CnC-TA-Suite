@@ -6,7 +6,7 @@ export class CompatibilityDetector {
     this.rules = rules;
   }
 
-  evaluate(environment, version) {
+  evaluate(environment, version, adapterReport = null) {
     const results = this.rules.map((rule) => {
       let passed = false;
       let error = null;
@@ -31,10 +31,12 @@ export class CompatibilityDetector {
     );
 
     const report = Object.freeze({
-      compatible: blockingFailures.length === 0,
+      compatible: blockingFailures.length === 0 && (adapterReport?.compatible ?? true),
       version,
+      adapter: adapterReport,
       results: Object.freeze(results),
-      blockingFailures: Object.freeze(blockingFailures)
+      blockingFailures: Object.freeze(blockingFailures),
+      degradedCapabilities: Object.freeze(Object.values(adapterReport?.capabilities ?? {}).filter((item) => !item.supported && !item.required))
     });
 
     if (!report.compatible) {
