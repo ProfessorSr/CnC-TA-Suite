@@ -1,0 +1,20 @@
+{
+  "id": "tactical-map",
+  "name": "Tactical Map",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "author": "ProfessorSr",
+  "lastUpdated": "2026-07-20",
+  "description": "Regional map, relationship colors, POI filters, target lines, and PvP quick-map mode.",
+  "permissions": ["game", "storage", "settings", "windows"],
+  "settings": {
+    "radius": { "type": "number", "default": 25, "min": 5, "max": 75 },
+    "zoom": { "type": "number", "default": 10, "min": 4, "max": 24 },
+    "minLevel": { "type": "number", "default": 1, "min": 1, "max": 100 },
+    "showForgotten": { "type": "boolean", "default": true },
+    "showPlayers": { "type": "boolean", "default": true },
+    "showPois": { "type": "boolean", "default": true },
+    "showLines": { "type": "boolean", "default": true },
+    "pvpOnly": { "type": "boolean", "default": false }
+  }
+}

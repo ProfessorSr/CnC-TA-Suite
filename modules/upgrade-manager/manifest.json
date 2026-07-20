@@ -1,0 +1,23 @@
+{
+  "id": "upgrade-manager",
+  "name": "Upgrade Manager",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "author": "ProfessorSr",
+  "lastUpdated": "2026-07-20",
+  "description": "Plan, filter, rank, and manually apply upgrades across owned bases.",
+  "dependencies": [],
+  "permissions": ["events", "game", "notifications", "settings", "windows"],
+  "settings": {
+    "categoryBuildings": { "type": "boolean", "default": true },
+    "categoryDefense": { "type": "boolean", "default": true },
+    "categoryOffense": { "type": "boolean", "default": true },
+    "affordableOnly": { "type": "boolean", "default": false },
+    "resourceOnly": { "type": "boolean", "default": false },
+    "strategy": { "type": "string", "default": "productive", "enum": ["productive", "collector-heavy", "power-heavy", "lowest-cost", "highest-level"] },
+    "targetLevel": { "type": "number", "default": 65, "min": 1, "max": 80 },
+    "baseStates": { "type": "object", "default": {} },
+    "typeStates": { "type": "object", "default": {} },
+    "baseTypeStates": { "type": "object", "default": {} }
+  }
+}

@@ -1,72 +1,56 @@
 # CnC-TA-Suite
 
-CnC-TA-Suite is a modular Chrome extension framework for [Command & Conquer: Tiberium Alliances](https://www.tiberiumalliances.com/). It provides shared game integration, lifecycle, storage, UI, and diagnostics services on which suite modules can be built.
+CnC-TA-Suite is a modular Chrome extension for Command & Conquer: Tiberium Alliances. It modernizes long-lived community-tool workflows behind shared game-data services and native Qooxdoo interfaces that fit the game client.
 
-The current release is **v0.4.0**.
+Current version: **v0.4.0**
 
-## Current capabilities
+## Highlights
 
-- Discovers ClientLib and qooxdoo safely and waits for the game to become ready.
-- Exposes player, city, world, alliance, selection, battle, unit, and formation APIs.
-- Publishes game-state events and manages duplicate-safe hooks and observers.
-- Provides shared caching, settings, storage, themes, windows, notifications, dialogs, and top-bar integration.
-- Reports event-bus, cache, state-monitor, and integration-watchdog diagnostics.
-- Discovers modules automatically during the extension build.
-- Manages module manifests, dependencies, permissions, settings, and complete lifecycle transitions.
-- Adds a native **Module Manager** entry to the game's top navigation bar.
-- Uses the game's Qooxdoo UI and theme for suite windows, notifications, controls, and dialogs.
-- Includes Module Manager, Suite Status, Launcher, and reference Sample modules. Launcher and Suite Status open on demand from Module Manager.
+- Native Module Manager with independently enabled modules and a read-only API Inspector for public snapshots and redacted diagnostics.
+- Shared Game Data Hub that keeps ClientLib access out of presentation and calculation code.
+- War Room with target discovery, live target authority, attack planning, formation presets, native simulation, replay, reports, army analysis, and combat history.
+- Scanner for bases, camps, outposts, infected camps, alliance targets, layouts, levels, distance, and CP filters.
+- Base Intelligence, Repair & Collection, Upgrade Manager, Resource Transfer, Layout Optimizer, Next MCV, Alliance Intelligence, Context Actions, Combat Reports, Tactical Map, Support Manager, Communications, and other focused tools.
+- Native-style shortcut controls that appear only for enabled modules.
 
-The page-context API is available at `window.CnCTASuite.game`. Runtime diagnostics are available through `window.CnCTASuite.diagnostics` and the Suite Status module.
+The generated catalog currently contains **22 modules**. Legacy feature coverage and intentionally excluded automation are tracked in [script_functions.md](script_functions.md).
 
-## Repository layout
+## War Room simulation boundary
 
-| Path | Purpose |
-| --- | --- |
-| `core/` | Bootstrap, module runtime, game integration, storage, events, diagnostics, Qooxdoo UI, and shared services |
-| `modules/` | User-facing suite modules |
-| `manifest/chrome/` | Chrome Manifest V3 entry points and extension assets |
-| `docs/` | Project specifications, architecture, development guidance, and API references |
-| `tests/` | Node unit tests and manual integration checklists |
-| `scripts/build/` | Extension build tooling |
+War Room generates formation candidates, edits previews, ranks outcomes, and caches results locally. Actual battle outcomes come from the game's native `SimulateBattle` command. Consequently, EA receives every uncached Quick, Detailed, Exhaustive, live, or manual-preview simulation request.
 
-Implementation follows the approved specifications in `docs/`. Start with [Architecture](docs/02%20-%20Architecture/Architecture.md), [Game Integration](docs/06%20-%20Reference/Game%20Integration.md), and [Testing](docs/04%20-%20Development/Testing.md).
+Simulation does not launch an attack. Applying a previewed formation is a separate, explicit, confirmed action.
 
-## Build and install
+## Architecture
 
-Requirements: a current Node.js release and Google Chrome or another Chromium-based browser that supports Manifest V3.
+The principal data flow is:
 
-1. Build the unpacked extension:
+```text
+ClientLib → shared game services / Game Data Hub → module calculations → Qooxdoo UI
+```
 
-   ```bash
-   node scripts/build/build-extension.mjs
-   ```
+Modules should use the scoped context and Hub instead of querying ClientLib directly. Use tracked `context.events` subscriptions, Suite storage/settings, and the shared window and notification services.
 
-2. Open `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Select **Load unpacked** and choose `dist/chrome`.
-5. Open a supported Tiberium Alliances game page.
+See [docs/modules.md](docs/modules.md), [Architecture](docs/02%20-%20Architecture/Architecture.md), and the [documentation index](DOCUMENTATION_INDEX.md) for details.
 
-Re-run the build after changing source files, then reload the extension from the extensions page.
+## Development
 
-## Test
-
-Run all automated unit and integration tests with Node's built-in test runner:
+Run the automated suite:
 
 ```bash
 node --test tests/unit/*.test.js tests/integration/*.test.js
 ```
 
-The Markdown files in `tests/integration/` are manual live-game checklists. Confirm the Module Manager top-bar entry, native windows, module toggles, persisted settings, and game integration behavior before publishing a release.
+Build the unpacked Chrome extension:
 
-## Development
+```bash
+node scripts/build/build-extension.mjs
+```
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes. Keep core services independent of feature modules, use the shared registries and event bus instead of parallel globals, and update the relevant specification when behavior changes.
+The output is written to `dist/chrome`. Load that directory as an unpacked extension and perform the live-game checks documented under `tests/integration/`.
 
-Modules are described by manifests and discovered by `scripts/build/generate-module-catalog.mjs`; do not edit the generated catalog manually. Module development guidance is available in [docs/modules.md](docs/modules.md).
+Do not edit generated module catalog or `dist/` files directly.
 
-Version metadata lives in `VERSION`, release-stage metadata in `PART`, and the browser-facing version in `manifest/chrome/manifest.json`. See [CHANGELOG.md](CHANGELOG.md) for release history.
+## Safety policy
 
-## License and security
-
-This project is distributed under the terms in [LICENSE](LICENSE). Report vulnerabilities according to [SECURITY.md](SECURITY.md).
+The Suite emphasizes read-only analysis and user-initiated actions. Prohibited or deferred automation—including automatic attacks, unattended upgrades, troop movement, account switching, and login/logout behavior—is identified in [script_functions.md](script_functions.md).

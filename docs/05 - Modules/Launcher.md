@@ -1,25 +1,5 @@
 # Launcher
 
->Status: Specification
+> Status: Implemented, on demand
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Launcher is a compatibility module that opens a small native Qooxdoo window and can demonstrate shared notifications. It no longer opens during page startup and is not a primary navigation surface. Users may open it from Module Manager while enabled. `start()` intentionally performs no UI work; `open()` delegates to `WindowManager`, which owns singleton behavior, geometry, and cleanup. New features should normally be linked from Module Manager rather than added to Launcher.

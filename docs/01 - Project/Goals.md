@@ -1,25 +1,24 @@
 # Goals
 
->Status: Specification
+> Status: Active for v0.4.0
 
-## Purpose
+## Product goals
 
-Define this area of the project before implementation begins.
+- Start reliably on supported Tiberium Alliances pages.
+- Present suite UI through the game's Qooxdoo theme.
+- Keep feature modules isolated from browser and discovery plumbing.
+- Offer documented player, city, world, alliance, base, selection, and battle APIs.
+- Preserve module settings and window geometry across reloads.
+- Detect compatibility failures without corrupting game state.
 
-## Scope
+## Engineering goals
 
-This specification is the authoritative design document for this subject.
+- Deterministic lifecycle and dependency ordering.
+- Explicit capability grants and automatic tracked-event cleanup.
+- Duplicate-safe hooks, observers, monitors, and caches.
+- Automated tests plus live-game release acceptance.
 
-## Sections
+## Non-goals
 
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+- Replacing the game client, bypassing authentication, or guaranteeing compatibility with every future game build.
+- Allowing modules to silently collect personal data or bypass core safety boundaries.

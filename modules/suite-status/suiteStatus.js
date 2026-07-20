@@ -3,6 +3,8 @@ import { buildSuiteStatusWindow } from './suiteStatusWindow.js';
 export class SuiteStatusModule {
   constructor() {
     this.id = 'suite-status';
+    this.version = '1.0.0';
+    this.author = 'ProfessorSr';
     this.settingsKey = 'suiteStatus';
   }
 

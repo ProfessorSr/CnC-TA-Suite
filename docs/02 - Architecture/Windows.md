@@ -1,25 +1,27 @@
 # Windows
 
->Status: Specification
+> Status: Implemented for v0.4.0
 
-## Purpose
+Suite windows use native `qx.ui.window.Window` widgets and are owned by `WindowManager`.
 
-Define this area of the project before implementation begins.
+## Responsibilities
 
-## Scope
+- singleton handling;
+- title, size, position, and content setup;
+- native moving and resizing;
+- optional geometry persistence;
+- event publication;
+- listener and timer cleanup;
+- destruction when closed.
 
-This specification is the authoritative design document for this subject.
+## Content contract
 
-## Sections
+Window content must be a Qooxdoo widget or a string converted to a wrapped label. Raw HTML elements are not accepted.
 
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
+## Persistence
 
+When `windows.rememberPositions` is enabled, geometry is stored under `window:<id>`. Move and resize writes are debounced.
+
+## Ownership
+
+The manager owns the window widget after opening it. Modules should close windows through the returned record or window service and should not maintain parallel DOM containers.

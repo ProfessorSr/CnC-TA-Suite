@@ -1,25 +1,7 @@
 # Logging
 
->Status: Specification
+> Status: Implemented for v0.4.0
 
-## Purpose
+The shared logger supports `debug`, `info`, `warn`, and `error` levels and prefixes messages with the suite and child scope. Core creates child loggers for services; `ModuleContext` creates `Module:<id>` scopes.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Use debug for discovery detail, info for completed state transitions, warn for recoverable degradation, and error for failed requested behavior. Error objects should be passed separately so stacks remain available. Never log storage credentials, authentication tokens, private messages, or unnecessary player data. The active threshold comes from `general.logLevel`.

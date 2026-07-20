@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented for v0.3.0 development.
+Implemented; current for v0.4.0.
 
 ## Purpose
 
@@ -33,6 +33,6 @@ CnCTASuite.context.game.getObject('player')
 CnCTASuite.context.game.getObject('world')
 ```
 
-## Release Acceptance
+## Current acceptance
 
-This part is not a standalone tagged release. It becomes eligible for the v0.3.0 release only after all remaining Game Integration parts are complete and the full Release Acceptance Policy passes.
+Automated discovery, readiness, version, and compatibility tests must pass. Releases also require live verification that the supported page exposes ClientLib, a Qooxdoo application, and ready MainData services before the timeout.

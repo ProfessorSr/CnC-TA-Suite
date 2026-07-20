@@ -1,25 +1,7 @@
 # Settings
 
->Status: Specification
+> Status: Implemented for v0.4.0
 
-## Purpose
+`SettingsService` loads the `settings` object, merges defaults, validates the fixed core schema, and restores defaults if validation fails. Paths use dot notation. Core module enabled states are booleans under `modules.<settingsKey>`.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Manifest settings are registered by `ModuleSettings`, stored under `moduleSettings.<moduleId>.<key>`, and validated for boolean, number, string, array, or object type plus supported enum/min/max constraints. Modules access them through `context.moduleSettings`. Changes are persisted before `settings:changed` is emitted. Schema evolution must include a migration or a compatible default.

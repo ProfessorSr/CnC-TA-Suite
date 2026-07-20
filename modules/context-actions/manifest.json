@@ -1,0 +1,28 @@
+{
+  "id": "context-actions",
+  "name": "Context Actions",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "author": "ProfessorSr",
+  "lastUpdated": "2026-07-20",
+  "description": "Adds configurable Suite actions to native map-object menus.",
+  "dependencies": [],
+  "permissions": ["events", "game", "hooks", "modules", "notifications", "settings", "storage", "windows"],
+  "settings": {
+    "showBaseInformation": { "type": "boolean", "default": true },
+    "showWarRoom": { "type": "boolean", "default": true },
+    "showTargetInfo": { "type": "boolean", "default": false },
+    "showScanNearby": { "type": "boolean", "default": true },
+    "showViewLayout": { "type": "boolean", "default": true },
+    "showCopyCoordinates": { "type": "boolean", "default": true },
+    "showRepairManager": { "type": "boolean", "default": true },
+    "showUpgradeManager": { "type": "boolean", "default": true },
+    "showLayoutOptimizer": { "type": "boolean", "default": true },
+    "showResourceTransfer": { "type": "boolean", "default": true },
+    "showPlanMove": { "type": "boolean", "default": true },
+    "showPlanRuin": { "type": "boolean", "default": true },
+    "showPlanRuinFor": { "type": "boolean", "default": true },
+    "showPlanLevel": { "type": "boolean", "default": true },
+    "showPlanRemove": { "type": "boolean", "default": true }
+  }
+}

@@ -1,25 +1,5 @@
 # Color System
 
->Status: Specification
+> Status: Baseline for v0.4.0
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Native game appearances are authoritative. Suite window content uses `#ffffff` foreground for readability; controls should inherit their Qooxdoo appearance. Success, warning, and error states must include text and may add green, amber, or red accents only when contrast is adequate. Avoid hard-coded backgrounds that conflict with the current game theme. Legacy tokens in `core/theme/colors.js` are compatibility helpers, not a separate theme contract.

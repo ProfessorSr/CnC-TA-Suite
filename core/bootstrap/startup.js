@@ -7,6 +7,9 @@ import { UIService } from '../ui/ui.js';
 import { TopBarService } from '../ui/topBar.js';
 import { DialogService } from '../ui/dialogs.js';
 import { GameService } from '../game/game.js';
+// Keep the query aligned with the suite release when the Hub contract changes.
+// Chrome may retain page-context ES modules by URL across extension reloads.
+import { GameDataHub } from '../game/hub/gameDataHub.js?v=0.4.0-hub8';
 import { HookRegistry } from '../hooks/hooks.js';
 import { ObserverRegistry } from '../hooks/observers.js';
 import { ModuleManager } from '../modules/moduleManager.js';
@@ -45,6 +48,7 @@ export async function createApplication({ eventBus, logger }) {
   const hooks = new HookRegistry(logger.child('Hooks'));
   const observers = new ObserverRegistry(logger.child('Observers'));
   const game = new GameService({ eventBus, logger: logger.child('Game') });
+  const hub = new GameDataHub({ game, logger: logger.child('Hub') });
 
   const context = {
     eventBus,
@@ -59,7 +63,8 @@ export async function createApplication({ eventBus, logger }) {
     ui,
     hooks,
     observers,
-    game
+    game,
+    hub
   };
 
   const modules = new ModuleManager({

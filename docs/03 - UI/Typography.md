@@ -1,25 +1,5 @@
 # Typography
 
->Status: Specification
+> Status: Baseline for v0.4.0
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Inherit the game font. Use bold for headings and important names, normal text for descriptions, and compact metadata for version/author/state. Labels should wrap where content can vary. Window content uses white foreground; disabled controls retain native appearance. Rich text is off by default and permitted only for trusted static content. Avoid all-caps paragraphs, excessive font sizes, and color-only emphasis.

@@ -1,3 +1,5 @@
+import { moduleStatus } from '../../core/modules/modulePresentation.js';
+
 const PROTECTED_MODULES = new Set(['module-manager']);
 
 function getQx() {
@@ -32,6 +34,10 @@ function moduleVersion(module) {
   return module.manifest?.version || module.version || '0.0.0';
 }
 
+function moduleUpdated(module) {
+  return module.manifest?.lastUpdated || module.lastUpdated || 'Unknown date';
+}
+
 function canOpenModule(module) {
   return (
     module.manifest?.window === true ||
@@ -54,6 +60,23 @@ async function openModule(context, module) {
   if (typeof module.open === 'function') {
     await module.open(context);
   }
+}
+
+function closeOpenModuleWindows(context, module) {
+  const windows = context.windows?.windows;
+  const ids = windows ? [...windows.keys()].filter((id) =>
+    id === module.id || id.startsWith(`${module.id}-`)
+  ) : [];
+  for (const id of ids) context.windows.close?.(id);
+  if (ids.length) return true;
+  const nativeWindows = [
+    module?.scannerWindow?.window,
+    module?.scannerWindow?.layoutWindow?.window,
+    module?.record?.window,
+    module?.window?.record?.window
+  ].filter((window) => window && !window.isDisposed?.() && window.isVisible?.() !== false);
+  for (const window of nativeWindows) window.close?.();
+  return nativeWindows.length > 0;
 }
 
 function createModuleRow(context, module, refresh) {
@@ -97,7 +120,7 @@ function createModuleRow(context, module, refresh) {
   information.add(nameLabel);
 
   const metadataLabel = new qx.ui.basic.Label(
-    `${moduleVersion(module)} · ${moduleAuthor(module)}`
+    `${moduleVersion(module)} · ${moduleAuthor(module)} · Updated ${moduleUpdated(module)}`
   );
 
   information.add(metadataLabel);
@@ -170,7 +193,7 @@ function createModuleRow(context, module, refresh) {
       openButton.setEnabled(false);
 
       try {
-        await openModule(context, module);
+        if (!closeOpenModuleWindows(context, module)) await openModule(context, module);
       } catch (error) {
         console.error(
           `[CnC-TA-Suite] Failed to open module "${module.id}".`,
@@ -203,9 +226,11 @@ function createModuleRow(context, module, refresh) {
 
   row.add(descriptionLabel);
 
+  const visibleState = moduleStatus(state);
   const stateLabel = new qx.ui.basic.Label(
-    `State: ${state}${isProtected ? ' · Required' : ''}`
+    `Status: ${visibleState.label}${isProtected ? ' · Required' : ''}`
   );
+  stateLabel.set({ textColor: visibleState.color });
 
   row.add(stateLabel);
 

@@ -1,25 +1,9 @@
 # Optimizer
 
->Status: Specification
+> Status: Implemented as bounded optimizers in War Room and Base Layout Optimizer
 
-## Purpose
+War Room searches bounded Quick, Detailed, and Exhaustive offensive formation sets. It generates whole-formation transforms, individual troop relocations, and swaps locally, deduplicates them, requests native battle outcomes, and ranks results against the selected CY, DF, CC, total-defense, or research/loot objective. A true one-shot result receives priority. The search reports progress and respects the native simulation cooldown.
 
-Define this area of the project before implementation begins.
+Base Layout Optimizer evaluates a native-style 9-by-4 owned-base grid against Tiberium, Crystal, Power, balanced, or custom weighted goals. It supports fixed buildings, replacement eligibility, storage minimums, move/replacement limits, production comparisons, costs, conflicts, and ranked alternatives.
 
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Both optimizers separate analysis from execution. Formation or building changes require an explicit, confirmed user action and never launch an attack. Data acquisition remains in shared Hub services.

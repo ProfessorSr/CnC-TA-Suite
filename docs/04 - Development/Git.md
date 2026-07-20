@@ -1,25 +1,5 @@
 # Git
 
->Status: Specification
+> Status: Active
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Commits should be atomic and use an imperative summary such as `fix: wait for Qooxdoo before bootstrap`. Include tests and docs with the behavior they describe. Do not commit secrets, `.DS_Store`, local extension profiles, or unrelated generated output. Do not hand-edit `core/modules/moduleCatalog.generated.js`; regenerate it through the build. Tag releases as `vMAJOR.MINOR.PATCH` only after metadata, tests, build, changelog, and live checks agree.

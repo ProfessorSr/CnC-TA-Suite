@@ -21,7 +21,7 @@ export class ModuleManagerModule extends Module {
       name: 'Module Manager',
       version: '1.0.0',
       apiVersion: '1.0.0',
-      author: 'CnC-TA-Suite',
+      author: 'ProfessorSr',
       description:
         'Lists installed modules and allows them to be enabled or disabled at runtime.',
       permissions: [

@@ -1,25 +1,7 @@
 # Performance
 
->Status: Specification
+> Status: Implemented baseline for v0.4.0
 
-## Purpose
+Game discovery polls at bounded intervals and times out. Top-bar discovery retries every 500 ms for at most 120 attempts. Game-state monitoring is centralized; modules must subscribe rather than add duplicate polling. Shared caches reduce repeated ClientLib reads, and move/resize persistence is debounced.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Module enable work should be short and asynchronous where needed. Avoid full widget-tree scans after attachment, unbounded event history, synchronous bulk storage, and per-frame ClientLib access. New recurring work must document its interval, ownership, cleanup, and expected cost and should be checked in a live world.

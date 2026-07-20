@@ -16,9 +16,11 @@ test('ModuleManifest normalizes valid metadata', () => {
   assert.equal(manifest.id, 'city.analyzer');
   assert.deepEqual(manifest.dependencies, ['core.data']);
   assert.deepEqual(manifest.permissions, ['game', 'events']);
+  assert.equal(manifest.lastUpdated, '2026-07-20');
 });
 
 test('ModuleManifest rejects invalid ids and versions', () => {
   assert.throws(() => ModuleManifest.normalize({ id: 'Bad ID', version: '1.0.0' }), /identifier/i);
   assert.throws(() => ModuleManifest.normalize({ id: 'valid', version: 'latest' }), /semantic version/i);
+  assert.throws(() => ModuleManifest.normalize({ id: 'valid', version: '1.0.0', lastUpdated: 'today' }), /last-updated/i);
 });

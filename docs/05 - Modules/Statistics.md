@@ -1,25 +1,7 @@
 # Statistics
 
->Status: Specification
+> Status: Implemented across War Room, Combat Reports, Base Intelligence, and diagnostics
 
-## Purpose
+War Room stores local battle history and favorite targets and presents outcome, defender and attacker health, loot, repair time, CP efficiency, duration, morale, and per-target trends. Combat Reports provides date/type/base filters and PvP/PvE aggregation. Base Intelligence presents current and owned-base production, storage, repair, condition, level, and composition data. Suite Status and diagnostics expose runtime event, service, module, hook, observer, and compatibility information.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Persistent statistics remain local to Suite storage. Export and clear operations require explicit user actions, and report data does not trigger automated game actions.

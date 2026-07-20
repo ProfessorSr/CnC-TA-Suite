@@ -103,7 +103,12 @@ export class WindowManager {
     width = 360,
     height = 400,
     resizable = true,
-    singleton = true
+    singleton = true,
+    showMinimize = false,
+    compactSize = {},
+    autoHide = false,
+    pinnable = true,
+    lockable = true
   }) {
     if (!id) {
       throw new Error('[CnC-TA-Suite] Window id is required.');
@@ -128,6 +133,10 @@ export class WindowManager {
 
     const qx = this.getQx();
     const parent = this.getWindowParent();
+    const resolvedCompactSize = {
+      width: compactSize.width ?? Math.min(width, 420),
+      height: compactSize.height ?? Math.min(height, 240)
+    };
 
     const rememberPositions = this.settings.get(
       'windows.rememberPositions',
@@ -145,9 +154,9 @@ export class WindowManager {
     win.set({
       width: saved?.width ?? width,
       height: saved?.height ?? height,
-      showMinimize: false,
+      showMinimize,
       showMaximize: false,
-      allowMinimize: false,
+      allowMinimize: showMinimize,
       allowMaximize: false,
       allowClose: true,
       modal: false,
@@ -157,6 +166,19 @@ export class WindowManager {
       resizableBottom: resizable,
       resizableLeft: resizable
     });
+
+    const windowState = {
+      pinned: Boolean(saved?.pinned),
+      locked: Boolean(saved?.locked),
+      compact: Boolean(saved?.compact),
+      autoHide: Boolean(saved?.autoHide ?? autoHide)
+    };
+    if (windowState.compact) {
+      win.setWidth(resolvedCompactSize.width);
+      win.setHeight(resolvedCompactSize.height);
+    }
+    win.setAlwaysOnTop?.(windowState.pinned);
+    win.setMovable?.(!windowState.locked);
 
     if (typeof win.setResizable === 'function') {
       win.setResizable(
@@ -189,8 +211,39 @@ export class WindowManager {
       body,
       persistenceTimer: null,
       close: () => this.close(id),
+      state: windowState,
       listenerIds: {}
     };
+
+    record.setPinned = (value) => {
+      if (!pinnable) return false;
+      windowState.pinned = Boolean(value);
+      win.setAlwaysOnTop?.(windowState.pinned);
+      persist();
+      return windowState.pinned;
+    };
+    record.setLocked = (value) => {
+      if (!lockable) return false;
+      windowState.locked = Boolean(value);
+      win.setMovable?.(!windowState.locked);
+      win.setResizable?.(!windowState.locked && resizable, !windowState.locked && resizable, !windowState.locked && resizable, !windowState.locked && resizable);
+      persist();
+      return windowState.locked;
+    };
+    record.setCompact = (value) => {
+      windowState.compact = Boolean(value);
+      if (windowState.compact) {
+        record.expandedSize = win.getBounds?.();
+        win.setWidth(resolvedCompactSize.width);
+        win.setHeight(resolvedCompactSize.height);
+      } else {
+        win.setWidth(record.expandedSize?.width ?? width);
+        win.setHeight(record.expandedSize?.height ?? height);
+      }
+      persist();
+      return windowState.compact;
+    };
+    record.setAutoHide = (value) => { windowState.autoHide = Boolean(value); persist(); return windowState.autoHide; };
 
     this.windows.set(id, record);
 
@@ -213,7 +266,9 @@ export class WindowManager {
           x: Math.round(layout.left ?? bounds.left ?? position.x),
           y: Math.round(layout.top ?? bounds.top ?? position.y),
           width: Math.round(bounds.width),
-          height: Math.round(bounds.height)
+          height: Math.round(bounds.height),
+          visible: win.isVisible?.() ?? true,
+          ...windowState
         }).catch((error) => {
           this.logger?.warn?.(
             `Failed to save position for window "${id}".`,
@@ -227,6 +282,15 @@ export class WindowManager {
 
     record.listenerIds.move = win.addListener('move', persist);
     record.listenerIds.resize = win.addListener('resize', persist);
+    record.listenerIds.activate = win.addListener('activate', () => {
+      if (record.autoHideTimer) { clearTimeout(record.autoHideTimer); record.autoHideTimer = null; }
+      win.show?.();
+    });
+    record.listenerIds.deactivate = win.addListener('deactivate', () => {
+      if (!windowState.autoHide) return;
+      clearTimeout(record.autoHideTimer);
+      record.autoHideTimer = setTimeout(() => win.exclude?.(), 350);
+    });
     record.listenerIds.close = win.addListener('close', () => {
       this.destroyRecord(id, record);
     });
@@ -251,6 +315,7 @@ export class WindowManager {
       clearTimeout(record.persistenceTimer);
       record.persistenceTimer = null;
     }
+    if (record.autoHideTimer) clearTimeout(record.autoHideTimer);
 
     if (win && !win.isDisposed?.()) {
       if (record.listenerIds?.close) {
@@ -264,6 +329,8 @@ export class WindowManager {
       if (record.listenerIds?.resize) {
         win.removeListenerById(record.listenerIds.resize);
       }
+      if (record.listenerIds?.activate) win.removeListenerById(record.listenerIds.activate);
+      if (record.listenerIds?.deactivate) win.removeListenerById(record.listenerIds.deactivate);
 
       win.destroy();
     }

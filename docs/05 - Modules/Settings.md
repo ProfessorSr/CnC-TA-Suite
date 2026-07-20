@@ -1,25 +1,5 @@
-# Settings
+# Settings Module
 
->Status: Specification
+> Status: Planned UI; core settings implemented
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Core settings and manifest-scoped module settings are implemented. A future Settings module should render registered schemas with native controls, descriptions, defaults, validation messages, reset actions, and persistence feedback. It must distinguish core settings from `moduleSettings.<id>`, use service APIs rather than mutate values, and confirm destructive resets. Secret values are out of scope because suite storage is not a credential vault.

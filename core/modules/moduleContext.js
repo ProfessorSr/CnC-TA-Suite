@@ -10,6 +10,7 @@ const CAPABILITIES = Object.freeze({
   hooks: 'hooks',
   observers: 'observers',
   game: 'game',
+  hub: 'game',
   modules: 'modules',
   diagnostics: 'diagnostics',
   qx: 'qx',

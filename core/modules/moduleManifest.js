@@ -1,5 +1,6 @@
 const ID_PATTERN = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function asStringArray(value, field) {
   if (value === undefined) return [];
@@ -23,6 +24,7 @@ export class ModuleManifest {
     const dependencies = asStringArray(source.dependencies ?? module.dependencies, 'dependencies');
     const permissions = asStringArray(source.permissions ?? module.permissions, 'permissions');
     const settings = source.settings ?? module.settingsSchema ?? {};
+    const lastUpdated = source.lastUpdated ?? module.lastUpdated ?? '2026-07-20';
 
     if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
       throw new TypeError('Module manifest "id" must be a lowercase identifier using letters, numbers, dots, underscores, or hyphens.');
@@ -39,6 +41,9 @@ export class ModuleManifest {
     if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
       throw new TypeError(`Module "${id}" settings must be an object.`);
     }
+    if (typeof lastUpdated !== 'string' || !DATE_PATTERN.test(lastUpdated)) {
+      throw new TypeError(`Module "${id}" has an invalid last-updated date: ${lastUpdated}`);
+    }
 
     return Object.freeze({
       id,
@@ -46,6 +51,7 @@ export class ModuleManifest {
       version,
       apiVersion,
       author: typeof source.author === 'string' ? source.author.trim() : '',
+      lastUpdated,
       description: typeof source.description === 'string' ? source.description.trim() : '',
       dependencies: Object.freeze(dependencies),
       permissions: Object.freeze(permissions),

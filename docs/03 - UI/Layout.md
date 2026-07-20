@@ -1,25 +1,5 @@
 # Layout
 
->Status: Specification
+> Status: Implemented baseline for v0.4.0
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Use Qooxdoo `VBox` for vertical content, `HBox` for rows/actions, `Grid` for aligned data, and `Grow` for single flexible content. Apply flex to the element intended to absorb extra space. Variable lists belong in `Scroll`. Windows define usable initial dimensions and persist user geometry when enabled. Avoid absolute positioning except window placement and native popups. Test narrow viewports, long labels, translated text, and missing optional data.

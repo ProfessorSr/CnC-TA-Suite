@@ -1,0 +1,1 @@
+{"id":"world-tools","name":"World Map Tools","version":"1.0.0","apiVersion":"1.0.0","author":"ProfessorSr","lastUpdated":"2026-07-20","description":"Coordinate navigation, compasses, sector HUD, zoom, and regional object inspection.","dependencies":[],"permissions":["game","settings","windows"],"settings":{"zoom":{"type":"number","default":1,"min":0.2,"max":3}}}

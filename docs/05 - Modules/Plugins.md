@@ -1,25 +1,5 @@
 # Plugins
 
->Status: Specification
+> Status: Terminology reserved; separate plugin runtime not implemented
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+CnC-TA-Suite currently extends behavior through modules discovered at build time. There is no runtime download, marketplace, or third-party plugin sandbox. Documentation and UI should use “module” for current features. Any future plugin system must define package signing/trust, API compatibility, permissions, update and rollback behavior, storage isolation, review policy, and the security implications of page-context execution before implementation.

@@ -1,25 +1,7 @@
 # Core
 
->Status: Specification
+> Status: Implemented for v0.4.0
 
-## Purpose
+Core owns cross-cutting infrastructure: bootstrap, browser storage, settings, events, logging, native UI, windows, diagnostics, game integration, the normalized Game Data Hub, hooks, observers, and the module runtime. `createApplication()` composes these services into one application context.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Feature modules may depend on core only through public contracts and granted `ModuleContext` capabilities. Core must not contain feature behavior or manually import individual modules; the generated catalog is the sole composition boundary. Services should be independently testable, avoid hidden globals except game/runtime discovery, and expose explicit cleanup where they own external resources.

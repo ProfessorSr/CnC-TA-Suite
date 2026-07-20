@@ -1,25 +1,7 @@
 # Vision
 
->Status: Specification
+> Status: Active for v0.4.0
 
-## Purpose
+CnC-TA-Suite should be a dependable, modular foundation for extending Command & Conquer: Tiberium Alliances without forcing each feature to rediscover game objects, recreate UI infrastructure, or manage browser integration independently.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+The v1.0 target is a stable module contract, documented public game API, native Qooxdoo interface, predictable startup and cleanup, and a release process validated against supported live worlds. The suite does not replace the game client or automate play without explicit feature scope; it provides safe shared infrastructure on which focused player tools can be built.

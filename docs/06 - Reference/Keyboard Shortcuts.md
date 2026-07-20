@@ -1,25 +1,7 @@
 # Keyboard Shortcuts
 
->Status: Specification
+> Status: No global shortcuts in v0.4.0
 
-## Purpose
+CnC-TA-Suite does not register global keyboard shortcuts. This avoids collisions with game controls and browser shortcuts. Native Qooxdoo focus traversal and Enter/Space activation apply to buttons, checkboxes, dialogs, and windows.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Future shortcuts must be configurable, disabled while typing, scoped to supported game states, documented here, and checked for game/browser conflicts. Every shortcut requires an equivalent visible action and accessible label.

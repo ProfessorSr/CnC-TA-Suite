@@ -1,25 +1,39 @@
 # Modules
 
->Status: Specification
+> Status: Implemented for v0.4.0
 
-## Purpose
+Modules are managed by `ModuleManager` and discovered automatically during builds.
 
-Define this area of the project before implementation begins.
+## Lifecycle
 
-## Scope
+```text
+register → initialize → load → enable
+                           ↓
+destroy ← unload ← disable
+```
 
-This specification is the authoritative design document for this subject.
+Each lifecycle method is optional and may be asynchronous.
 
-## Sections
+## Manifest modules
 
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
+A manifest declares identity, API version, dependencies, requested permissions, and settings. Dependencies are enabled before dependents. Missing dependencies and cycles prevent startup.
 
+## ModuleContext
+
+Modules receive a context containing:
+
+- identity and logger;
+- tracked events;
+- module-scoped settings;
+- permission helpers;
+- granted framework capabilities.
+
+Capabilities may include game, the normalized game-data Hub, storage, settings, theme, windows, notifications, UI, hooks, observers, modules, diagnostics, and Qooxdoo access. Hub access follows the `game` permission.
+
+## Cleanup
+
+Subscriptions created through `context.events` are cleared automatically when the module is disabled. Modules remain responsible for cleaning up any timers, native listeners, or resources they create outside tracked services.
+
+## Compatibility note
+
+The v0.4.0 review found that `ModuleContext` recognizes a `qx` capability while the explicit permission registry does not yet list it. Until aligned, manifest-based modules should not request `qx` directly.

@@ -2,7 +2,7 @@
 
 CnC-TA-Suite modules are self-contained features managed by `ModuleManager`.
 
-## Required structure
+## Recommended structure
 
 ```text
 modules/<module-id>/
@@ -11,9 +11,9 @@ modules/<module-id>/
 └── README.md
 ```
 
-## Manifest
+Legacy modules without manifests are still discovered, but new modules should use manifests.
 
-Every module must provide:
+## Manifest
 
 ```json
 {
@@ -24,12 +24,12 @@ Every module must provide:
   "author": "Author",
   "description": "Description",
   "dependencies": [],
-  "permissions": ["events"],
+  "permissions": ["events", "ui", "windows"],
   "settings": {}
 }
 ```
 
-Valid permissions are:
+Recognized explicit permissions in v0.4.0 are:
 
 - `events`
 - `game`
@@ -44,24 +44,25 @@ Valid permissions are:
 - `modules`
 - `diagnostics`
 
-## Lifecycle
+`ModuleContext` also has a Qooxdoo capability path, but the explicit permission registry does not yet accept `qx`; this should be aligned before modules declare it.
 
-The lifecycle order is:
+## Lifecycle
 
 ```text
 initialize → load → enable → disable → unload → destroy
 ```
 
-Each lifecycle method is optional and may be asynchronous.
+Methods are optional and may be asynchronous.
 
 ## Context
 
-Lifecycle methods receive a `ModuleContext`. Depending on permissions, it may expose:
+Depending on granted permissions, a module may receive:
 
 - `logger`
 - `events`
 - `moduleSettings`
 - `game`
+- `hub` (granted with the `game` permission)
 - `storage`
 - `settings`
 - `theme`
@@ -73,39 +74,35 @@ Lifecycle methods receive a `ModuleContext`. Depending on permissions, it may ex
 - `modules`
 - `diagnostics`
 
-Use `context.events` instead of subscribing directly to the global event bus. Subscriptions made through `context.events` are cleaned up automatically when the module is disabled.
+Use `context.events` for tracked subscriptions. Use native Qooxdoo widgets for in-game UI and pass widgets, not HTML elements, to the window service.
 
-## Registration
+Use `context.hub.snapshot()` for aggregated ClientLib-derived data. Modules must not query ClientLib directly.
 
-Modules are registered before `ModuleManager.startEnabled()` runs:
+## Current feature modules
 
-```js
-import { ExampleModule } from '../../modules/example/index.js';
+- **API Inspector** provides read-only readiness, service availability, cloned public snapshots, documented API examples, diagnostic health, and redacted diagnostic export without exposing mutable ClientLib objects or evaluating arbitrary code.
+- **War Room** automatically follows native combat setup and includes target search and intelligence, an objective-driven Attack Planner, click-to-move formation previews, persistent formation presets, native manual-preview simulation, Quick/Detailed/Exhaustive candidate searches, cached result comparison, native animated replay, reports, army analysis, and combat history. Candidate generation, preview editing, caching, and ranking occur locally; every uncached battle outcome is requested from EA through the native `SimulateBattle` command. Applying a preview remains a separate, confirmed user action and never launches an attack.
+- **Combat Reports** filters and aggregates battle history, loot, repair time, losses, CP efficiency, and PvP/PvE trends without triggering actions from reports.
+- **Tactical Map** provides a read-only relationship-colored regional map with target lines, saved-target markers, range and level filters, and persistent map preferences.
+- **Support Manager** lists support assignments and provides explicit, confirmed manual recall and calibration actions; it performs no unattended support automation.
+- **Communications** formats coordinates, players, alliances, links, and Forgotten-wave summaries for user-initiated chat and mail composition.
+- **External Analysis** generates selected-base CNCOpt, CNCTAOpt/CNCOpt+, and CNC-Map links and opens them only after an explicit click.
+- **Context Actions** adds configurable Suite launch actions to the native map-object menu for owned bases, player bases, camps, outposts, and Forgotten targets.
+- **Base Intelligence** consolidates player/world/alliance details, every owned base, composition, resource and repair projections, loot summaries, direct navigation, configurable status stickers, online-state colors, and region-tooltip details.
+- **Base Layout Optimizer** analyzes the current owned base against resource goals and constraints, renders a compact native Qooxdoo building grid, compares estimated production, lists moves/replacements/additions/upgrades and costs, and ranks alternative layouts. Its one-click building mover is isolated and experimental.
+- **Resource Transfer** supports detailed source selection plus per-destination Quick Transfer profiles for all resources, Crystal only, Tiberium only, or custom resource percentages pulled from all other eligible owned bases. **Scanner**, **Next MCV**, **Repair Manager**, and **Upgrade Manager** provide their corresponding game-planning and manual-action workflows.
 
-modules.register(new ExampleModule());
-```
-
-Dependencies are enabled first. Missing dependencies and circular dependencies prevent startup and produce clear errors.
+Both one-click layout executors require an explicit user action and confirmation, never launch attacks, and expose independent source-level disable flags.
 
 ## Settings
-
-Settings are declared in the manifest and accessed through the module-scoped settings API:
 
 ```js
 const value = context.moduleSettings.get('settingName');
 await context.moduleSettings.set('settingName', newValue);
 ```
 
-The framework validates setting types, enumerations, and numeric ranges.
+Manifest settings are validated for type and supported constraints.
 
-## Events
+## Registration
 
-```js
-const unsubscribe = context.events.on('game:city-changed', (payload) => {
-  context.logger.debug('City changed.', payload);
-});
-
-context.events.emit('example:updated', { value: 1 });
-```
-
-Manual cleanup is normally unnecessary because the module context clears tracked subscriptions during disable.
+The build scans `modules/` and regenerates `core/modules/moduleCatalog.generated.js`. Do not edit the generated catalog manually.
