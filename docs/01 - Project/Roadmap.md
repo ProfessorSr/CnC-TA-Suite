@@ -1,31 +1,29 @@
 # Roadmap
 
-> Status: Active for v0.4.0
+> Status: Active for v1.0.0
 
 ## Current position
 
-v0.4.0 is the working architectural foundation. Core runtime behavior, module management, game integration, diagnostics, storage, settings, and Qooxdoo-native UI services are implemented.
+v1.0.0 is the first feature-complete regular-user release candidate. Core runtime behavior, module management, data-driven UI contracts, centralized game integration, diagnostics, storage, settings, Qooxdoo-native UI services, and 23 discoverable modules are implemented.
 
-## v0.4.x — Stabilization
+## v1.0.x — Stabilization
 
 - Complete live-game regression testing.
-- Resolve remaining permission and compatibility inconsistencies.
-- Remove or clearly mark unused legacy DOM helpers.
+- Track EA client compatibility by runtime fingerprint and adapter contract.
 - Improve error reporting and recovery around game updates.
 - Expand automated coverage for native UI cleanup and module failure paths.
-- Finish implementation-backed documentation.
+- Keep Command Manual coverage synchronized with every registered module.
 
-## v0.5.0–v0.9.x — Product refinement
+## v1.x — Maintenance and alliance refinement
 
-- Improve Module Manager usability and module status reporting.
-- Expand public game and diagnostics references.
-- Add compatibility telemetry that does not collect personal data.
+- Improve alliance-management workflows only after role, safety, and live-client validation.
+- Expand public game and diagnostics references as stable contracts become available.
 - Harden storage migration and recovery.
 - Improve accessibility and keyboard navigation.
 - Add release packaging and repeatable acceptance checks.
-- Develop production feature modules without bypassing core services.
+- Keep feature modules behind the Hub, adapter, permission, and explicit-user-action boundaries.
 
-## v1.0.0 acceptance target
+## v1.0.0 acceptance gate
 
 v1.0.0 should be tagged when:
 
@@ -38,4 +36,4 @@ v1.0.0 should be tagged when:
 - installation, upgrade, and rollback instructions are complete;
 - no known critical or high-severity defects remain.
 
-Large architectural rewrites are not planned between v0.4.0 and v1.0.0 unless required by browser or game compatibility.
+Automated validation can establish repository readiness. Tagging and distribution still require the documented live-game acceptance pass on a current EA world.

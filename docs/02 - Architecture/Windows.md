@@ -1,6 +1,6 @@
 # Windows
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 Suite windows use native `qx.ui.window.Window` widgets and are owned by `WindowManager`.
 

@@ -1,7 +1,15 @@
 # Keyboard Shortcuts
 
-> Status: No global shortcuts in v0.4.0
+> Status: Implemented for v1.0.0
 
-CnC-TA-Suite does not register global keyboard shortcuts. This avoids collisions with game controls and browser shortcuts. Native Qooxdoo focus traversal and Enter/Space activation apply to buttons, checkboxes, dialogs, and windows.
+The Hotkeys module provides configurable page-level shortcuts. It is independently enabled and ignores key events while focus is in an input or text area.
 
-Future shortcuts must be configurable, disabled while typing, scoped to supported game states, documented here, and checked for game/browser conflicts. Every shortcut requires an equivalent visible action and accessible label.
+| Default | Action |
+| --- | --- |
+| `Alt+M` | Module Manager |
+| `Alt+W` | War Room |
+| `Alt+S` | Scanner |
+| `Alt+B` | Base Intelligence |
+| `Alt+P` | Insert player details through Communications |
+
+Change bindings in the Hotkeys window using forms such as `Ctrl+Shift+W` or `Meta+B`. Every shortcut has an equivalent visible action. Browser- or game-reserved combinations may take precedence.

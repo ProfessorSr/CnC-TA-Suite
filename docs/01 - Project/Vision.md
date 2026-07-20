@@ -1,6 +1,6 @@
 # Vision
 
-> Status: Active for v0.4.0
+> Status: Active for v1.0.0
 
 CnC-TA-Suite should be a dependable, modular foundation for extending Command & Conquer: Tiberium Alliances without forcing each feature to rediscover game objects, recreate UI infrastructure, or manage browser integration independently.
 

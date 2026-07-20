@@ -1,6 +1,6 @@
 # Performance
 
-> Status: Implemented baseline for v0.4.0
+> Status: Implemented baseline for v1.0.0
 
 Game discovery polls at bounded intervals and times out. Top-bar discovery retries every 500 ms for at most 120 attempts. Game-state monitoring is centralized; modules must subscribe rather than add duplicate polling. Shared caches reduce repeated ClientLib reads, and move/resize persistence is debounced.
 

@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 CnC-TA-Suite is a page-context modular application delivered by a Chrome Manifest V3 extension.
 

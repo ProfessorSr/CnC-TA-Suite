@@ -1,6 +1,6 @@
 # Events
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 The central `EventBus` publishes suite, game, settings, theme, window, and module lifecycle events. Names use lowercase colon-separated namespaces such as `game:city-changed` and `module:started`.
 

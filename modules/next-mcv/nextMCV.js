@@ -1,7 +1,7 @@
 import {
   buildNextMCVWindow,
   getNextMCVWindowController
-} from './nextMCVWindow.js?v=0.4.0-mcv15';
+} from './nextMCVWindow.js?v=1.0.0-mcv1';
 
 export class NextMCVModule {
   constructor() {

@@ -1,11 +1,21 @@
-# Integration checklist
+# Integration and live acceptance
 
-- Add all six scripts to the suite's page-context loader in the listed order.
-- Add a launcher/menu entry whose action is `CnCTA.ScannerModule.open()`.
-- Confirm the Hub global name in `scanner-module.js`.
-- Confirm the suite's existing `GameDataHub` object is extensible.
-- Test Camps, Outposts, and Bases separately before enabling all three.
-- Test `Only center on World` both enabled and disabled.
-- Verify the layout icons against a known 7 Tiberium and 7 Crystal target.
+The production integration path is built into Suite Core; no scripts require
+manual loader registration. The build discovers modules and regenerates
+`core/modules/moduleCatalog.generated.js` automatically.
 
-The module does not automatically attack, spend resources, or issue irreversible commands.
+For repository validation run:
+
+```bash
+node --test tests/unit/*.test.js tests/integration/*.test.js
+node scripts/build/build-extension.mjs
+```
+
+Then load `dist/chrome` as an unpacked extension and complete the live checklists
+in `tests/integration/`. At minimum verify clean bootstrap, Module Manager and
+Command Manual access, module enable-state persistence, right-dock placement,
+Hub data freshness, Qooxdoo window cleanup, and the user-confirmed native action
+paths relevant to the change.
+
+The Suite does not automatically attack. Analysis and previews must remain
+separate from explicit, confirmed native actions.

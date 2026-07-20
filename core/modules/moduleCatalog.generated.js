@@ -7,6 +7,7 @@ import { AllianceModule } from '../../modules/alliance/index.js';
 import { ApiInspectorModule } from '../../modules/api-inspector/index.js';
 import { BaseIntelligenceModule } from '../../modules/base-intelligence/index.js';
 import { CombatReportsModule } from '../../modules/combat-reports/index.js';
+import { CommandManualModule } from '../../modules/command-manual/index.js';
 import { CommunicationsModule } from '../../modules/communications/index.js';
 import { ContextActionsModule } from '../../modules/context-actions/index.js';
 import { ExternalToolsModule } from '../../modules/external-tools/index.js';
@@ -31,6 +32,7 @@ export const registeredModules = Object.freeze([
   ApiInspectorModule,
   BaseIntelligenceModule,
   CombatReportsModule,
+  CommandManualModule,
   CommunicationsModule,
   ContextActionsModule,
   ExternalToolsModule,

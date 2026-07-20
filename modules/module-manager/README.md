@@ -1,6 +1,6 @@
 # Module Manager
 
-The Module Manager is the primary user-facing entry point for the v0.4.0 module framework.
+The Module Manager is the primary user-facing entry point for the v1.0.0 module framework.
 
 ## Features
 

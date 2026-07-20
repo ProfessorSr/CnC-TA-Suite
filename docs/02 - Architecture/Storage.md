@@ -1,6 +1,6 @@
 # Storage
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 `StorageService` uses the Chrome storage bridge when available and falls back to local storage for development compatibility. The page bridge correlates asynchronous requests by ID and returns serializable results or error messages.
 

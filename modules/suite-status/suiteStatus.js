@@ -1,26 +1,9 @@
-import { buildSuiteStatusWindow } from './suiteStatusWindow.js';
+import { DeclarativeModule } from '../../core/ui/declarative/declarativeModule.js';
+import { suiteStatusDefinition } from './suiteStatusWindow.js';
 
-export class SuiteStatusModule {
+export class SuiteStatusModule extends DeclarativeModule {
   constructor() {
-    this.id = 'suite-status';
-    this.version = '1.0.0';
-    this.author = 'ProfessorSr';
+    super(suiteStatusDefinition);
     this.settingsKey = 'suiteStatus';
-  }
-
-  async start() {
-    // Status window opens on demand from the launcher.
-  }
-
-  async open(context) {
-    return context.windows.open({
-      id: 'suite-status',
-      title: 'Suite Status',
-      content: buildSuiteStatusWindow(context),
-      x: 380,
-      y: 70,
-      width: 380,
-      height: 360
-    });
   }
 }

@@ -7,7 +7,7 @@ The Suite uses four maintenance contracts:
 - Client adapter capabilities: `core/game/compatibility/clientApiAdapter.js`
 - Verified EA builds: `core/game/compatibility/clientBuildRegistry.js`
 
-Runtime budgets currently cover game-state ticks, Hub snapshots, module enable/open operations, and owned-city normalization. Inspect them with `CnCTASuite.diagnostics.snapshot().performance`. A budget violation is retained in diagnostics and logged as a warning.
+Runtime budgets currently cover game-state capture, tick-listener dispatch, total ticks, Hub snapshots, module enable/open operations, and owned-city normalization. Inspect them with `CnCTASuite.diagnostics.snapshot().performance`. Individual over-budget samples remain visible in the operation statistics, but a diagnostic violation and warning require three consecutive breaches. This prevents browser scheduling or garbage-collection noise from being reported as a regression.
 
 Before release, run:
 

@@ -390,8 +390,8 @@ IMPLEMENT** entries are policy exclusions and are not included in the eligible
 legacy-feature denominator.
 
 - **Legacy coverage:** 177/193 eligible legacy features complete.
-- **Suite modules:** 22 cataloged modules, and growing.
-- **Suite-exclusive features:** 11 implemented capabilities with no equivalent
+- **Suite modules:** 23 cataloged modules, and growing.
+- **Suite-exclusive features:** 12 implemented capabilities with no equivalent
   workflow found in the reviewed legacy ecosystem.
 
 ### Suite-exclusive feature inventory
@@ -407,6 +407,7 @@ legacy-feature denominator.
 - ✅ A responsive native-style Suite shortcut dock that relocates tools between the base header and right navigation, hides controls for disabled modules, exposes every openable module, and uses dual-purpose open/close buttons.
 - ✅ Shared persistent window modes covering compact, resize, move, pin, lock, visibility, and auto-hide behavior.
 - ✅ Alliance invitation discovery with world-ranking criteria, sortable candidate filtering, available-slot enforcement, multi-selection, and confirmed manual sending.
+- ✅ An interactive Command Manual with contextual per-window Help routing, complete module/button guides, subtopic search, new-player guidance, FAQ, troubleshooting, live module metadata, visual previews, release notes, and glossary.
 
 When a new Suite-only capability is added, append it here and increment the
 Suite-exclusive count. If a legacy source is later found to provide the same

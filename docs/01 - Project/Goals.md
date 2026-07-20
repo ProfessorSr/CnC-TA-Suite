@@ -1,6 +1,6 @@
 # Goals
 
-> Status: Active for v0.4.0
+> Status: Active for v1.0.0
 
 ## Product goals
 

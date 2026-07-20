@@ -29,7 +29,7 @@ Legacy modules without manifests are still discovered, but new modules should us
 }
 ```
 
-Recognized explicit permissions in v0.4.0 are:
+Recognized explicit permissions in v1.0.0 are:
 
 - `events`
 - `game`
@@ -44,7 +44,7 @@ Recognized explicit permissions in v0.4.0 are:
 - `modules`
 - `diagnostics`
 
-`ModuleContext` also has a Qooxdoo capability path, but the explicit permission registry does not yet accept `qx`; this should be aligned before modules declare it.
+Qooxdoo is an implementation detail of the shared UI and window services, not a separately granted module capability. Modules that render native custom controls may use the game-owned global only inside their renderer; data access still belongs behind `context.game` and `context.hub`.
 
 ## Lifecycle
 

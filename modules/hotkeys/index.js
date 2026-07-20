@@ -1,8 +1,62 @@
-import { Module } from '../../core/interfaces/module.js';
-const BINDS=[['moduleManagerKey','Module Manager','module-manager'],['warRoomKey','War Room','war-room'],['scannerKey','Scanner','scanner'],['baseInfoKey','Base Intelligence','base-intelligence'],['playerDetailsKey','Insert Player Details','communications','player-details']];
-function signature(event){return `${event.ctrlKey?'Ctrl+':''}${event.altKey?'Alt+':''}${event.shiftKey?'Shift+':''}${event.metaKey?'Meta+':''}${event.key.length===1?event.key.toUpperCase():event.key}`;}
-export class HotkeysModule extends Module{constructor(){super({id:'hotkeys',name:'Hotkeys',version:'1.0.0',apiVersion:'1.0.0',author:'ProfessorSr',description:'Configurable keyboard shortcuts for Suite navigation and tools.',permissions:['modules','settings','windows'],settings:Object.fromEntries(BINDS.map(([key])=>[key,{type:'string',default:{moduleManagerKey:'Alt+M',warRoomKey:'Alt+W',scannerKey:'Alt+S',baseInfoKey:'Alt+B',playerDetailsKey:'Alt+P'}[key]}]))});}
-async enable(context){this.context=context;this.handler=e=>{if(/INPUT|TEXTAREA/.test(e.target?.tagName??''))return;const hit=BINDS.find(([key])=>this.context.moduleSettings.get(key,'')===signature(e));if(!hit)return;e.preventDefault();void this.context.modules.open(hit[2]).then(()=>{if(hit[3]==='player-details'){const module=this.context.modules.get('communications');module?.append?.(module.playerDetails?.());}});};globalThis.document?.addEventListener?.('keydown',this.handler);}
-build(){const qx=globalThis.qx,root=new qx.ui.container.Composite(new qx.ui.layout.VBox(8)).set({padding:12,textColor:'#fff'});root.add(new qx.ui.basic.Label('Enter shortcuts such as Alt+M, Ctrl+Shift+W, or Meta+B. Shortcuts are ignored while typing in fields.').set({textColor:'#fff',wrap:true}));for(const [key,label] of BINDS){const row=new qx.ui.container.Composite(new qx.ui.layout.HBox(8));row.add(new qx.ui.basic.Label(label).set({width:170,textColor:'#fff',alignY:'middle'}));const field=new qx.ui.form.TextField(this.context.moduleSettings.get(key,'')).set({width:180});field.addListener('changeValue',e=>void this.context.moduleSettings.set(key,e.getData()));row.add(field);root.add(row);}return root;}
-async open(c=this.context){if(this.record?.window&&!this.record.window.isDisposed?.()){this.record.window.open();return this.record;}this.record=await this.context.windows.open({id:'hotkeys',title:'Hotkeys',content:this.build(),x:220,y:110,width:500,height:390,resizable:true,singleton:true});return this.record;}async disable(c=this.context){globalThis.document?.removeEventListener?.('keydown',this.handler);c?.windows?.close?.('hotkeys');this.record=null;this.context=null;}}
+import { DeclarativeModule } from '../../core/ui/declarative/declarativeModule.js';
+
+const BINDS = Object.freeze([
+  ['moduleManagerKey', 'Module Manager', 'module-manager', 'Alt+M'],
+  ['warRoomKey', 'War Room', 'war-room', 'Alt+W'],
+  ['scannerKey', 'Scanner', 'scanner', 'Alt+S'],
+  ['baseInfoKey', 'Base Intelligence', 'base-intelligence', 'Alt+B'],
+  ['playerDetailsKey', 'Insert Player Details', 'communications', 'Alt+P', 'player-details']
+]);
+
+function signature(event) {
+  return `${event.ctrlKey ? 'Ctrl+' : ''}${event.altKey ? 'Alt+' : ''}${event.shiftKey ? 'Shift+' : ''}${event.metaKey ? 'Meta+' : ''}${event.key.length === 1 ? event.key.toUpperCase() : event.key}`;
+}
+
+const settings = Object.freeze(Object.fromEntries(BINDS.map(([key, label, , defaultValue]) => [key, {
+  type: 'string', default: defaultValue, label
+}])));
+
+export const hotkeysDefinition = Object.freeze({
+  manifest: {
+    id: 'hotkeys', name: 'Hotkeys', version: '1.0.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
+    author: 'ProfessorSr', description: 'Configurable keyboard shortcuts for Suite navigation and tools.',
+    permissions: ['modules', 'settings', 'windows'], settings
+  },
+  window: {
+    title: 'Hotkeys', icon: 'hotkeys', x: 220, y: 110, width: 500, height: 390,
+    tabs: [{ id: 'settings', title: 'Settings', controls: [
+      { type: 'text', value: 'Enter shortcuts such as Alt+M, Ctrl+Shift+W, or Meta+B. Shortcuts are ignored while typing in fields.' },
+      { type: 'settings', schema: settings, labelWidth: 180 }
+    ] }]
+  },
+  providers: {}, actions: {}
+});
+
+export class HotkeysModule extends DeclarativeModule {
+  constructor() { super(hotkeysDefinition); }
+
+  async enable(context) {
+    await super.enable(context);
+    this.handler = (event) => {
+      if (/INPUT|TEXTAREA/.test(event.target?.tagName ?? '')) return;
+      const hit = BINDS.find(([key]) => this.context.moduleSettings.get(key, '') === signature(event));
+      if (!hit) return;
+      event.preventDefault();
+      void this.context.modules.open(hit[2]).then(() => {
+        if (hit[4] === 'player-details') {
+          const module = this.context.modules.get('communications');
+          module?.append?.(module.playerDetails?.());
+        }
+      });
+    };
+    globalThis.document?.addEventListener?.('keydown', this.handler);
+  }
+
+  async disable(context = this.context) {
+    globalThis.document?.removeEventListener?.('keydown', this.handler);
+    this.handler = null;
+    await super.disable(context);
+  }
+}
+
 export default HotkeysModule;

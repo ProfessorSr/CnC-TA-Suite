@@ -10,7 +10,7 @@ Run:
 node --test tests/unit/*.test.js tests/integration/*.test.js
 ```
 
-The stabilization suite contains **81 automated tests** covering feature behavior, compatibility contracts, diagnostics, and performance budgets.
+The stabilization suite contains **89 automated tests** covering feature behavior, Command Manual coverage/search, compatibility contracts, declarative module adoption, diagnostics, and performance budgets.
 
 Automated coverage includes:
 

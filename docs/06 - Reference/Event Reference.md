@@ -1,6 +1,6 @@
 # Event Reference
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 Events use object payloads and lowercase colon-separated names.
 

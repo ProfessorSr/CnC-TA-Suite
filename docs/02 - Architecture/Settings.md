@@ -1,6 +1,6 @@
 # Settings
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 `SettingsService` loads the `settings` object, merges defaults, validates the fixed core schema, and restores defaults if validation fails. Paths use dot notation. Core module enabled states are booleans under `modules.<settingsKey>`.
 

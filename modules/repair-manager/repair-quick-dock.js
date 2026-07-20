@@ -67,6 +67,7 @@ const RIGHT_MODULE_GROUPS = Object.freeze([
     Object.freeze({ moduleId: 'ui-tools', label: 'UI Tools', icon: suiteIcon('ui-tools') }),
     Object.freeze({ moduleId: 'hotkeys', label: 'Hotkeys', icon: suiteIcon('hotkeys') }),
     Object.freeze({ moduleId: 'suite-status', label: 'Suite Status', icon: 'webfrontend/ui/common/icon_moral_alert_orange.png' }),
+    Object.freeze({ moduleId: 'command-manual', label: 'Command Manual', icon: suiteIcon('command-manual') }),
     Object.freeze({ moduleId: 'launcher', label: 'Suite Dashboard', icon: 'FactionUI/icons/icon_attack_start_combat.png' })
   ]) })
 ]);

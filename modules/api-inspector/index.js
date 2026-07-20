@@ -57,7 +57,7 @@ export class ApiInspectorModule extends Module {
     const health = this.context?.diagnostics?.health?.() ?? { healthy: false, checks: {} };
     const modules = this.context?.modules?.snapshot?.() ?? {};
     this.overviewModel?.setData?.([
-      ['Suite version', globalThis.CnCTASuite?.version ?? '0.4.0'],
+      ['Suite version', globalThis.CnCTASuite?.version ?? '1.0.0'],
       ['Public API ready', this.snapshot.ready ? 'Yes' : 'No'],
       ['Game version', this.snapshot.version],
       ['Diagnostic health', health.healthy ? 'Healthy' : 'Attention required'],
@@ -71,7 +71,7 @@ export class ApiInspectorModule extends Module {
     ]));
     this.snapshotArea?.setValue?.(stringify(safeClone(this.snapshot)));
     this.diagnosticsArea?.setValue?.(stringify(redactedExport({
-      suiteVersion: globalThis.CnCTASuite?.version ?? '0.4.0',
+      suiteVersion: globalThis.CnCTASuite?.version ?? '1.0.0',
       apiSnapshot: this.snapshot,
       diagnostics: this.context?.diagnostics?.snapshot?.() ?? null
     })));

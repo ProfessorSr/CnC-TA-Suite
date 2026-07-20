@@ -1,6 +1,6 @@
 # Icons
 
-> Status: Baseline for v0.4.0
+> Status: Baseline for v1.0.0
 
 Prefer icons already provided by the game theme. Icon-only buttons must define tooltip and accessible-label text and retain a visible focus state. Do not use emoji as permanent navigation controls. Keep common control icons near the native game size and provide a text fallback when an icon resource is unavailable. New bundled artwork must have a documented license and live under `assets/`.
 

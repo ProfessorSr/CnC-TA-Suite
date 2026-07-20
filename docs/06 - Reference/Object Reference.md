@@ -1,6 +1,6 @@
 # Object Reference
 
-> Status: Implemented baseline for v0.4.0
+> Status: Implemented baseline for v1.0.0
 
 Service snapshots intentionally expose stable subsets rather than promising raw ClientLib classes. Player contains identity and progression data when available; city/base identify current or selected bases and levels; world contains server/map facts and distance helpers; alliance contains current membership; selection describes selected object and type; battle contains active state, target, and attacker/defender formations.
 

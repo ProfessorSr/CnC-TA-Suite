@@ -1,6 +1,6 @@
 # Principles
 
-> Status: Active for v0.4.0
+> Status: Active for v1.0.0
 
 1. **Native first:** use Qooxdoo widgets and game appearances for in-game UI.
 2. **Discover once:** core owns ClientLib, application, service, and object discovery.

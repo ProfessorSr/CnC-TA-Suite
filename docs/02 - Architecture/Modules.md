@@ -1,6 +1,8 @@
 # Modules
 
-> Status: Implemented for v0.4.0
+Conventional module windows should be defined through the declarative framework documented in [Declarative Modules](Declarative%20Modules.md). Specialized modules may retain custom Qooxdoo renderers while using versioned manifests, Hub providers, standard lifecycle methods, and shared actions.
+
+> Status: Implemented for v1.0.0
 
 Modules are managed by `ModuleManager` and discovered automatically during builds.
 
@@ -36,4 +38,4 @@ Subscriptions created through `context.events` are cleared automatically when th
 
 ## Compatibility note
 
-The v0.4.0 review found that `ModuleContext` recognizes a `qx` capability while the explicit permission registry does not yet list it. Until aligned, manifest-based modules should not request `qx` directly.
+Qooxdoo is supplied through framework-owned UI/window services rather than an explicit module permission. Custom renderers may construct native controls, but must keep game-data reads behind the scoped game facade and Hub.

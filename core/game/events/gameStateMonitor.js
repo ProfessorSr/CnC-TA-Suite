@@ -125,10 +125,14 @@ export class GameStateMonitor {
     try {
       this.lastTickAt = Date.now();
       this.tickCount += 1;
+      const captureStarted = globalThis.performance?.now?.() ?? Date.now();
       const current = this.capture();
+      this.performance?.record?.('game-state.capture', (globalThis.performance?.now?.() ?? Date.now()) - captureStarted);
+      const dispatchStarted = globalThis.performance?.now?.() ?? Date.now();
       this.emitChanges(this.previous, current);
       this.previous = current;
       this.eventBus.emit(Events.GAME_TICK, current);
+      this.performance?.record?.('game-state.dispatch', (globalThis.performance?.now?.() ?? Date.now()) - dispatchStarted);
     } catch (error) {
       this.errorCount += 1;
       this.logger.warn('Game state monitor tick failed.', error);

@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented; current for v0.4.0.
+Implemented; current for v1.0.0.
 
 ## Purpose
 

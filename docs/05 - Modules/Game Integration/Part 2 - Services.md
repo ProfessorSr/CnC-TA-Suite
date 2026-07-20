@@ -1,6 +1,6 @@
 # Game Integration — Part 2: Services
 
-> Status: Implemented; current for v0.4.0
+> Status: Implemented; current for v1.0.0
 
 Part 2 registers shared cache-backed services so modules do not call ClientLib independently.
 

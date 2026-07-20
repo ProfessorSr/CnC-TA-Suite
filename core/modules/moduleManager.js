@@ -6,6 +6,7 @@ import { DependencyResolver } from './dependencyResolver.js';
 import { ModuleManifest } from './moduleManifest.js';
 import { ModulePermissions } from './modulePermissions.js';
 import { ModuleSettings } from './moduleSettings.js';
+import { adoptModuleDefinition, definitionSummary } from '../ui/declarative/moduleDefinitionBridge.js';
 
 const State = Object.freeze({
   REGISTERED: 'registered',
@@ -44,6 +45,7 @@ export class ModuleManager {
     module.apiVersion = manifest.apiVersion;
     module.dependencies = manifest.dependencies;
     module.manifest = manifest;
+    adoptModuleDefinition(module, manifest);
 
     this.permissions.register(module.id, manifest.permissions, {
       legacyUnrestricted: !hasExplicitManifest
@@ -95,9 +97,16 @@ export class ModuleManager {
       throw new Error(`Module does not expose an open() method: ${id}`);
     }
     const profiler = this.context.game?.services?.tryGet?.('performance');
+    const openOperation = module.definition?.renderer === 'custom' && typeof module.definition.actions?.open === 'function'
+      ? () => module.definition.actions.open({
+        context: this.context,
+        owner: module,
+        providers: module.definition.providers
+      })
+      : () => module.open(this.context);
     return profiler?.measureAsync
-      ? profiler.measureAsync('module.open', () => module.open(this.context))
-      : module.open(this.context);
+      ? profiler.measureAsync('module.open', openOperation)
+      : openOperation();
   }
 
   getModuleContext(module) {
@@ -205,6 +214,10 @@ export class ModuleManager {
 
   snapshot() {
     return this.registry.snapshot(this.states);
+  }
+
+  definitionSnapshot() {
+    return Object.freeze(this.registry.values().map(definitionSummary).filter(Boolean));
   }
 }
 

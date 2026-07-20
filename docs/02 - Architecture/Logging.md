@@ -1,6 +1,6 @@
 # Logging
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 The shared logger supports `debug`, `info`, `warn`, and `error` levels and prefixes messages with the suite and child scope. Core creates child loggers for services; `ModuleContext` creates `Module:<id>` scopes.
 

@@ -1,6 +1,6 @@
 # Repository Structure
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 The source repository is divided by responsibility.
 

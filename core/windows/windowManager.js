@@ -7,6 +7,33 @@ export class WindowManager {
     this.settings = settings;
     this.logger = logger;
     this.windows = new Map();
+    this.helpHandler = null;
+  }
+
+  setHelpHandler(handler) { this.helpHandler = typeof handler === 'function' ? handler : null; }
+
+  openHelp(moduleId) { return this.helpHandler?.(moduleId); }
+
+  createHelpBar(moduleId) {
+    if (!this.helpHandler) return null;
+    const qx = this.getQx();
+    const bar = new qx.ui.container.Composite(new qx.ui.layout.HBox(5, 'right')).set({ allowGrowX: true });
+    const spacer = new qx.ui.basic.Label('');
+    bar.add(spacer, { flex: 1 });
+    const help = new qx.ui.form.Button('? Help').set({ width: 68, toolTipText: `Open Command Manual for ${moduleId}` });
+    help.addListener('execute', () => { void this.openHelp(moduleId); });
+    bar.add(help);
+    return bar;
+  }
+
+  attachHelpButton(window, moduleId) {
+    if (!window?.add || window.__suiteHelpAttached || !this.helpHandler) return null;
+    const bar = this.createHelpBar(moduleId);
+    if (!bar) return null;
+    if (typeof window.addAt === 'function') window.addAt(bar, 0);
+    else window.add(bar);
+    window.__suiteHelpAttached = true;
+    return bar;
   }
 
   getQx() {
@@ -191,7 +218,13 @@ export class WindowManager {
 
     const body = this.createContentWidget(content);
     body.set?.({ textColor: '#ffffff' });
-    win.add(body);
+    const helpBar = this.createHelpBar(id);
+    if (helpBar) {
+      const shell = new qx.ui.container.Composite(new qx.ui.layout.VBox(4));
+      shell.add(helpBar);
+      shell.add(body, { flex: 1 });
+      win.add(shell);
+    } else win.add(body);
 
     parent.add(win);
 

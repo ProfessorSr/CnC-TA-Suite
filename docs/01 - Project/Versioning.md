@@ -10,15 +10,15 @@ CnC-TA-Suite uses semantic versioning: `MAJOR.MINOR.PATCH`.
 
 ## Current release
 
-- `VERSION`: `0.4.0`
-- `PART`: `v0.4.0-release`
-- Chrome manifest version: `0.4.0`
+- `VERSION`: `1.0.0`
+- `PART`: `v1.0.0-release`
+- Chrome manifest version: `1.0.0`
 
 These values must remain aligned for a release.
 
-## Pre-1.0 policy
+## Compatibility policy
 
-Before v1.0.0, minor releases may refine internal interfaces, but module-facing changes must still be recorded in the changelog. Breaking changes should be avoided after v0.4.0 unless needed for correctness or compatibility.
+The 1.x line keeps the public game facade, Hub contract, module API, stored settings, and user workflows backward compatible wherever practical. Breaking changes require a major version, a migration note, and explicit changelog coverage. EA client changes may require compatibility adaptations without changing Suite-facing contracts.
 
 ## Release checklist
 

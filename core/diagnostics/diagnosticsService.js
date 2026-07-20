@@ -41,6 +41,7 @@ export class DiagnosticsService {
       monitor: monitor?.getStatus?.() ?? Object.freeze({ running: false }),
       performance: this.game.services?.tryGet?.('performance')?.snapshot?.() ?? null,
       modules: this.modules?.snapshot?.() ?? null,
+      moduleDefinitions: this.modules?.definitionSnapshot?.() ?? null,
       logs: this.rootLogger?.snapshot?.() ?? null
     });
   }

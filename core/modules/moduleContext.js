@@ -12,8 +12,7 @@ const CAPABILITIES = Object.freeze({
   game: 'game',
   hub: 'game',
   modules: 'modules',
-  diagnostics: 'diagnostics',
-  qx: 'qx',
+  diagnostics: 'diagnostics'
 });
 
 export class ModuleContext {
@@ -25,6 +24,8 @@ export class ModuleContext {
       id: module.id,
       name: module.name ?? module.id,
       version: module.version ?? '0.0.0',
+      uiSchemaVersion: module.definition?.uiSchemaVersion ?? null,
+      renderer: module.definition?.renderer ?? null,
       manifest: module.manifest ?? null
     });
     
@@ -46,9 +47,6 @@ export class ModuleContext {
       const allowed = permissions?.allows(module.id, permission) ?? true;
       this[property] = allowed ? applicationContext[property] : undefined;
     }
-    this.qx = permissions?.allows(module.id, 'qx')
-      ? (globalThis.qx ?? null)
-      : undefined;
   }
 
   cleanup() {

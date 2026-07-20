@@ -121,6 +121,7 @@ function createModuleRow(context, module, refresh) {
 
   const metadataLabel = new qx.ui.basic.Label(
     `${moduleVersion(module)} · ${moduleAuthor(module)} · Updated ${moduleUpdated(module)}`
+    + ` · UI ${module.definition?.uiSchemaVersion ?? 'legacy'} (${module.definition?.renderer ?? 'unregistered'})`
   );
 
   information.add(metadataLabel);

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "CnC-TA-Suite",
-  "version": "0.4.0",
-  "description": "A modular Chrome extension framework for Command & Conquer: Tiberium Alliances.",
+  "version": "1.0.0",
+  "description": "A modular command center and planning suite for Command & Conquer: Tiberium Alliances.",
   "permissions": [
     "storage"
   ],

@@ -1,6 +1,6 @@
 # Bootstrap
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 `manifest/chrome/bridge.js` runs at `document_start`, installs the storage message bridge, and injects the page-context module entry. `bootstrap()` is idempotent and performs this sequence:
 

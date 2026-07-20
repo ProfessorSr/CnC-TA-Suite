@@ -1,5 +1,5 @@
 import settings from './settings.js';
-import { NextMCVCalculator } from './nextMCVCalculator.js?v=0.4.0-mcv4';
+import { NextMCVCalculator } from './nextMCVCalculator.js?v=1.0.0-mcv1';
 
 const windowControllers = new WeakMap();
 

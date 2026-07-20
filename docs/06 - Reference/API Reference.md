@@ -1,6 +1,6 @@
 # API Reference
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 `window.CnCTASuite` is frozen and exposes `version`, `context`, `game`, and `diagnostics`. Call game methods after `CnCTASuite.game.ready` is true.
 

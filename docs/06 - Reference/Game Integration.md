@@ -1,6 +1,6 @@
 # Game Integration Reference
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 Game Integration discovers `window.ClientLib` and the Qooxdoo application, waits for MainData/player/cities/world readiness, detects version and compatibility, then registers services and objects. Services include ClientLib, Qooxdoo manager, object discovery, cache, player, city, world, alliance, base, selection, battle, battle objects, version, and compatibility. Objects include MainData, server, player, cities, world, and application.
 

@@ -1,6 +1,6 @@
 # Themes
 
-> Status: Implemented baseline for v0.4.0
+> Status: Implemented baseline for v1.0.0
 
 In-game suite UI uses the active Qooxdoo game theme and native appearances. Core components create Qooxdoo widgets; windows enforce a white content foreground for readability. Custom colors, fonts, icons, and CSS tokens remain compatibility helpers and must not create a parallel visual system.
 

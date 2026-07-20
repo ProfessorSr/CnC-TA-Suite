@@ -1,6 +1,6 @@
 # Core
 
-> Status: Implemented for v0.4.0
+> Status: Implemented for v1.0.0
 
 Core owns cross-cutting infrastructure: bootstrap, browser storage, settings, events, logging, native UI, windows, diagnostics, game integration, the normalized Game Data Hub, hooks, observers, and the module runtime. `createApplication()` composes these services into one application context.
 

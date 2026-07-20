@@ -1,6 +1,6 @@
 # UI Standards
 
-> Status: Implemented baseline for v0.4.0
+> Status: Implemented baseline for v1.0.0
 
 ## Native UI rule
 

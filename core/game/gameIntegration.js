@@ -195,7 +195,16 @@ export class GameIntegration {
       this.services.register('compatibilityDetector', compatibilityDetector);
       const performance = new PerformanceProfiler({
         logger: this.logger.child('Performance'),
-        limits: { 'game-state.tick': 16, 'hub.snapshot': 25, 'module.enable': 50, 'module.open': 50 }
+        limits: {
+          'game-state.capture': 10,
+          'game-state.dispatch': 25,
+          'game-state.tick': 30,
+          'hub.snapshot': 25,
+          'module.enable': 50,
+          'module.open': 50,
+          'city.normalize-all': 25
+        },
+        violationThreshold: 3
       });
       this.registerCoreServices({ clientLib, qx, objectDiscovery, adapter, performance });
 

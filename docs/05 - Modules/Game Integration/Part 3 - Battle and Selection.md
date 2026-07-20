@@ -19,7 +19,7 @@ Included:
 
 Modules must not discover combat, selection, army, or unit objects independently.
 
-Use the v0.4.0 public facade:
+Use the v1.0.0 public facade:
 
 ```javascript
 CnCTASuite.game.battle

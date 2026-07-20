@@ -1,6 +1,6 @@
 # Releases
 
-> Status: Active for v0.4.0
+> Status: Active for v1.0.0
 
 ## Required validation
 
@@ -22,13 +22,13 @@ The first command runs JavaScript tests. Markdown integration files are manual l
 7. Verify no fatal console errors.
 8. Package or tag the validated source.
 
-## v0.4.0 result
+## v1.0.0 release-candidate result
 
-- Build: passed
-- Generated modules: 4
-- Automated tests: 29 passed, 0 failed
-- Live-game status: reported working well; final regression pass still recommended before public release
+- Build: must pass from a clean generated catalog
+- Generated modules: 23
+- Automated tests: 89 expected; zero failures required
+- Live-game status: complete the Markdown checklists under `tests/integration/` before tagging
 
-## Path to v1.0.0
+## Post-1.0 policy
 
-Post-v0.4.0 changes should normally be compatible tweaks, hardening, documentation, and feature refinement rather than foundational rewrites.
+Prefer compatible hardening, documentation, profiling, and targeted feature refinement over foundational rewrites. Record module API, Hub contract, settings, or compatibility changes explicitly.

@@ -2,7 +2,36 @@
 
 Notable changes to CnC-TA-Suite are recorded here. The project follows semantic versioning.
 
-## Unreleased
+## [1.0.0] - 2026-07-20
+
+- Expanded declarative custom content to fill its page and made the Command Manual table of contents and article viewport use the full available window height.
+
+### Release summary
+
+CnC-TA-Suite v1.0.0 is the first feature-complete regular-user release candidate. It combines 23 independently managed modules with a versioned Game Data Hub, Client API compatibility adapters, native Qooxdoo presentation, diagnostics, performance budgets, declarative module definitions, and an interactive Command Manual. State-changing operations remain explicit and confirmed; prohibited unattended automation is excluded by policy.
+
+### Platform and maintainability
+
+- Added versioned module and Hub API contracts, compatibility fixtures, runtime fingerprints, structured diagnostics, redacted exports, and an EA client-update workflow.
+- Added data-driven module definitions for manifests, windows, tabs, controls, settings, providers, and actions; specialized modules retain custom renderers behind the same contract.
+- Added performance instrumentation and throttled budget warnings for game-state capture and event dispatch.
+- Added complete Command Manual coverage for every registered module, contextual `? Help`, search, quick starts, troubleshooting, glossary, shortcuts, and release guidance.
+- Expanded automated validation to 89 tests and 23 generated modules.
+
+### Feature suite
+
+- Added War Room, Scanner, Base Intelligence, Next MCV, Repair & Collection, Upgrade Manager, Resource Transfer, Base Layout Optimizer, Alliance Intelligence, Context Actions, Combat Reports, Tactical Map, Support Manager, Communications, External Analysis, Hotkeys, UI Tools, API Inspector, and supporting dashboard/status modules.
+- Added native right-side and base-view launch controls that respect module enabled state and toggle open windows.
+- Added conservative attack-capacity and loot intelligence, native simulation/replay workflows, formation previews and presets, quick upgrades/transfers, contextual map actions, and current-base planning tools.
+
+### Documentation and release cleanup
+
+- Aligned `VERSION`, `PART`, Chrome manifest, runtime fallbacks, cache tokens, README, roadmap, release process, project tree, and maintained reference statuses to v1.0.0.
+- Replaced repository policy placeholders with contribution, conduct, security, and source-rights statements.
+- Replaced the obsolete repository workflow with CI that validates current files, JSON manifests, release-version alignment, all automated tests, the generated catalog, and the Chrome build.
+- Renamed the former instruction-booklet source to the canonical `command-manual` module path and removed its obsolete terminology.
+- Removed four unreferenced pre-integration helpers (`dom`, inline style injector, legacy game scanner, and legacy version probe) superseded by native UI and compatibility services.
+- Removed the developer-only Sample module and kept historical v0.3.0/v0.4.0 validation records clearly separated from current guidance.
 
 - Replaced unavailable `DateField` and `embed.Html` Qooxdoo classes in Combat Reports and Tactical Map with game-compatible text fields, rich labels, and native scrolling.
 - Assigned every right-side Suite shortcut a unique native game icon and expanded use of colored resource, alliance, combat, report, world, and status artwork.

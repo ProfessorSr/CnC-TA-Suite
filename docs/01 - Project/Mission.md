@@ -1,6 +1,6 @@
 # Mission
 
-> Status: Active for v0.4.0
+> Status: Active for v1.0.0
 
 Provide module authors and players with one coherent extension runtime that:
 
