@@ -5,7 +5,7 @@ function call(target, names, ...args) { for (const name of names) { try { if (ty
 function values(collection) { const source = collection?.d ?? collection?.l ?? collection ?? []; return Array.isArray(source) ? source.filter(Boolean) : Object.values(source).filter(Boolean); }
 
 export class CombatReportsModule extends Module {
-  constructor() { super({ id: 'combat-reports', name: 'Combat Reports', version: '1.0.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Filter, aggregate, trend, and export combat report history.', permissions: ['game', 'storage', 'windows'], settings: {} }); }
+  constructor() { super({ id: 'combat-reports', name: 'Combat Reports', version: '0.1.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Filter, aggregate, trend, and export combat report history.', permissions: ['game', 'storage', 'windows'], settings: {} }); }
   async enable(context) { this.context = context; }
   read() {
     const root = this.context?.hub?.game?.services?.tryGet?.('clientLib')?.root ?? globalThis.ClientLib;

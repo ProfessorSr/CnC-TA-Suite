@@ -3,7 +3,7 @@ import { buildCommandManual } from './command-manual-window.js';
 
 export const commandManualDefinition = Object.freeze({
   manifest: {
-    id: 'command-manual', name: 'Command Manual', version: '1.0.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
+    id: 'command-manual', name: 'Command Manual', version: '0.2.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
     author: 'ProfessorSr', description: 'Interactive searchable command center with contextual module help, workflows, FAQ, troubleshooting, release notes, and glossary.',
     permissions: ['modules', 'windows'], settings: {}
   },

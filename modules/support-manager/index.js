@@ -4,7 +4,7 @@ function call(target, names, ...args) { for (const name of names) { try { if (ty
 function values(collection) { const source = collection?.d ?? collection?.l ?? collection ?? []; return Array.isArray(source) ? source.filter(Boolean) : Object.values(source).filter(Boolean); }
 
 export class SupportManagerModule extends Module {
-  constructor() { super({ id: 'support-manager', name: 'Support Manager', version: '1.0.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Inspect, manually recall, and manually calibrate support weapons.', permissions: ['game', 'notifications', 'windows'], settings: {} }); }
+  constructor() { super({ id: 'support-manager', name: 'Support Manager', version: '0.1.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Inspect, manually recall, and manually calibrate support weapons.', permissions: ['game', 'notifications', 'windows'], settings: {} }); }
   async enable(context) { this.context = context; }
   root() { return this.context?.hub?.game?.services?.tryGet?.('clientLib')?.root ?? globalThis.ClientLib; }
   citiesObject() { return call(this.root()?.Data?.MainData?.GetInstance?.(), ['get_Cities']); }

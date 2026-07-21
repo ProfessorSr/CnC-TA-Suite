@@ -8,7 +8,7 @@ const settings = Object.freeze({});
 export const layoutOptimizerManifest = Object.freeze({
   id: 'layout-optimizer',
   name: 'Base Layout Optimizer',
-  version: '1.0.0',
+  version: '0.1.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Design, compare, rank, and optionally apply optimized base layouts.',

@@ -4,7 +4,7 @@ function call(target, names, ...args) { for (const name of names) { try { if (ty
 function bearing(dx, dy) { const degrees = (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360; return { degrees, direction: ['N','NE','E','SE','S','SW','W','NW'][Math.round(degrees / 45) % 8] }; }
 
 export class WorldToolsModule extends Module {
-  constructor() { super({ id:'world-tools', name:'World Map Tools', version:'1.0.0', apiVersion:'1.0.0', author:'ProfessorSr', description:'Coordinate navigation, compasses, sector HUD, zoom, and regional object inspection.', permissions:['game','settings','windows'], settings:{ zoom:{type:'number',default:1,min:0.2,max:3} } }); this.record=null; }
+  constructor() { super({ id:'world-tools', name:'World Map Tools', version:'0.1.0', apiVersion:'1.0.0', author:'ProfessorSr', description:'Coordinate navigation, compasses, sector HUD, zoom, and regional object inspection.', permissions:['game','settings','windows'], settings:{ zoom:{type:'number',default:1,min:0.2,max:3} } }); this.record=null; }
   async enable(context) { this.context=context; }
   root() { return this.context?.hub?.game?.services?.tryGet?.('clientLib')?.root ?? globalThis.ClientLib; }
   state() {

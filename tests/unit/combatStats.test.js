@@ -33,3 +33,36 @@ test('CombatStats persists normalized battle history and favorites', async () =>
   assert.equal(restored.isFavorite(snapshot.target), true);
   assert.match(restored.exportText(), /Camp/);
 });
+
+test('CombatStats answers attack and defense performance by opponent class', () => {
+  const stats = new CombatStats();
+  const reports = [
+    { category: 'offense', target: 'Enemy', won: true, destroyed: true, cp: 10, loot: { 1: 1000 }, repairSeconds: 60 },
+    { category: 'forgotten', target: 'Camp 20', npc: true, won: false, destroyed: false, cp: 12, loot: { 1: 500 }, repairSeconds: 120 },
+    { category: 'defense', target: 'Raider', won: true, destroyed: false, cp: 0, loot: {}, repairSeconds: 30 },
+    { category: 'defense', target: 'Forgotten', npc: true, won: false, destroyed: false, cp: 0, loot: {}, repairSeconds: 90 }
+  ];
+  const rows = stats.overviewRows(reports);
+  assert.deepEqual(rows.map((row) => [row[0], row[1], row[2]]), [
+    ['Attacking other players', 0, 0],
+    ['Attacking Forgotten', 1, 1],
+    ['Defending against Forgotten', 1, 0],
+    ['Defending vs players', 2, 1],
+    ['All attacks', 1, 1],
+    ['All defense', 3, 1]
+  ]);
+});
+
+test('CombatStats transposes combat sections into metric rows and filters by base', () => {
+  const stats = new CombatStats();
+  const reports = [
+    { category: 'offense', ownBase: 'Alpha', won: true, destroyed: true, cp: 10, loot: { 1: 100 }, repairSeconds: 60 },
+    { category: 'others', ownBase: 'Beta', won: false, destroyed: false, cp: 8, loot: {}, repairSeconds: 30 }
+  ];
+  const matrix = stats.overviewMatrix(reports, 'Alpha');
+  assert.equal(matrix.length, 7);
+  assert.equal(matrix[0][0], 'Combat section');
+  assert.equal(matrix[1][0], 'Reports');
+  assert.equal(matrix[1][2], 1);
+  assert.equal(matrix[1][1], 0);
+});

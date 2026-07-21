@@ -10,7 +10,7 @@ Run:
 node --test tests/unit/*.test.js tests/integration/*.test.js
 ```
 
-The stabilization suite contains **89 automated tests** covering feature behavior, Command Manual coverage/search, compatibility contracts, declarative module adoption, diagnostics, and performance budgets.
+The stabilization suite contains **92 automated tests** covering feature behavior, independent module versioning, War Room native report/formation integration, Command Manual coverage/search, compatibility contracts, declarative module adoption, diagnostics, and performance budgets.
 
 Automated coverage includes:
 
@@ -47,4 +47,5 @@ Use the Markdown checklists under `tests/integration/` for live-game behavior. A
 - enable/disable persistence;
 - Launcher and Suite Status access;
 - player, city, world, selection, and battle APIs;
+- movable War Room Formation Controls placement, faction-native styling, group visibility, persistent single-troop toggle mode, reset/save, and restored Attack Planner movement controls;
 - no repeated hooks or runaway event listeners.

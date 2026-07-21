@@ -366,10 +366,10 @@ CnC-TA-Suite/
 │   │   └── upgrade-manager-window.js
 │   ├── war-room/
 │   │   ├── army-analyzer.js
+│   │   ├── attack-controls-palette.js
 │   │   ├── battle-simulator.js
 │   │   ├── combat-stats.js
 │   │   ├── README.md
-│   │   ├── report-summary.js
 │   │   ├── target-analyzer.js
 │   │   ├── war-room-calculator.js
 │   │   ├── war-room-hub.js

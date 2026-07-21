@@ -26,7 +26,7 @@ The first command runs JavaScript tests. Markdown integration files are manual l
 
 - Build: must pass from a clean generated catalog
 - Generated modules: 23
-- Automated tests: 89 expected; zero failures required
+- Automated tests: 92 expected; zero failures required
 - Live-game status: complete the Markdown checklists under `tests/integration/` before tagging
 
 ## Post-1.0 policy

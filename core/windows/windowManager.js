@@ -135,7 +135,8 @@ export class WindowManager {
     compactSize = {},
     autoHide = false,
     pinnable = true,
-    lockable = true
+    lockable = true,
+    sizeRevision = null
   }) {
     if (!id) {
       throw new Error('[CnC-TA-Suite] Window id is required.');
@@ -173,14 +174,15 @@ export class WindowManager {
     const saved = rememberPositions
       ? await this.storage.get(`window:${id}`, null)
       : null;
+    const useSavedSize = !sizeRevision || saved?.sizeRevision === sizeRevision;
 
     const win = new qx.ui.window.Window(title || id);
 
     win.setLayout(new qx.ui.layout.Grow());
 
     win.set({
-      width: saved?.width ?? width,
-      height: saved?.height ?? height,
+      width: useSavedSize ? (saved?.width ?? width) : width,
+      height: useSavedSize ? (saved?.height ?? height) : height,
       showMinimize,
       showMaximize: false,
       allowMinimize: showMinimize,
@@ -301,6 +303,7 @@ export class WindowManager {
           width: Math.round(bounds.width),
           height: Math.round(bounds.height),
           visible: win.isVisible?.() ?? true,
+          ...(sizeRevision ? { sizeRevision } : {}),
           ...windowState
         }).catch((error) => {
           this.logger?.warn?.(

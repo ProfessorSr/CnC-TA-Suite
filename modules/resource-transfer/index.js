@@ -30,7 +30,7 @@ export function normalizeQuickTransferProfile(profile = {}) {
 export const resourceTransferManifest = Object.freeze({
   id: 'resource-transfer',
   name: 'Resource Transfer Manager',
-  version: '1.0.0',
+  version: '0.1.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Plan and manually execute safe resource transfers between owned bases.',

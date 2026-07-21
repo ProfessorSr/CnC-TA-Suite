@@ -4,7 +4,7 @@ export class LauncherModule {
   constructor() {
     this.id = 'launcher';
     this.name = 'Suite Dashboard';
-    this.version = '1.0.0';
+    this.version = '0.2.0';
     this.apiVersion = '1.0.0';
     this.author = 'ProfessorSr';
     this.lastUpdated = '2026-07-20';

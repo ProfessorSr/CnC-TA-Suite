@@ -18,16 +18,35 @@ export function coordinateBbcode(x, y) {
   return `[coords]${Math.round(Number(x) || 0)}:${Math.round(Number(y) || 0)}[/coords]`;
 }
 
+export function allianceRecipients(members, group = 'all') {
+  const unique = new Map();
+  for (const member of members ?? []) {
+    const name = String(member?.Name ?? member?.n ?? member?.name ?? '').trim();
+    if (!name) continue;
+    const role = String(member?.RoleName ?? member?.rn ?? member?.role ?? member?.Role ?? '').trim();
+    if (!unique.has(name.toLocaleLowerCase())) unique.set(name.toLocaleLowerCase(), { name, role });
+  }
+  const matches = ({ role }) => {
+    if (group === 'all') return true;
+    if (group === 'cic') return /^(?:leader|commander(?: in chief)?|cic)$/i.test(role) && !/second/i.test(role);
+    if (group === 'sic') return /second commander|second in command|sic/i.test(role);
+    if (group === 'officers') return /officer/i.test(role);
+    return false;
+  };
+  return [...unique.values()].filter(matches).map(({ name }) => name).sort((a, b) => a.localeCompare(b));
+}
+
 export class CommunicationsModule extends Module {
   constructor() {
     super({
-      id: 'communications', name: 'Communications', version: '1.0.0', apiVersion: '1.0.0',
+      id: 'communications', name: 'Communications', version: '0.1.0', apiVersion: '1.0.0',
       author: 'ProfessorSr',
-      description: 'BBCode composition, selection and wave summaries, and persistent whisper contacts.',
+      description: 'BBCode composition, whisper contacts, and user-confirmed in-game mail with alliance role recipients.',
       permissions: ['game', 'storage', 'settings', 'windows'],
       settings: { minimizeChatOnStart: { type: 'boolean', default: false } }
     });
     this.contacts = [];
+    this.mailRecipients = [];
   }
 
   async enable(context) {
@@ -97,14 +116,50 @@ export class CommunicationsModule extends Module {
     return false;
   }
 
+  allianceMembers(group = 'all') {
+    const root = this.clientRoot();
+    const alliance = root?.Data?.MainData?.GetInstance?.()?.get_Alliance?.();
+    call(alliance, ['RefreshMemberData']);
+    const memberArray = call(alliance, ['get_MemberDataAsArray']);
+    const sources = [
+      ...(Array.isArray(memberArray) ? memberArray : Object.values(memberArray?.d ?? memberArray ?? {})),
+      ...Object.values(call(alliance, ['get_MemberData'])?.d ?? {})
+    ];
+    return allianceRecipients(sources.map((member) => ({
+      name: member?.Name ?? member?.n ?? call(member, ['get_Name']),
+      role: member?.RoleName ?? member?.rn ?? member?.Role
+    })), group);
+  }
+
+  sendMail(recipients, subject, message) {
+    const names = [...new Set(recipients.map((name) => String(name).trim()).filter(Boolean))];
+    if (!names.length) throw new Error('Add at least one recipient.');
+    if (!String(subject).trim()) throw new Error('Enter a mail subject.');
+    if (!String(message).trim()) throw new Error('Enter a message.');
+    const player = this.selection().player;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const body = `<cnc><cncs>${player}</cncs><cncd>${timestamp}</cncd><cnct>${message}</cnct></cnc>`;
+    const mail = this.clientRoot()?.Data?.Mail?.prototype;
+    if (typeof mail?.SendMail !== 'function') throw new Error('Native in-game mail is unavailable.');
+    mail.SendMail(names.join(';'), '', String(subject).trim(), body);
+    return names.length;
+  }
+
   wrap(tag, value = null) {
     const text = this.editor.getValue() || '';
     this.editor.setValue(value == null ? `[${tag}]${text}[/${tag}]` : `[${tag}=${value}]${text}[/${tag}]`);
   }
 
   append(text) {
-    const current = this.editor.getValue();
+    const current = String(this.editor.getValue() ?? '');
     this.editor.setValue(`${current}${current ? '\n' : ''}${text}`);
+  }
+
+  async openDraft(context, text) {
+    await this.open(context ?? this.context);
+    this.append(String(text ?? ''));
+    this.editor?.focus?.();
+    return this.record;
   }
 
   async copy(text = this.editor.getValue()) {
@@ -140,17 +195,70 @@ export class CommunicationsModule extends Module {
 
     this.editor = new qx.ui.form.TextArea().set({ height: 180, placeholder: 'Compose reusable BBCode…' });
     root.add(this.editor);
+    const messaging = new qx.ui.tabview.TabView();
+    const whisperPage = new qx.ui.tabview.Page('Whisper').set({ layout: new qx.ui.layout.VBox(5), padding: 7 });
+    const mailPage = new qx.ui.tabview.Page('Mail').set({ layout: new qx.ui.layout.VBox(5), padding: 7 });
+    messaging.add(whisperPage);
+    messaging.add(mailPage);
     const contacts = new qx.ui.groupbox.GroupBox('Whisper Contacts').set({ layout: new qx.ui.layout.VBox(5), padding: 7 });
     const row = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
     this.contact = new qx.ui.form.TextField().set({ placeholder: 'Player name' });
     const add = new qx.ui.form.Button('Add');
     const remove = new qx.ui.form.Button('Remove Selected');
     row.add(this.contact, { flex: 1 }); row.add(add); row.add(remove); contacts.add(row);
-    this.list = new qx.ui.form.List().set({ height: 130 }); contacts.add(this.list); root.add(contacts, { flex: 1 });
-    const copy = new qx.ui.form.Button('Copy for Chat or Mail');
+    this.list = new qx.ui.form.List().set({ height: 95 }); contacts.add(this.list); whisperPage.add(contacts, { flex: 1 });
+    const copyWhisper = new qx.ui.form.Button('Copy Whisper Command');
+    copyWhisper.addListener('execute', () => {
+      const name = this.list.getSelection()[0]?.getLabel?.() || String(this.contact.getValue() ?? '').trim();
+      if (!name) return;
+      void this.copy(`/w ${name} ${this.editor.getValue() || ''}`);
+    });
+    whisperPage.add(copyWhisper);
+
+    const recipientRow = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
+    this.recipientField = new qx.ui.form.TextField().set({ placeholder: 'Receiving player names', readOnly: true });
+    const recipientGroup = new qx.ui.form.SelectBox().set({ width: 190 });
+    for (const [name, id] of [
+      ['Whole alliance', 'all'], ['CiC of alliance', 'cic'],
+      ['SiC of alliance', 'sic'], ['All officers', 'officers']
+    ]) recipientGroup.add(new qx.ui.form.ListItem(name, null, id));
+    const addRecipients = new qx.ui.form.Button('Add to Recipients');
+    const clearRecipients = new qx.ui.form.Button('Clear');
+    recipientRow.add(recipientGroup);
+    recipientRow.add(addRecipients);
+    recipientRow.add(clearRecipients);
+    mailPage.add(recipientRow);
+    mailPage.add(this.recipientField);
+    this.mailSubject = new qx.ui.form.TextField().set({ placeholder: 'Mail subject' });
+    mailPage.add(this.mailSubject);
+    const mailStatus = new qx.ui.basic.Label('Choose a group, then add its members to the recipient field.').set({ wrap: true });
+    mailPage.add(mailStatus);
+    const sendMail = new qx.ui.form.Button('Send In-Game Mail');
+    mailPage.add(sendMail);
+    const renderRecipients = () => this.recipientField.setValue(this.mailRecipients.join('; '));
+    addRecipients.addListener('execute', () => {
+      const group = recipientGroup.getSelection()[0]?.getModel?.() ?? 'all';
+      const names = this.allianceMembers(group);
+      this.mailRecipients = [...new Set([...this.mailRecipients, ...names])];
+      renderRecipients();
+      mailStatus.setValue(names.length ? `${names.length} alliance member(s) added.` : 'No matching alliance members were available.');
+    });
+    clearRecipients.addListener('execute', () => { this.mailRecipients = []; renderRecipients(); mailStatus.setValue('Recipients cleared.'); });
+    sendMail.addListener('execute', () => {
+      const count = this.mailRecipients.length;
+      if (!count || !globalThis.confirm?.(`Send this in-game mail to ${count} recipient(s)?`)) return;
+      try {
+        const sent = this.sendMail(this.mailRecipients, this.mailSubject.getValue(), this.editor.getValue());
+        mailStatus.setValue(`Mail submitted to ${sent} recipient(s).`);
+      } catch (error) {
+        mailStatus.setValue(`Mail failed: ${error?.message ?? error}`);
+      }
+    });
+    root.add(messaging, { flex: 1 });
+    const copy = new qx.ui.form.Button('Copy Message');
     copy.addListener('execute', () => this.copy()); root.add(copy);
     const render = () => { this.list.removeAll(); for (const name of this.contacts) this.list.add(new qx.ui.form.ListItem(name)); };
-    add.addListener('execute', () => { const name = this.contact.getValue().trim(); if (name && !this.contacts.includes(name)) { this.contacts.push(name); this.contacts.sort(); void this.context.storage.set(CONTACTS_KEY, this.contacts); render(); } });
+    add.addListener('execute', () => { const name = String(this.contact.getValue() ?? '').trim(); if (name && !this.contacts.includes(name)) { this.contacts.push(name); this.contacts.sort(); void this.context.storage.set(CONTACTS_KEY, this.contacts); render(); } });
     remove.addListener('execute', () => { const name = this.list.getSelection()[0]?.getLabel(); this.contacts = this.contacts.filter(item => item !== name); void this.context.storage.set(CONTACTS_KEY, this.contacts); render(); });
     render();
     return root;

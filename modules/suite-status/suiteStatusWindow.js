@@ -4,7 +4,7 @@ const status = (label, value, ok = () => true, fallback) => ({ label, value, ok,
 
 export const suiteStatusDefinition = Object.freeze({
   manifest: {
-    id: 'suite-status', name: 'Suite Status', version: '1.0.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
+    id: 'suite-status', name: 'Suite Status', version: '0.2.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
     author: 'ProfessorSr', description: 'Live framework, compatibility, performance, and lifecycle diagnostics.',
     permissions: ['diagnostics', 'windows'], settings: {}
   },

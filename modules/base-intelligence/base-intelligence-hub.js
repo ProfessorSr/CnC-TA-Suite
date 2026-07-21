@@ -165,8 +165,11 @@ export class BaseIntelligenceHub {
     const repairAvailable = activeRepairGroups.length
       ? Math.min(...activeRepairGroups.map((group) => group.available))
       : 0;
-    const repairAttacks = maxRepairCost > 0
+    const fullyRepairableAttacks = maxRepairCost > 0
       ? Math.floor(repairAvailable / maxRepairCost)
+      : Infinity;
+    const repairAttacks = Number.isFinite(fullyRepairableAttacks)
+      ? fullyRepairableAttacks + 1
       : Infinity;
     const possibleAttacks = Math.max(0, Math.min(cpAttacks, repairAttacks));
 
@@ -217,7 +220,7 @@ export class BaseIntelligenceHub {
       x, y, attacker: own?.name ?? 'Current base', cpAvailable, cpCost, cpAttacks,
       maxRepairCostSeconds: maxRepairCost, repairAvailableSeconds: repairAvailable,
       repairGroups: Object.freeze(repairGroups.map((group) => Object.freeze(group))),
-      repairAttacks, possibleAttacks, loot: Object.freeze(loot), surrounding,
+      fullyRepairableAttacks, repairAttacks, possibleAttacks, loot: Object.freeze(loot), surrounding,
       attackRadius: radius, innerAttackRadius: Math.floor(radius),
       forgotten, innerForgotten, waves, levels: Object.freeze(levels),
       targetLoaded: Boolean(targetCity)

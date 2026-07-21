@@ -3,6 +3,8 @@
 
   const HOST = globalThis.window ?? globalThis;
   const ROOT = (HOST.CnCTA = HOST.CnCTA || {});
+  // World-sector object types. Player cities are type 1; the similarly named
+  // RegionCity type is a separate enum and must not be used for world scans.
   const TYPE = Object.freeze({ PLAYER: 1, BASE: 2, CAMP: 3 });
 
   function hiddenMemberFromRegion(method) {
@@ -176,34 +178,48 @@
     return { id, name: String(name || '').trim() };
   }
 
-  function worldSectors(world) {
-    for (const value of Object.values(world ?? {})) {
-      const dictionary = value?.d;
-      if (!dictionary || typeof dictionary !== 'object') continue;
-      const first = Object.values(dictionary).find(Boolean);
-      if (typeof first?.ConvertToWorldX === 'function') return Object.values(dictionary);
+  function currentRankedAlliances(ClientLib, limit = 3000) {
+    const communication = ClientLib?.Net?.CommunicationManager?.GetInstance?.();
+    const delegateFactory = globalThis.webfrontend?.phe?.cnc?.Util?.createEventDelegate
+      ?? globalThis.webfrontend?.Util?.createEventDelegate;
+    if (!communication?.SendSimpleCommand || !delegateFactory) {
+      return Promise.reject(new Error('Alliance ranking service is unavailable.'));
     }
-    return [];
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Alliance ranking request timed out.')), 15000);
+      const receiver = { done(_status, response) {
+        clearTimeout(timeout);
+        if (response == null) reject(new Error('Alliance ranking returned no data.'));
+        else resolve(response);
+      } };
+      communication.SendSimpleCommand('RankingGetData', {
+        firstIndex: 0,
+        lastIndex: Math.max(0, limit - 1),
+        ascending: true,
+        view: ClientLib?.Data?.Ranking?.EViewType?.Alliance ?? 1,
+        rankingType: ClientLib?.Data?.Ranking?.ERankingType?.Score ?? 0,
+        sortColumn: 2
+      }, delegateFactory(ClientLib.Net.CommandResult, receiver, receiver.done), null);
+    });
   }
 
-  function worldAlliances(world) {
-    const alliances = new Map();
-    for (const sector of worldSectors(world)) {
-      for (let index = 1; index < 10000; index += 1) {
-        const record = safeCall(sector, ['GetAlliance'], index);
-        if (!record) break;
-        const entries = Object.entries(record);
-        const name = entries.find(([, value]) => typeof value === 'string' && value.trim())?.[1] ?? '';
-        const id = record.Id
-          ?? record.ID
-          ?? entries.find(([, value]) => Number.isInteger(value) && value > 0)?.[1]
-          ?? index;
-        if (!name) continue;
-        const key = String(id);
-        if (!alliances.has(key)) alliances.set(key, { id, name: name.trim() });
-      }
+  function normalizeRankedAlliances(response) {
+    const source = response?.a ?? response?.alliances ?? response ?? {};
+    const entries = Array.isArray(source) ? source : Object.values(source?.d ?? source?.l ?? source);
+    const unique = new Map();
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') continue;
+      const name = String(entry.an ?? entry.n ?? entry.name ?? '').trim();
+      if (!name) continue;
+      const key = name.toLocaleLowerCase();
+      if (!unique.has(key)) unique.set(key, {
+        id: entry.a ?? entry.i ?? entry.id ?? null,
+        name
+      });
     }
-    return alliances;
+    return [...unique.values()].sort((left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
+    );
   }
 
   function createLayout(city) {
@@ -293,7 +309,7 @@
         };
       },
 
-      getAllianceOptions(options = {}) {
+      async getAllianceOptions(options = {}) {
         installWorldObjectAccessors(ClientLib);
         const main = ClientLib.Data.MainData.GetInstance();
         const cities = main.get_Cities();
@@ -302,22 +318,25 @@
         const origin = own.find((city) => String(city.id) === String(options.originCityId)) || own[0];
         if (!origin) return [];
         const radius = Number(options.radius || main.get_Server().get_MaxAttackDistance() || 0);
-        const alliances = worldAlliances(world);
-
-        if (!alliances.size) {
-          for (let y = origin.y - Math.ceil(radius); y <= origin.y + Math.ceil(radius); y += 1) {
-            for (let x = origin.x - Math.ceil(radius); x <= origin.x + Math.ceil(radius); x += 1) {
-              if (Math.hypot(origin.x - x, origin.y - y) > radius) continue;
-              const object = world.GetObjectFromPosition(x, y);
-              if (resolveObjectType(object) !== TYPE.PLAYER) continue;
-              const alliance = resolveAlliance(object);
-              if (!alliance.name) continue;
-              const key = alliance.id == null ? alliance.name.toLowerCase() : String(alliance.id);
-              if (!alliances.has(key)) alliances.set(key, alliance);
-            }
+        try {
+          const ranked = normalizeRankedAlliances(await currentRankedAlliances(ClientLib));
+          if (ranked.length) return ranked;
+        } catch {
+          // Fall back to live world objects only. Sector alliance dictionaries
+          // can retain deleted or renamed alliances and are not authoritative.
+        }
+        const alliances = new Map();
+        for (let y = origin.y - Math.ceil(radius); y <= origin.y + Math.ceil(radius); y += 1) {
+          for (let x = origin.x - Math.ceil(radius); x <= origin.x + Math.ceil(radius); x += 1) {
+            if (Math.hypot(origin.x - x, origin.y - y) > radius) continue;
+            const object = world.GetObjectFromPosition(x, y);
+            if (resolveObjectType(object) !== TYPE.PLAYER) continue;
+            const alliance = resolveAlliance(object);
+            if (!alliance.name) continue;
+            const key = alliance.name.toLocaleLowerCase();
+            if (!alliances.has(key)) alliances.set(key, alliance);
           }
         }
-
         return [...alliances.values()].sort((left, right) =>
           left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })
         );
@@ -328,6 +347,9 @@
         const main = ClientLib.Data.MainData.GetInstance();
         const cities = main.get_Cities();
         const world = main.get_World();
+        const region = ClientLib?.Vis?.VisMain?.GetInstance?.()?.get_Region?.();
+        const gridWidth = Number(region?.get_GridWidth?.() || 0);
+        const gridHeight = Number(region?.get_GridHeight?.() || 0);
         const own = getOwnCities(cities);
         const origin = own.find((city) => String(city.id) === String(options.originCityId)) || own[0];
         if (!origin) throw new Error('No player base is available for target search.');
@@ -338,6 +360,8 @@
         const minLevel = Number(options.minLevel ?? 1);
         const maxLevel = Number(options.maxLevel ?? Number.POSITIVE_INFINITY);
         const selectedTypes = new Set(options.types || ['Base', 'Outpost', 'Camp']);
+        const selectedAllianceId = options.allianceId == null
+          ? '' : String(options.allianceId).trim();
         const selectedAlliance = String(options.allianceName || '').trim().toLowerCase();
         const selectedRelationships = new Set(options.relationships ?? ['allied', 'nap', 'enemy', 'neutral']);
         const diplomacy = allianceRelationships(main);
@@ -350,25 +374,45 @@
             if (distance > radius) continue;
             const object = world.GetObjectFromPosition(x, y);
             const objectType = resolveObjectType(object);
-            const alliance = objectType === TYPE.PLAYER ? resolveAlliance(object) : null;
+            const regionObject = objectType === TYPE.PLAYER && region && gridWidth && gridHeight
+              ? region.GetObjectFromPosition(x * gridWidth, y * gridHeight)
+              : null;
+            const worldAlliance = objectType === TYPE.PLAYER ? resolveAlliance(object) : null;
+            const regionAlliance = objectType === TYPE.PLAYER ? resolveAlliance(regionObject) : null;
+            const alliance = objectType === TYPE.PLAYER
+              ? {
+                  id: regionAlliance?.id ?? worldAlliance?.id ?? null,
+                  name: regionAlliance?.name || worldAlliance?.name || ''
+                }
+              : null;
             const allianceMatch = Boolean(
-              selectedAlliance
-              && alliance?.name.toLowerCase() === selectedAlliance
+              (selectedAllianceId && alliance?.id != null
+                && String(alliance.id) === selectedAllianceId)
+              || (selectedAlliance && alliance?.name
+                && alliance.name.toLowerCase() === selectedAlliance)
             );
             const type = allianceMatch ? 'Alliance' : classifyWorldObject(object);
             if (!type || (type !== 'Alliance' && !selectedTypes.has(type))) continue;
-            const id = resolveObjectId(object);
+            const id = resolveObjectId(object) ?? resolveObjectId(regionObject);
             const level = resolveObjectLevel(object);
             if (!id || ownIds.has(String(id)) || !isAttackableWorldObject(object) || level < minLevel || level > maxLevel) continue;
             const relationship = objectType === TYPE.PLAYER
               ? (String(alliance?.id) === String(diplomacy.ownId) ? 'allied' : diplomacy.result.get(String(alliance?.id)) ?? 'neutral')
               : null;
             if (type === 'Player' && !selectedRelationships.has(relationship)) continue;
+            // Match the value published after the target is opened. Current
+            // clients already account for PvP territory through this overload;
+            // the legacy boolean overload now produces a different estimate.
             const cp = Number(selectedBase.CalculateAttackCommandPointCostToCoord(x, y) || 0);
             if (cp > cpLimit) continue;
             targets.push({
               id,
-              type: type === 'Alliance' ? 'Base' : type,
+              type: type === 'Alliance' ? 'Base' : type === 'Player' ? 'PVP' : type,
+              name: String(safeCall(regionObject, ['get_Name', 'get_CityName', 'get_BaseName'])
+                || safeCall(object, ['get_Name', 'get_CityName', 'get_BaseName'])
+                || (type === 'Alliance' ? 'Player Base' : type)),
+              owner: String(safeCall(regionObject, ['get_PlayerName', 'get_OwnerName'])
+                || safeCall(object, ['get_PlayerName', 'get_OwnerName']) || ''),
               level,
               x,
               y,
@@ -376,7 +420,9 @@
               distance,
               allianceId: alliance?.id ?? null,
               alliance: alliance?.name ?? '',
-              relationship
+              relationship,
+              attackerId: origin.id,
+              attackerName: origin.name
             });
           }
         }
@@ -384,6 +430,32 @@
         return targets.sort((left, right) =>
           left.cp - right.cp || right.level - left.level || left.distance - right.distance
         );
+      },
+
+      async selectTarget(target) {
+        if (!target || !Number.isFinite(Number(target.x)) || !Number.isFinite(Number(target.y))) {
+          throw new Error('The selected target has no valid map coordinates.');
+        }
+        const vis = ClientLib?.Vis?.VisMain?.GetInstance?.();
+        const region = vis?.get_Region?.();
+        const gridWidth = Number(region?.get_GridWidth?.() || 0);
+        const gridHeight = Number(region?.get_GridHeight?.() || 0);
+        if (!vis || !region || !gridWidth || !gridHeight) throw new Error('Native map selection is unavailable.');
+        vis.CenterGridPosition(Number(target.x), Number(target.y));
+        let selected = null;
+        for (let attempt = 0; attempt < 12 && !selected; attempt += 1) {
+          selected = region.GetObjectFromPosition(Number(target.x) * gridWidth, Number(target.y) * gridHeight);
+          if (!selected) await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        if (!selected) throw new Error('The target is not loaded in the region view yet.');
+        // Clear first so Qooxdoo emits a real selection change even when the
+        // same singleton context panel is already open for another target.
+        vis.set_SelectedObject?.(null);
+        vis.set_SelectedObject?.(selected);
+        const cities = ClientLib.Data.MainData.GetInstance().get_Cities();
+        const own = getOwnCities(cities).find((city) => String(city.id) === String(target.attackerId));
+        safeCall(own?.raw?.get_CityArmyFormationsManager?.(), ['set_CurrentTargetBaseId'], target.id);
+        return selected;
       },
 
       async getTargetIntel(target, signal) {
@@ -394,7 +466,7 @@
         const world = main.get_World();
         const server = main.get_Server();
         const own = getOwnCities(cities);
-        const attacker = own[0] ?? null;
+        const attacker = own.find((city) => String(city.id) === String(target.attackerId)) ?? own[0] ?? null;
         cities.set_CurrentCityId(target.id);
         safeCall(ClientLib?.Net?.CommunicationManager?.GetInstance?.(), ['UserAction']);
         const city = await waitForCity(cities, target.id, signal, 10000);
@@ -446,13 +518,13 @@
         return {
           id: target.id,
           type: target.type,
-          name: safeCall(city, ['get_Name']) || target.type,
+          name: target.name || safeCall(city, ['get_Name']) || target.type,
           level: Number(safeCall(city, ['get_LvlBase', 'get_BaseLevel', 'get_Level']) || target.level || 0),
           x: target.x,
           y: target.y,
           cp: target.cp,
-          owner: safeCall(city, ['get_PlayerName', 'get_OwnerName']) || 'Forgotten',
-          alliance: safeCall(city, ['get_AllianceName', 'get_OwnerAllianceName']) || '',
+          owner: target.owner || (target.type === 'PVP' ? safeCall(city, ['get_PlayerName', 'get_OwnerName']) : 'Forgotten') || 'Forgotten',
+          alliance: target.alliance || (target.type === 'PVP' ? safeCall(city, ['get_AllianceName', 'get_OwnerAllianceName']) : '') || '',
           baseCondition: Number(safeCall(city, ['GetBuildingsConditionInPercent']) || 0),
           defenseCondition: Number(safeCall(city, ['GetDefenseConditionInPercent']) || 0),
           attackPossible: Boolean(attacker && Number(target.cp) <= 99),

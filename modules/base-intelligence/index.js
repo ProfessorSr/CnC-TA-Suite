@@ -14,7 +14,7 @@ const settings = Object.freeze({
 });
 
 export const baseIntelligenceManifest = Object.freeze({
-  id: 'base-intelligence', name: 'Base Intelligence', version: '1.0.0', apiVersion: '1.0.0', author: 'ProfessorSr',
+  id: 'base-intelligence', name: 'Base Intelligence', version: '0.1.0', apiVersion: '1.0.0', author: 'ProfessorSr',
   description: 'Owned-base overview, statistics, resources, repairs, composition, stickers, and region intelligence.',
   dependencies: Object.freeze([]), permissions: Object.freeze(['events', 'game', 'hooks', 'settings', 'windows']), settings
 });

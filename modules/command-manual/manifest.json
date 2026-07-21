@@ -1,0 +1,13 @@
+{
+  "id": "command-manual",
+  "name": "Command Manual",
+  "version": "0.2.0",
+  "apiVersion": "1.0.0",
+  "hubApiVersion": "1.0.0",
+  "author": "ProfessorSr",
+  "lastUpdated": "2026-07-21",
+  "description": "Interactive searchable command center with contextual module help, workflows, FAQ, troubleshooting, release notes, and glossary.",
+  "dependencies": [],
+  "permissions": ["modules", "windows"],
+  "settings": {}
+}

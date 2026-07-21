@@ -6,7 +6,7 @@ import { RepairQuickDock } from './repair-quick-dock.js';
 export const repairManagerManifest = Object.freeze({
   id: 'repair-manager',
   name: 'Repair & Collection Manager',
-  version: '1.0.0',
+  version: '0.1.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Automatic and manual repair and resource collection controls for owned bases.',

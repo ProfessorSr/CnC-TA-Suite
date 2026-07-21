@@ -1,5 +1,14 @@
 const STORAGE_KEY = 'module:war-room:combat-stats:v1';
 
+function duration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total % 3600 / 60);
+  const remainder = total % 60;
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+    : `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
 function compactTarget(target) {
   if (!target) return null;
   return {
@@ -98,6 +107,105 @@ export class CombatStats {
       Math.round(entry.summary?.loot ?? 0),
       `${Math.round(100 - Number(entry.summary?.defenderRemaining ?? 100))}% damage`
     ]);
+  }
+
+  analysisRows(nativeReports = []) {
+    const groups = new Map();
+    for (const entry of this.history) {
+      const key = String(entry.target?.id ?? entry.target?.name ?? 'unknown');
+      const group = groups.get(key) ?? { target: entry.target?.name ?? 'Unknown', attacks: 0, kills: 0, cp: 0, loot: 0, rp: 0, repair: 0, damage: 0 };
+      group.attacks += 1;
+      group.kills += Number(entry.summary?.defenderRemaining ?? 100) <= 0 ? 1 : 0;
+      group.cp += Number(entry.cpCost ?? 0);
+      group.loot += Number(entry.summary?.loot ?? 0);
+      group.rp += Number(entry.summary?.research ?? 0);
+      group.repair += Number(entry.summary?.repairSeconds ?? 0);
+      group.damage += Math.max(0, 100 - Number(entry.summary?.defenderRemaining ?? 100));
+      groups.set(key, group);
+    }
+    // Native reports enrich totals even when a simulation was not recorded.
+    for (const report of nativeReports) {
+      const key = `native:${report.target}`;
+      if ([...groups.values()].some((group) => group.target === report.target)) continue;
+      const group = groups.get(key) ?? { target: report.target, attacks: 0, kills: 0, cp: 0, loot: 0, rp: 0, repair: 0, damage: 0 };
+      group.attacks += 1;
+      group.kills += report.destroyed ? 1 : 0;
+      group.cp += Number(report.cp ?? 0);
+      group.loot += Object.values(report.loot ?? {}).reduce((sum, value) => sum + Number(value || 0), 0);
+      group.repair += Number(report.repairSeconds ?? 0);
+      groups.set(key, group);
+    }
+    return [...groups.values()].map((group) => {
+      const avgDamage = group.attacks ? group.damage / group.attacks : 0;
+      return [
+        group.target, group.attacks, group.kills,
+        group.attacks ? (group.cp / group.attacks).toFixed(1) : '0',
+        Math.round(group.loot), group.cp ? Math.round(group.loot / group.cp) : 0,
+        group.attacks ? Math.round(group.rp / group.attacks) : 0,
+        group.attacks ? Math.round(group.repair / group.attacks) : 0,
+        `${avgDamage.toFixed(1)}%`, avgDamage > 0 ? Math.ceil(100 / avgDamage) : '—',
+        group.repair > 0 ? (group.loot / (group.repair / 3600)).toFixed(0) : '—'
+      ];
+    }).sort((left, right) => Number(right[5]) - Number(left[5]));
+  }
+
+  analysisSummary(nativeReports = []) {
+    const rows = this.analysisRows(nativeReports);
+    const attacks = rows.reduce((sum, row) => sum + Number(row[1]), 0);
+    const kills = rows.reduce((sum, row) => sum + Number(row[2]), 0);
+    return `${attacks} analyzed attacks · ${kills} target kills · ${rows.length} targets · ranked by loot per CP; `
+      + 'estimated hits-to-kill uses average defender damage per simulation.';
+  }
+
+  overviewRows(nativeReports = []) {
+    // EA's report-tab names describe native folders, not intuitive combat
+    // direction. Keep this explicit mapping aligned with the live UI.
+    const attacking = (report) => report.category === 'offense' || report.category === 'others';
+    const defending = (report) => report.category === 'defense' || report.category === 'forgotten';
+    const sections = [
+      ['Attacking other players', (report) => report.category === 'others'],
+      ['Attacking Forgotten', (report) => report.category === 'offense'],
+      ['Defending against Forgotten', (report) => report.category === 'forgotten'],
+      ['Defending vs players', (report) => report.category === 'defense'],
+      ['All attacks', attacking],
+      ['All defense', defending]
+    ];
+    return sections.map(([name, predicate]) => {
+      const reports = nativeReports.filter(predicate);
+      const wins = reports.filter((report) => report.won).length;
+      const destroyed = reports.filter((report) => report.destroyed).length;
+      const cp = reports.reduce((sum, report) => sum + Number(report.cp || 0), 0);
+      const loot = reports.reduce((sum, report) => sum
+        + Object.values(report.loot ?? {}).reduce((total, value) => total + Number(value || 0), 0), 0);
+      const repair = reports.reduce((sum, report) => sum + Number(report.repairSeconds || 0), 0);
+      return [
+        name, reports.length, wins, reports.length - wins,
+        reports.length ? `${(wins / reports.length * 100).toFixed(1)}%` : '—',
+        destroyed, cp, Math.round(loot), cp ? Math.round(loot / cp) : 0,
+        reports.length ? Math.round(repair / reports.length) : 0
+      ];
+    });
+  }
+
+  overviewSummary(nativeReports = []) {
+    const rows = this.overviewRows(nativeReports);
+    const attacks = rows.find((row) => row[0] === 'All attacks');
+    const defense = rows.find((row) => row[0] === 'All defense');
+    return `${nativeReports.length} combat reports analyzed · attacks: ${attacks?.[1] ?? 0} reports / ${attacks?.[4] ?? '—'} success · `
+      + `defense: ${defense?.[1] ?? 0} reports / ${defense?.[4] ?? '—'} success.`;
+  }
+
+  overviewMatrix(nativeReports = [], baseName = 'All bases') {
+    const filtered = baseName === 'All bases'
+      ? nativeReports
+      : nativeReports.filter((report) => String(report.ownBase) === String(baseName));
+    const sections = this.overviewRows(filtered);
+    const metrics = [
+      ['Combat section', 0], ['Reports', 1], ['Wins', 2], ['Losses', 3],
+      ['Success', 4], ['Loot', 7], ['Average repair', 9]
+    ];
+    return metrics.map(([label, index]) => [label, ...sections.map((section) =>
+      index === 9 ? duration(section[index]) : section[index])]);
   }
 
   exportText() {

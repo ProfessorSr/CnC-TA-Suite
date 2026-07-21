@@ -7,15 +7,16 @@ function fixture() {
   return {
     target: { level: 25 },
     units: [
-      { name: 'Mammoth', level: 30, health: 1 },
+      { id: 10, name: 'Mammoth', level: 30, health: 1, x: 4, y: 0,
+        repairCosts: { 1: 1000, 2: 400 } },
       { name: 'Guardian', level: 28, health: 0.9 }
     ],
-    defenseUnits: [{ name: 'Cannon', level: 25, health: 1, x: 4 }],
+    defenseUnits: [{ id: 500, name: 'Cannon', level: 25, health: 1, x: 4, y: 8 }],
     buildings: [
       { id: 112, name: 'Construction Yard', level: 25, health: 1, x: 6, requirements: [] },
       { id: 900, name: 'Defense Facility', level: 24, health: 1, x: 2, requirements: [] }
     ],
-    resourceTypes: { ResearchPoints: 3 },
+    resourceTypes: { Tiberium: 1, Crystal: 2, ResearchPoints: 3 },
     repair: { infantry: 100, vehicle: 200, aircraft: 0 },
     loot: { 3: 10_000, 6: 20_000 },
     cpCost: 10
@@ -94,6 +95,14 @@ test('WarRoomCalculator ranks native simulations by objective destruction', () =
 
 test('WarRoomCalculator summarizes live native battle results', () => {
   const snapshot = fixture();
+  snapshot.resourceTypes = { ResearchPointsProduction: 99, ...snapshot.resourceTypes };
+  snapshot.buildings = snapshot.buildings.map((building) => ({
+    ...building,
+    resourceValue: building.id === 112 ? { 1: 1000, 2: 200, 3: 500 } : { 1: 400, 2: 800, 3: 100 }
+  }));
+  snapshot.defenseUnits = snapshot.defenseUnits.map((unit) => ({
+    ...unit, resourceValue: { 1: 600, 2: 300, 3: 200 }
+  }));
   const response = {
     d: {
       cs: 440,
@@ -116,6 +125,66 @@ test('WarRoomCalculator summarizes live native battle results', () => {
   assert.equal(result.dfRemaining, 50);
   assert.equal(result.ownRemaining, 75);
   assert.equal(result.durationSeconds, 44);
+  assert.equal(result.repairSeconds, 50);
+  assert.equal(result.repairTimeByGroup.vehicle, 50);
+  assert.equal(result.repairCostResources.tiberium, 250);
+  assert.equal(result.repairCostResources.crystal, 100);
+  assert.equal(result.lootResources.tiberium, 1650);
+  assert.equal(result.lootResources.crystal, 825);
+  assert.equal(result.lootResources.research, 700);
+  assert.equal(result.loot, 3175);
+});
+
+test('WarRoomCalculator reports defender state against native maximum health', () => {
+  const snapshot = fixture();
+  snapshot.defenseUnits = [{
+    id: 500, name: 'Cannon', level: 25, x: 4, y: 8,
+    maxHealth: 2000, resourceValue: { 1: 1000 }
+  }];
+  snapshot.buildings = [];
+  const result = WarRoomCalculator.analyzeNativeSimulation({
+    d: { s: [], d: [{ i: 500, x: 4, y: 8, h: 100, ci: 1 }], a: [] },
+    e: [{ Key: 1, Value: { h: 1580 } }]
+  }, snapshot);
+  assert.equal(result.defenderBreakdown.defense.remainingPercent, 79);
+  assert.equal(result.defenderRemaining, 79);
+});
+
+test('WarRoomCalculator prefers simulator maximum health and applies repeated-attack loot decay', () => {
+  const snapshot = fixture();
+  snapshot.resourceTypes = { Tiberium: 1, ResearchPoints: 4 };
+  snapshot.buildings = [];
+  snapshot.defenseUnits = [{
+    id: 500, name: 'Cannon', level: 25, x: 4, y: 8,
+    maxHealth: 1200, attackCounter: 0,
+    resourceValue: { 1: 1000, 4: 501 }
+  }];
+  const result = WarRoomCalculator.analyzeNativeSimulation({
+    d: { s: [], d: [{ i: 500, x: 4, y: 8, h: 100, ac: 2, ci: 1 }], a: [] },
+    e: [{ Key: 1, Value: { h: 800, mh: 2000 } }]
+  }, snapshot);
+  assert.equal(result.defenderRemaining, 40);
+  assert.equal(Math.round(result.lootResources.tiberium), 196);
+  assert.equal(result.lootResources.research, 98);
+  assert.equal(result.calculationDiagnostics.source, 'native-entity-values');
+  assert.ok(Math.abs(result.calculationDiagnostics.entities[0].attackDecay - 0.49) < 1e-12);
+});
+
+test('WarRoomCalculator prefers authoritative simulated combat-report loot', () => {
+  const snapshot = fixture();
+  snapshot.resourceTypes = { Tiberium: 1, Crystal: 2, ResearchPoints: 6 };
+  snapshot.buildings = snapshot.buildings.map((building) => ({
+    ...building, resourceValue: { 1: 999999, 2: 999999, 6: 999999 }
+  }));
+  const result = WarRoomCalculator.analyzeNativeSimulation({
+    d: { s: [{ i: 112, x: 6, y: 4, h: 100, ci: 1 }], d: [], a: [] },
+    e: [{ Key: 1, Value: { sh: 1600, h: 800, mh: 1600 } }],
+    nativeReportLoot: { 1: 114900, 2: 21345, 6: 51129 }
+  }, snapshot);
+  assert.equal(result.lootResources.tiberium, 114900);
+  assert.equal(result.lootResources.crystal, 21345);
+  assert.equal(result.lootResources.research, 51129);
+  assert.equal(result.calculationDiagnostics.source, 'native-combat-report');
 });
 
 test('War Room attack estimate is limited by CP and the largest active repair requirement', () => {
@@ -131,8 +200,9 @@ test('War Room attack estimate is limited by CP and the largest active repair re
   });
   assert.equal(result.commandPointAttacks, 8);
   assert.equal(result.maxRepairSeconds, 7200);
-  assert.equal(result.repairTimeAttacks, 4);
-  assert.equal(result.possibleAttacks, 4);
+  assert.equal(result.fullyRepairableAttacks, 4);
+  assert.equal(result.repairTimeAttacks, 5);
+  assert.equal(result.possibleAttacks, 5);
 });
 
 test('War Room attack estimate remains CP-limited when no repair is needed', () => {
@@ -140,4 +210,16 @@ test('War Room attack estimate remains CP-limited when no repair is needed', () 
   assert.equal(result.commandPointAttacks, 6);
   assert.equal(result.repairTimeAttacks, Infinity);
   assert.equal(result.possibleAttacks, 6);
+});
+
+test('War Room includes a final attack after fully repairable capacity is exhausted', () => {
+  const result = estimatePossibleAttacks({
+    cpAvailable: 100,
+    cpCost: 10,
+    repair: { infantry: 4 * 3600 },
+    repairStorage: { infantry: { stored: 10 * 3600 } }
+  });
+  assert.equal(result.fullyRepairableAttacks, 2);
+  assert.equal(result.repairTimeAttacks, 3);
+  assert.equal(result.possibleAttacks, 3);
 });

@@ -1,5 +1,4 @@
 import { ArmyAnalyzer } from './army-analyzer.js';
-import { ReportSummary } from './report-summary.js';
 import { WarRoomCalculator } from './war-room-calculator.js';
 
 // Keep the user-initiated formation executor isolated so it can be disabled
@@ -19,10 +18,36 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function compactColumnWidth(name) {
+  const label = String(name);
+  if (/^(?:CP|Lvl|Level|Wins|Losses|Reports|Range|Speed)$/i.test(label)) return 58;
+  if (/^(?:Health|State|Position|Result|Success)$/i.test(label)) return 72;
+  if (/^(?:Tiberium|Crystal|Credits|Research|Loot|Other loot)$/i.test(label)) return 82;
+  if (/^(?:Time|Coordinates|Average repair|Repair)$/i.test(label)) return 118;
+  if (/^(?:Type|Role|Unit|Target|Attacking base|Best against)$/i.test(label)) return 125;
+  if (/Open Reports/i.test(label)) return 96;
+  if (/Information|ceiling|Combat section|Metric/i.test(label)) return 155;
+  return 105;
+}
+
 function table(qx, columns) {
   const model = new qx.ui.table.model.Simple();
   model.setColumns(columns);
   const widget = new qx.ui.table.Table(model).set({ statusBarVisible: false });
+  const columnModel = widget.getTableColumnModel();
+  const storageKey = `cnc-ta-suite:war-room:columns:${columns.join('|')}`;
+  let savedWidths = null;
+  try { savedWidths = JSON.parse(globalThis.localStorage?.getItem(storageKey) ?? 'null'); } catch {}
+  columns.forEach((column, index) => {
+    const saved = Number(savedWidths?.[index]);
+    columnModel.setColumnWidth(index, Number.isFinite(saved) && saved >= 35 ? saved : compactColumnWidth(column));
+  });
+  columnModel.addListener?.('widthChanged', () => {
+    try {
+      const widths = columns.map((_, index) => columnModel.getColumnWidth(index));
+      globalThis.localStorage?.setItem(storageKey, JSON.stringify(widths));
+    } catch { /* Persistence is optional when browser storage is unavailable. */ }
+  });
   return { widget, model };
 }
 
@@ -39,6 +64,13 @@ function duration(seconds) {
   const minutes = Math.floor((value % 3600) / 60);
   const remainder = value % 60;
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
+function repairCostText(analysis) {
+  const costs = analysis?.repairCostResources ?? {};
+  return `Tib ${Math.round(costs.tiberium ?? 0).toLocaleString()} · Crystal ${Math.round(costs.crystal ?? 0).toLocaleString()}`
+    + `${costs.credits ? ` · Credits ${Math.round(costs.credits).toLocaleString()}` : ''}`
+    + `${costs.power ? ` · Power ${Math.round(costs.power).toLocaleString()}` : ''}`;
 }
 
 function unitCodes(units) {
@@ -85,10 +117,23 @@ export class WarRoomWindow {
     const qx = globalThis.qx;
     const root = new qx.ui.container.Composite(new qx.ui.layout.VBox(6));
     root.set({ padding: 6, textColor: '#ffffff' });
+    let buildDisposed = false;
+    const widgetAlive = (widget) => !buildDisposed && widget && !widget.isDisposed?.();
+    const safeSetValue = (widget, value) => {
+      if (!widgetAlive(widget)) return false;
+      try { widget.setValue(value); return true; } catch { return false; }
+    };
+    const safeSetEnabled = (widget, value) => {
+      if (!widgetAlive(widget)) return false;
+      try { widget.setEnabled(value); return true; } catch { return false; }
+    };
+    const windowVisible = () => !this.record?.window || Boolean(this.record.window.isVisible?.());
+    let unsubscribePresetChanges = null;
 
     const toolbar = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
     const stack = new qx.ui.container.Stack();
     const pages = new Map();
+    let activeSectionId = 'search';
     const sections = [
       ['search', '🔍 Search'],
       ['planner', '⚔ Attack Planner'],
@@ -101,11 +146,21 @@ export class WarRoomWindow {
     for (const [id, title] of sections) {
       const button = new qx.ui.form.Button(title);
       toolbar.add(button);
-      button.addListener('execute', () => stack.setSelection([pages.get(id).page]));
+      button.addListener('execute', () => {
+        activeSectionId = id;
+        stack.setSelection([pages.get(id).page]);
+        render();
+        if (id === 'stats') void loadCombatStatistics();
+      });
     }
     this.showPage = (id) => {
       const page = pages.get(id)?.page;
-      if (page) stack.setSelection([page]);
+      if (page) {
+        activeSectionId = id;
+        stack.setSelection([page]);
+        render();
+        if (id === 'stats') void loadCombatStatistics();
+      }
     };
     toolbar.add(new qx.ui.core.Spacer(), { flex: 1 });
     const favorite = new qx.ui.form.Button('★ Favorite');
@@ -153,11 +208,34 @@ export class WarRoomWindow {
     presetControls.add(deletePreset);
     planner.page.addAt(presetControls, 1);
     const plannerStatus = label(qx, 'Recommendations are visual only; move troops manually in the game.');
-    planner.page.add(plannerStatus);
     const formationVisual = table(qx, ['Row', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
     formationVisual.widget.set({ height: 190, minHeight: 150 });
     planner.page.add(formationVisual.widget);
     const formationLegend = label(qx, '<b>Troop legend</b><br>—', { rich: true });
+    const formationLegendSection = new qx.ui.container.Composite(new qx.ui.layout.VBox()).set({
+      padding: 8,
+      marginTop: 6,
+      backgroundColor: '#27333a',
+      decorator: new qx.ui.decoration.Decorator(1, 'solid', '#667780')
+    });
+    formationLegendSection.add(formationLegend);
+    const bestFormationResult = label(qx,
+      '<b>Best Formation Result</b><br><span style="color:#52636b">Run a best-formation simulation to compare layouts.</span>', {
+        rich: true,
+        padding: 8,
+        minHeight: 112,
+        allowGrowX: true,
+        allowGrowY: true,
+        allowShrinkY: false,
+        textColor: '#17262d',
+        backgroundColor: '#d9ece1',
+        decorator: new qx.ui.decoration.Decorator(1, 'solid', '#3d8b5a')
+      });
+    let plannerResultHtml = bestFormationResult.getValue();
+    const setPlannerResult = (value) => {
+      plannerResultHtml = value;
+      if (activeSectionId === 'planner') safeSetValue(bestFormationResult, value);
+    };
     const formationTools = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
     const previewUndo = new qx.ui.form.Button('Undo').set({ enabled: false });
     const previewRedo = new qx.ui.form.Button('Redo').set({ enabled: false });
@@ -174,7 +252,8 @@ export class WarRoomWindow {
     const swapRows34 = new qx.ui.form.Button('Swap 3/4');
     formationTools.add(label(qx, 'Preview'));
     for (const button of [
-      previewUndo, previewRedo, previewReset, simulatePreview, shiftLeft, shiftRight, shiftUp, shiftDown,
+      previewUndo, previewRedo, previewReset, simulatePreview,
+      shiftLeft, shiftRight, shiftUp, shiftDown,
       mirrorHorizontal, mirrorVertical, swapRows12, swapRows23, swapRows34
     ]) formationTools.add(button);
     planner.page.add(formationTools);
@@ -221,6 +300,11 @@ export class WarRoomWindow {
 
     const presetStorageKey = 'module:war-room:formation-presets:v1';
     let formationPresets = [];
+    const presetMatchesTarget = (preset, snapshot = this.hub.snapshot()) => Boolean(
+      preset?.target?.id != null
+      && snapshot.target?.id != null
+      && String(preset.target.id) === String(snapshot.target.id)
+    );
     const selectedPreset = () => {
       const id = presetSelect.getSelection?.()?.[0]?.getModel?.();
       return formationPresets.find((preset) => String(preset.id) === String(id)) ?? null;
@@ -228,9 +312,11 @@ export class WarRoomWindow {
     const renderPresets = (selectedId = null) => {
       presetSelect.removeAll();
       let selectedItem = null;
-      const attackerId = this.hub.snapshot().attacker?.id;
+      const snapshot = this.hub.snapshot();
+      const attackerId = snapshot.attacker?.id;
       for (const preset of formationPresets.filter((item) =>
         String(item.attackerId) === String(attackerId)
+        && presetMatchesTarget(item, snapshot)
       )) {
         const item = new qx.ui.form.ListItem(preset.name, null, preset.id);
         presetSelect.add(item);
@@ -241,25 +327,65 @@ export class WarRoomWindow {
       loadPreset.setEnabled(available);
       deletePreset.setEnabled(available);
     };
-    const loadFormationPresets = async () => {
+    const loadFormationPresets = async (selectedId = null) => {
       formationPresets = await this.context.storage?.get?.(presetStorageKey, []) ?? [];
-      renderPresets();
+      renderPresets(selectedId);
     };
+    unsubscribePresetChanges = this.context.events?.on?.('war-room:formation-presets-changed', (event = {}) => {
+      void loadFormationPresets(event.presetId).catch((error) => {
+        this.context.logger?.warn?.('War Room formation presets could not be synchronized.', error);
+      });
+    });
 
     const simulator = keyValuePage(qx, [
       'Run', 'CY left', 'DF left', 'Defender left', 'Own left',
-      'Repair', 'Loot', 'RP', 'Duration', 'Outcome', 'Morale', 'Auto repair', 'Source'
+      'Repair time', 'Tib repair', 'Crystal repair', 'Loot', 'RP', 'Duration', 'Outcome', 'Morale', 'Auto repair', 'Source'
     ]);
     simulator.grid.widget.set({ height: 125, minHeight: 100, maxHeight: 150 });
-    const reports = keyValuePage(qx, ['Metric', 'Value']);
-    const army = keyValuePage(qx, ['Unit', 'Level', 'Health', 'Position', 'Group']);
-    const search = keyValuePage(qx, ['Type', 'Location', 'Level', 'CP', 'Distance']);
+    const reports = keyValuePage(qx, [
+      'Time', 'Type', 'Attacking base', 'Target', 'Coordinates', 'Result', 'CP',
+      'Tiberium', 'Crystal', 'Credits', 'Research', 'Other loot', 'Repair', 'Open Reports'
+    ]);
+    const reportDetail = label(qx, 'Select an attack to review its summary.', { rich: true, textColor: '#d5e2e8' });
+    let nativeReportStatus = 'Native reports have not been loaded yet.';
+    const reportSummary = label(qx, 'No report metrics loaded.', { textColor: '#ffffff', wrap: true });
+    const reportCategory = new qx.ui.form.SelectBox().set({ width: 150 });
+    for (const [name, id] of [['Offense', 'offense'], ['Defense', 'defense'], ['The Forgotten', 'forgotten'], ['Others', 'others']]) {
+      reportCategory.add(new qx.ui.form.ListItem(name, null, id));
+    }
+    const reportActions = new qx.ui.container.Composite(new qx.ui.layout.HBox(6));
+    reportActions.add(label(qx, 'Raid Report category'));
+    reportActions.add(reportCategory);
+    reports.page.add(reportDetail);
+    reports.page.add(reportActions);
+    let displayedReports = [];
+    let selectedReport = null;
+    const army = keyValuePage(qx, ['Unit', 'Role', 'Level', 'Health', 'State', 'Position', 'Range', 'Speed', 'Best against', 'Est. 1v1 ceiling', 'Repair crystal needed']);
+    const armySummary = label(qx, 'No offensive formation loaded.', { textColor: '#ffffff', wrap: true });
+    const armyBase = new qx.ui.form.SelectBox().set({ width: 220 });
+    const repairArmy = new qx.ui.form.Button('Repair All Troops');
+    const exportArmyCsv = new qx.ui.form.Button('Download CSV');
+    const armyControls = new qx.ui.container.Composite(new qx.ui.layout.HBox(6));
+    armyControls.add(label(qx, 'Offense base'));
+    armyControls.add(armyBase);
+    armyControls.add(repairArmy);
+    armyControls.add(exportArmyCsv);
+    armyControls.add(label(qx, 'Only bases with a Command Center are listed. 1v1 ceilings are estimates; use native simulation for battle decisions.', { wrap: true }), { flex: 1 });
+    army.page.addAt(armyControls, 0);
+    const search = keyValuePage(qx, ['Type', 'Location', 'Level', 'CP', 'Attack']);
+    let selectedSearchTarget = null;
     const targetControls = new qx.ui.container.Composite(new qx.ui.layout.HBox(6));
-    const minLevel = new qx.ui.form.Spinner(1, 1, 100).set({ width: 65 });
-    const maxLevel = new qx.ui.form.Spinner(1, 100, 100).set({ width: 65 });
-    const maxCp = new qx.ui.form.Spinner(1, 25, 99).set({ width: 65 });
-    const maxDistance = new qx.ui.form.Spinner(1, 10, 99).set({ width: 65 });
-    maxDistance.setValue(Math.max(1, Math.round(this.hub.getSearchOptions().maxAttackDistance || 10)));
+    const initialSnapshot = this.hub.snapshot();
+    const initialOffenseLevel = Math.max(1, Math.round(Number(
+      initialSnapshot.attacker?.offenseLevel || initialSnapshot.attacker?.level || 1
+    )));
+    const minLevel = new qx.ui.form.Spinner(1, initialOffenseLevel, 100).set({ width: 65 });
+    const maxLevel = new qx.ui.form.Spinner(1, Math.min(100, initialOffenseLevel + 5), 100).set({ width: 65 });
+    const maxCp = new qx.ui.form.Spinner(1, 41, 41).set({ width: 65 });
+    // CP is the user-facing reach constraint. A 40-field discovery radius is
+    // already broader than a legal 40-CP attack and avoids scanning millions
+    // of empty world coordinates on the UI event thread.
+    const searchRadius = 41;
     const targetTypes = {};
     targetControls.add(label(qx, 'Level'));
     targetControls.add(minLevel);
@@ -267,11 +393,9 @@ export class WarRoomWindow {
     targetControls.add(maxLevel);
     targetControls.add(label(qx, 'Max CP'));
     targetControls.add(maxCp);
-    targetControls.add(label(qx, 'Distance'));
-    targetControls.add(maxDistance);
-    for (const type of ['Base', 'Camp', 'Outpost']) {
+    for (const type of ['Base', 'Camp', 'Outpost', 'PVP']) {
       const check = new qx.ui.form.CheckBox(type).set({ value: true, textColor: '#ffffff' });
-      targetTypes[type] = check;
+      targetTypes[type === 'PVP' ? 'Player' : type] = check;
       targetControls.add(check);
     }
     const allianceCheck = new qx.ui.form.CheckBox('Alliance').set({ value: false, textColor: '#ffffff' });
@@ -281,27 +405,60 @@ export class WarRoomWindow {
     const targetSearch = new qx.ui.form.Button('Search Targets');
     targetControls.add(targetSearch);
     search.page.addAt(targetControls, 0);
+    const searchExportControls = new qx.ui.container.Composite(new qx.ui.layout.HBox(6));
+    const exportSearchCsv = new qx.ui.form.Button('Download CSV').set({ enabled: false });
+    const copySearchList = new qx.ui.form.Button('Copy Target List').set({ enabled: false });
+    const messageSearchList = new qx.ui.form.Button('Open Message Draft').set({ enabled: false });
+    searchExportControls.add(label(qx, 'Share results'));
+    searchExportControls.add(exportSearchCsv);
+    searchExportControls.add(copySearchList);
+    searchExportControls.add(messageSearchList);
+    search.page.addAt(searchExportControls, 1);
     const targetStatus = label(qx, 'Search from the current attacker base, or open War Room from an attack screen.');
     search.page.add(targetStatus);
     const targetIntel = table(qx, ['Target Information', 'Value']);
     targetIntel.widget.set({ height: 245, minHeight: 180 });
     search.page.add(targetIntel.widget);
-    const stats = keyValuePage(qx, ['Time', 'Target', 'CP', 'Loot', 'Status']);
+    const stats = keyValuePage(qx, [
+      'Metric', 'Attack players', 'Attack Forgotten', 'Defend Forgotten',
+      'Defend players', 'All attacks', 'All defense'
+    ]);
+    stats.grid.widget.set({ height: 275, minHeight: 235, maxHeight: 310 });
     const statsControls = new qx.ui.container.Composite(new qx.ui.layout.HBox(6));
+    const statsBase = new qx.ui.form.SelectBox().set({ width: 190 });
     const exportHistory = new qx.ui.form.Button('Copy History');
+    const exportStatsCsv = new qx.ui.form.Button('Download CSV');
     const clearHistory = new qx.ui.form.Button('Clear History');
-    const statsStatus = label(qx, 'Battle results and favorite targets persist between sessions.');
+    const statsStatus = label(qx, 'Attack efficiency analysis persists between sessions.', { wrap: true });
+    statsControls.add(label(qx, 'Base'));
+    statsControls.add(statsBase);
     statsControls.add(exportHistory);
+    statsControls.add(exportStatsCsv);
     statsControls.add(clearHistory);
-    statsControls.add(statsStatus, { flex: 1 });
     stats.page.addAt(statsControls, 0);
 
-    const loadAlliances = () => {
+    let allianceLoadSequence = 0;
+    const allianceOptions = new Map();
+    const loadAlliances = async () => {
+      const sequence = ++allianceLoadSequence;
       const snapshot = this.hub.snapshot();
-      const alliances = this.hub.getAllianceOptions({ originCityId: snapshot.attacker?.id });
+      allianceSelect.setEnabled(false);
+      targetStatus.setValue('Loading current alliances from the world ranking…');
+      const loaded = await this.hub.getAllianceOptions({ originCityId: snapshot.attacker?.id });
+      if (sequence !== allianceLoadSequence || !allianceCheck.getValue()) return;
+      const alliances = [...new Map((loaded ?? [])
+        .filter((alliance) => String(alliance?.name ?? '').trim())
+        .map((alliance) => [String(alliance.name).trim().toLocaleLowerCase(), {
+          ...alliance, name: String(alliance.name).trim()
+        }])).values()];
       allianceSelect.removeAll();
+      allianceOptions.clear();
       for (const alliance of alliances) {
-        allianceSelect.add(new qx.ui.form.ListItem(alliance.name, null, alliance.name));
+        const key = alliance.id != null && String(alliance.id).trim()
+          ? `id:${String(alliance.id).trim()}`
+          : `name:${alliance.name.toLocaleLowerCase()}`;
+        allianceOptions.set(key, alliance);
+        allianceSelect.add(new qx.ui.form.ListItem(alliance.name, null, key));
       }
       allianceSelect.setEnabled(allianceCheck.getValue() && alliances.length > 0);
       if (allianceCheck.getValue()) {
@@ -318,8 +475,14 @@ export class WarRoomWindow {
           check.setValue(false);
           check.setEnabled(false);
         }
-        loadAlliances();
+        void loadAlliances().catch((error) => {
+          if (!allianceCheck.getValue()) return;
+          allianceSelect.setEnabled(false);
+          targetStatus.setValue(`Alliance list failed: ${error?.message ?? error}`);
+          this.context.logger?.warn?.('War Room alliance list failed.', error);
+        });
       } else {
+        allianceLoadSequence += 1;
         allianceSelect.setEnabled(false);
         for (const check of Object.values(targetTypes)) check.setEnabled(true);
       }
@@ -373,7 +536,6 @@ export class WarRoomWindow {
     simulatorActions.add(simulatorText);
     simulatorActions.add(runSimulations);
     simulatorActions.add(launch);
-    simulatorActions.add(miniMove);
     simulatorActions.add(cachedResultsTitle);
     simulatorActions.add(cachedResultsScroll, { flex: 1 });
     simulatorActions.add(settingsRow);
@@ -397,11 +559,21 @@ export class WarRoomWindow {
     overview.add(overviewFormation);
     overview.add(overviewReadiness);
     overview.add(overviewAttacks);
-    overview.add(formationLegend);
+    overview.add(plannerStatus);
+    overview.add(bestFormationResult);
+    overview.add(formationLegendSection);
     overview.add(new qx.ui.core.Spacer(), { flex: 1 });
 
+    const overviewScroll = new qx.ui.container.Scroll().set({
+      width: 238,
+      minWidth: 198,
+      maxWidth: 298,
+      scrollbarX: 'off',
+      scrollbarY: 'auto'
+    });
+    overviewScroll.add(overview);
     const workspace = new qx.ui.container.Composite(new qx.ui.layout.HBox(8));
-    workspace.add(overview);
+    workspace.add(overviewScroll);
     workspace.add(stack, { flex: 1 });
     root.add(workspace, { flex: 1 });
     const footer = label(qx, 'Select a target in the game, then refresh War Room.');
@@ -417,17 +589,169 @@ export class WarRoomWindow {
           ['Target level', snapshot.target?.level ?? '—'],
           ['Command points', snapshot.cpCost],
           ['Estimated attacks', snapshot.target
-            ? `${snapshot.attackEstimate.possibleAttacks} (${snapshot.attackEstimate.commandPointAttacks} by CP; ${Number.isFinite(snapshot.attackEstimate.repairTimeAttacks) ? `${snapshot.attackEstimate.repairTimeAttacks} by repair time` : 'repair time not limiting'})`
+            ? `${snapshot.attackEstimate.possibleAttacks} possible (${snapshot.attackEstimate.commandPointAttacks} by CP; ${Number.isFinite(snapshot.attackEstimate.fullyRepairableAttacks) ? `${snapshot.attackEstimate.fullyRepairableAttacks} fully repairable + 1 final hit` : 'repair time not limiting'})`
             : '—'],
           ['Formation units', summary.unitCount],
           ['Average unit level', summary.averageLevel.toFixed(1)],
           ['Level difference', summary.levelDelta.toFixed(1)],
           ['Readiness', summary.readiness]
         ]);
-        reports.grid.model.setData(ReportSummary.rows(snapshot));
-        army.grid.model.setData(ArmyAnalyzer.rows(snapshot));
+        displayedReports = this.hub.getCombatReports();
+        const lootAmount = (report, pattern) => Object.entries(report.loot ?? {}).reduce((sum, [type, amount]) => {
+          const name = report.lootLabels?.[type] ?? `Resource ${type}`;
+          return pattern.test(name) ? sum + Number(amount || 0) : sum;
+        }, 0);
+        reports.grid.model.setData(displayedReports.map((report) => {
+          const at = Number(report.at) < 1e12 ? Number(report.at) * 1000 : Number(report.at);
+          const tib = lootAmount(report, /tiberium/i);
+          const crystal = lootAmount(report, /crystal|chrystal/i);
+          const credits = lootAmount(report, /credit|gold/i);
+          const research = lootAmount(report, /research/i);
+          const total = Object.values(report.loot ?? {}).reduce((sum, amount) => sum + Number(amount || 0), 0);
+          return [
+            at ? new Date(at).toLocaleString() : 'Unknown', report.type, report.ownBase, report.target,
+            report.targetX || report.targetY ? `${report.targetX}:${report.targetY}` : '—',
+            report.won ? (report.destroyed ? 'Destroyed' : 'Victory') : (report.resultName || 'Defeat'), report.cp || '—',
+            Math.round(tib), Math.round(crystal), Math.round(credits), Math.round(research),
+            Math.round(Math.max(0, total - tib - crystal - credits - research)),
+            duration(report.repairSeconds), '↗ Open Reports'
+          ];
+        }));
+        const reportCp = displayedReports.reduce((sum, report) => sum + Number(report.cp || 0), 0);
+        const reportLoot = displayedReports.reduce((sum, report) => sum
+          + Object.values(report.loot ?? {}).reduce((total, amount) => total + Number(amount || 0), 0), 0);
+        const reportRepair = displayedReports.reduce((sum, report) => sum + Number(report.repairSeconds || 0), 0);
+        const reportWins = displayedReports.filter((report) => report.won).length;
+        reportSummary.setValue(
+          `${displayedReports.length} reports · ${reportWins} victories · ${reportCp} CP · `
+          + `${Math.round(reportLoot).toLocaleString()} resources · ${reportCp ? Math.round(reportLoot / reportCp).toLocaleString() : 0} resources/CP · `
+          + `${duration(reportRepair)} total repair · ${displayedReports.length ? duration(reportRepair / displayedReports.length) : '0s'} average repair`
+        );
+        if (selectedReport) {
+          selectedReport = displayedReports.find((report) => String(report.id) === String(selectedReport.id)) ?? null;
+        }
+        const offenseBases = this.hub.offenseBases();
+        const selectedBaseId = armyBase.getSelection?.()?.[0]?.getModel?.();
+        const selectedBase = offenseBases.find((base) => String(base.id) === String(selectedBaseId)) ?? offenseBases[0];
+        const armyOptionsSignature = offenseBases.map((base) => `${base.id}:${base.name}`).join('|');
+        if (this.armyOptionsSignature !== armyOptionsSignature) {
+          this.armyOptionsSignature = armyOptionsSignature;
+          armyBase.removeAll();
+          for (const base of offenseBases) armyBase.add(new qx.ui.form.ListItem(`${base.name} · CC L${base.commandCenterLevel}`, null, base.id));
+          const item = armyBase.getSelectables?.(true)?.find((entry) => String(entry.getModel?.()) === String(selectedBase?.id));
+          if (item) armyBase.setSelection([item]);
+        }
+        const armySnapshot = selectedBase ?? snapshot;
+        const armyRows = ArmyAnalyzer.rows(armySnapshot);
+        this.currentArmyRows = armyRows;
+        army.grid.model.setData(armyRows);
+        const armyMetrics = ArmyAnalyzer.summarize(armySnapshot);
+        armySummary.setValue(selectedBase
+          ? `${selectedBase.name} · Command Center L${selectedBase.commandCenterLevel} · ${armyMetrics.text}`
+          : 'No owned base with a Command Center was found.');
         if (!this.searchResults) search.grid.model.setData([]);
-        stats.grid.model.setData(this.stats.rows());
+        const allCombatReports = this.hub.getAllCombatReports();
+        const selectedStatsBase = statsBase.getSelection?.()?.[0]?.getModel?.() ?? 'All bases';
+        const availableStatsBases = ['All bases', ...new Map(offenseBases.map((base) =>
+          [String(base.name).trim().toLowerCase(), String(base.name).trim()])).values()];
+        const statsBaseOptionsSignature = availableStatsBases.map((name) => name.toLowerCase()).join('|');
+        if (this.statsBaseOptionsSignature !== statsBaseOptionsSignature) {
+          // Commit the signature before mutating the select box. Qooxdoo fires
+          // changeSelection synchronously from removeAll/add/setSelection.
+          this.statsBaseOptionsSignature = statsBaseOptionsSignature;
+          this.updatingStatsBase = true;
+          try {
+            statsBase.removeAll();
+            for (const base of availableStatsBases) statsBase.add(new qx.ui.form.ListItem(base, null, base));
+            const selected = statsBase.getSelectables?.(true)?.find((item) => String(item.getModel?.()) === String(selectedStatsBase))
+              ?? statsBase.getSelectables?.(true)?.[0];
+            if (selected) statsBase.setSelection([selected]);
+          } finally {
+            this.updatingStatsBase = false;
+          }
+        }
+        const effectiveStatsBase = availableStatsBases.includes(selectedStatsBase) ? selectedStatsBase : 'All bases';
+        const statsRows = this.stats.overviewMatrix(allCombatReports, effectiveStatsBase);
+        this.currentStatsRows = statsRows;
+        stats.grid.model.setData(statsRows);
+        const baseReports = effectiveStatsBase === 'All bases' ? allCombatReports
+          : allCombatReports.filter((report) => report.ownBase === effectiveStatsBase);
+        const combatOverviewRows = this.stats.overviewRows(baseReports);
+        const allAttacks = combatOverviewRows.find((row) => row[0] === 'All attacks');
+        const allDefense = combatOverviewRows.find((row) => row[0] === 'All defense');
+        statsStatus.setValue(`${effectiveStatsBase} · ${this.stats.overviewSummary(baseReports)}`);
+        plannerStatus.setVisibility(activeSectionId === 'planner' ? 'visible' : 'excluded');
+        if (activeSectionId === 'army') {
+          bestFormationResult.setValue(
+            '<b>Army Information</b><br><br>'
+            + `<b>Base</b><br><span style="color:#005f86">${escapeHtml(selectedBase?.name ?? 'No offense base')}</span><br><br>`
+            + `<b>Command Center</b><br>L${Number(selectedBase?.commandCenterLevel ?? 0)}<br><br>`
+            + `<b>Units</b><br>${armyMetrics.unitCount}<br>`
+            + `<span style="color:#19733a">Ready: ${armyMetrics.ready}</span><br>`
+            + `<span style="color:#b32323">Damaged: ${armyMetrics.damaged}</span><br>`
+            + `<span style="color:#52636b">Hidden: ${armyMetrics.hidden}</span><br><br>`
+            + `<b>Average level</b><br>${armyMetrics.averageLevel.toFixed(1)}<br><br>`
+            + `<b>Average health</b><br>${armyMetrics.averageHealth.toFixed(1)}%<br><br>`
+            + `<b>Readiness index</b><br>${armyMetrics.readinessIndex.toFixed(1)}<br><br>`
+            + `<b>Composition</b><br>${Object.entries(armyMetrics.roles).map(([role, count]) => `${escapeHtml(role)}: ${count}`).join('<br>') || '—'}`
+          );
+        } else if (activeSectionId === 'stats') {
+          bestFormationResult.setValue(
+            '<b>Combat Statistics</b><br><br>'
+            + `<b>Base filter</b><br><span style="color:#005f86">${escapeHtml(effectiveStatsBase)}</span><br><br>`
+            + `<b>Completed reports</b><br>${baseReports.length}<br><br>`
+            + `<b>Attacks</b><br>${allAttacks?.[1] ?? 0} reports<br>${escapeHtml(allAttacks?.[4] ?? '—')} success<br><br>`
+            + `<b>Defense</b><br>${allDefense?.[1] ?? 0} reports<br>${escapeHtml(allDefense?.[4] ?? '—')} success`
+          );
+        } else if (activeSectionId === 'reports') {
+          const categoryName = reportCategory.getSelection?.()?.[0]?.getLabel?.() ?? 'Reports';
+          bestFormationResult.setValue(
+            '<b>Report Summary</b><br><br>'
+            + `<b>Category</b><br><span style="color:#005f86">${escapeHtml(categoryName)}</span><br><br>`
+            + `<b>Reports</b><br>${displayedReports.length}<br><br>`
+            + `<b>Victories</b><br>${reportWins}<br><br>`
+            + `<b>Command points</b><br>${reportCp || '—'}<br><br>`
+            + `<b>Resources</b><br>${Math.round(reportLoot).toLocaleString()}<br><br>`
+            + `<b>Resources / CP</b><br>${reportCp ? Math.round(reportLoot / reportCp).toLocaleString() : '—'}<br><br>`
+            + `<b>Total repair</b><br>${duration(reportRepair)}<br><br>`
+            + `<b>Average repair</b><br>${displayedReports.length ? duration(reportRepair / displayedReports.length) : '0:00:00'}<br><br>`
+            + `<b>Native report status</b><br><span style="color:#52636b">${escapeHtml(nativeReportStatus)}</span>`
+          );
+        } else if (activeSectionId === 'search') {
+          const enabledTypes = Object.entries(targetTypes)
+            .filter(([, check]) => check.getValue())
+            .map(([type]) => type === 'Player' ? 'PVP' : type)
+            .join(', ') || (allianceCheck.getValue() ? 'Alliance' : 'None');
+          const selectedAllianceName = allianceCheck.getValue()
+            ? allianceSelect.getSelection?.()?.[0]?.getLabel?.() ?? '—'
+            : null;
+          bestFormationResult.setValue(
+            '<b>Search Information</b><br><br>'
+            + `<b>Target types</b><br><span style="color:#005f86">${escapeHtml(enabledTypes)}</span><br><br>`
+            + (selectedAllianceName ? `<b>Alliance</b><br>${escapeHtml(selectedAllianceName)}<br><br>` : '')
+            + `<b>Level range</b><br>${minLevel.getValue()}–${maxLevel.getValue()}<br><br>`
+            + `<b>Maximum CP</b><br>${maxCp.getValue()}<br><br>`
+            + `<b>Results</b><br>${this.searchResults?.length ?? 0}`
+            + (selectedSearchTarget
+              ? '<br><br><b>Selected target</b><br>'
+                + `<span style="color:#005f86">${escapeHtml(selectedSearchTarget.name || selectedSearchTarget.type)}</span><br>`
+                + `Type: ${escapeHtml(selectedSearchTarget.type)}<br>`
+                + `Owner: ${escapeHtml(selectedSearchTarget.owner || '—')}<br>`
+                + `Alliance: ${escapeHtml(selectedSearchTarget.alliance || '—')}<br>`
+                + `Level: ${Number(selectedSearchTarget.level) || 0}<br>`
+                + `Coordinates: ${Number(selectedSearchTarget.x) || 0}:${Number(selectedSearchTarget.y) || 0}<br>`
+                + `CP: ${Number(selectedSearchTarget.cp) || 0}<br>`
+                + `Distance: ${Number(selectedSearchTarget.distance || 0).toFixed(2)}`
+              : '<br><br><span style="color:#52636b">Select a result to inspect it here.</span>')
+          );
+        } else if (activeSectionId === 'planner') {
+          bestFormationResult.setValue(plannerResultHtml);
+        } else {
+          bestFormationResult.setValue(
+            '<b>War Room Information</b><br><br>'
+            + `<span style="color:#52636b">${escapeHtml(footer.getValue())}</span>`
+          );
+        }
         overviewAttacker.setValue(`Attacker: ${snapshot.attacker?.name ?? 'No base'}`);
         overviewTarget.setValue(`Target: ${snapshot.target ? `${snapshot.target.name} Lvl ${snapshot.target.level}` : 'No target'}`);
         overviewFormation.setValue(`Formation: ${summary.unitCount} units`);
@@ -439,7 +763,11 @@ export class WarRoomWindow {
         );
         this.currentSnapshot = snapshot;
         this.currentSummary = summary;
-        if (snapshot.target?.id && String(snapshot.target.id) !== String(this.intelTargetId ?? '')) {
+        if (
+          snapshot.target?.id
+          && !(activeSectionId === 'search' && selectedSearchTarget)
+          && String(snapshot.target.id) !== String(this.intelTargetId ?? '')
+        ) {
           targetStatus.setValue(`Selected from game: ${snapshot.target.name}. Loading target intelligence…`);
           targetIntel.model.setData([
             ['Target', snapshot.target.name],
@@ -461,6 +789,8 @@ export class WarRoomWindow {
     let liveSimulationQueued = false;
     let playSimulationQueued = false;
     let optimizationRunning = false;
+    let recommendationSequence = 0;
+    let liveFormationSequence = 0;
     let observedTargetId = null;
     let observedFormation = null;
     const simulationCache = new Map();
@@ -538,6 +868,24 @@ export class WarRoomWindow {
     };
     const renderRecommendation = () => {
       showRecommendation(WarRoomCalculator.recommendFormation(this.hub.snapshot(), selectedGoal()));
+    };
+
+    const syncLiveFormationPreview = (snapshot = this.hub.snapshot()) => {
+      const recommendation = WarRoomCalculator.recommendFormation(snapshot, selectedGoal());
+      const grid = Array.from({ length: 4 }, () => Array(9).fill(null));
+      for (const unit of snapshot.units ?? []) {
+        const x = Number(unit.x);
+        const y = Number(unit.y);
+        if (Number.isInteger(x) && Number.isInteger(y) && grid[y]?.[x] !== undefined) {
+          grid[y][x] = { ...unit };
+        }
+      }
+      showRecommendation({ ...recommendation, grid }, { resetHistory: true });
+      plannerStatus.setValue(
+        `Live formation synchronized from the game: ${snapshot.units.length} troop(s). `
+        + 'Use the controls below to edit this reversible preview, or Simulate Best Formation to generate recommendations.'
+      );
+      observedFormation = formationSignature(snapshot);
     };
 
     const transformPreview = (transform, message) => {
@@ -649,32 +997,151 @@ export class WarRoomWindow {
       win.open();
     });
 
+    const gameIcon = (path, fallback) => {
+      try {
+        const uri = qx.util.ResourceManager.getInstance().toUri(path);
+        return `<img src="${escapeHtml(uri)}" alt="${escapeHtml(fallback)}" title="${escapeHtml(fallback)}" style="width:16px;height:16px;vertical-align:middle;margin-right:4px">`;
+      } catch { return escapeHtml(fallback); }
+    };
+    const icons = {
+      cy: gameIcon('FactionUI/icons/icon_building_detail_upgrade.png', 'Construction Yard'),
+      df: gameIcon('FactionUI/icons/icon_building_detail_upgrade.png', 'Defense Facility'),
+      dhq: gameIcon('FactionUI/icons/icon_building_detail_upgrade.png', 'Defense HQ'),
+      tiberium: gameIcon('webfrontend/ui/common/icn_res_tiberium.png', 'Tiberium'),
+      crystal: gameIcon('webfrontend/ui/common/icn_res_chrystal.png', 'Crystal'),
+      credits: gameIcon('webfrontend/ui/common/icn_res_dollar.png', 'Credits'),
+      research: gameIcon('webfrontend/ui/common/icn_res_research_mission.png', 'Research Points'),
+      repair: gameIcon('webfrontend/ui/icons/icn_repair_off_points.png', 'Repair time'),
+      infantry: gameIcon('webfrontend/ui/icons/icon_res_repair_inf.png', 'Infantry'),
+      vehicle: gameIcon('webfrontend/ui/icons/icon_res_repair_tnk.png', 'Vehicle'),
+      aircraft: gameIcon('webfrontend/ui/icons/icon_res_repair_air.png', 'Aircraft')
+    };
+    const simulationDetailsHtml = (analysis) => {
+      const remaining = (value) => value == null ? '—' : `${Number(value).toFixed(1)}%`;
+      const defender = analysis?.defenderBreakdown ?? {};
+      const offense = analysis?.offenseBreakdown ?? {};
+      const repairGroups = analysis?.repairTimeByGroup ?? {};
+      const repairCosts = analysis?.repairCostsByGroup ?? {};
+      const loot = analysis?.lootResources ?? {};
+      const snapshot = this.hub.snapshot();
+      const crystalType = snapshot.resourceTypes?.Crystal;
+      const crystal = (group) => Math.round(Number(repairCosts[group]?.[crystalType] ?? 0)).toLocaleString();
+      const attackEstimate = snapshot.attackEstimate ?? {};
+      const fullyRepairable = Number(attackEstimate.fullyRepairableAttacks ?? Infinity);
+      const repairAttackText = Number.isFinite(fullyRepairable)
+        ? `${fullyRepairable} with full repairs (+1 not fully repairable)` : 'Not repair-time limited';
+      const repairCell = (group, icon) => `<td style="width:33%;text-align:center;vertical-align:top;padding:3px">`
+        + `<b>${icon}</b><br>`
+        + `${icons.crystal}${crystal(group)}<br>`
+        + `${icons.repair}${escapeHtml(duration(repairGroups[group]))}<br>`
+        + `${remaining(offense[group]?.remainingPercent)} remaining</td>`;
+      return `<b>Duration:</b> ${escapeHtml(duration(analysis?.durationSeconds))}<br>`
+        + `<b>Outcome:</b> <span style="color:${/Victory/i.test(analysis?.outcome ?? '') ? '#19733a' : '#b32323'}"><b>${escapeHtml(analysis?.outcome ?? 'Unknown')}</b></span><br><br>`
+        + '<span style="color:#45565e"><b>Defender</b></span><br>'
+        + `<b>Target State:</b> ${remaining(analysis?.defenderRemaining)}<br>`
+        + `&nbsp;&nbsp;Base State: ${remaining(defender.structures?.remainingPercent)}<br>`
+        + `&nbsp;&nbsp;Defense State: ${remaining(defender.defense?.remainingPercent)}<br>`
+        + `${icons.cy}${remaining(analysis?.cyRemaining)}<br>`
+        + `${icons.df}${remaining(analysis?.dfRemaining)}<br>`
+        + `${icons.dhq}${remaining(analysis?.defenseHqRemaining)}<br>`
+        + `Structures: ${remaining(defender.structures?.remainingPercent)}<br>`
+        + `Defensive Units: ${remaining(defender.defense?.remainingPercent)}<br><br>`
+        + '<span style="color:#45565e"><b>Loot</b></span><br>'
+        + `${icons.research}${Math.round(loot.research ?? 0).toLocaleString()}<br>`
+        + `${icons.crystal}${Math.round(loot.crystal ?? 0).toLocaleString()}<br>`
+        + `${icons.tiberium}${Math.round(loot.tiberium ?? 0).toLocaleString()}<br>`
+        + `${icons.credits}${Math.round(loot.credits ?? 0).toLocaleString()}<br>`
+        + `<b>Total: ${Math.round(analysis?.loot ?? 0).toLocaleString()}</b><br><br>`
+        + '<span style="color:#45565e"><b>Own Repair</b></span>'
+        + `<table style="width:100%;table-layout:fixed"><tr>${repairCell('aircraft', icons.aircraft)}${repairCell('vehicle', icons.vehicle)}${repairCell('infantry', icons.infantry)}</tr></table>`
+        + `${icons.crystal}<b>Total:</b> ${Math.round(analysis?.repairCostResources?.crystal ?? 0).toLocaleString()}<br>`
+        + `${icons.repair}<b>Total:</b> ${escapeHtml(duration(analysis?.repairSeconds))}<br><br>`
+        + '<span style="color:#45565e"><b>Possible Attacks</b></span><br>'
+        + `CP: ${Math.round(Number(attackEstimate.commandPointAttacks ?? 0))}<br>`
+        + `RT: ${escapeHtml(repairAttackText)}`;
+    };
+
+    const showSimulationResult = (analysis, {
+      title = 'Best Formation Result',
+      name = analysis?.label ?? 'Simulation',
+      oneShot = false,
+      note = 'Native battle simulation. Troops were not moved.'
+    } = {}) => {
+      setPlannerResult(
+        `<b>${escapeHtml(title)}</b><br>`
+        + `<span style="color:#005f86"><b>${escapeHtml(name)}</b></span>`
+        + (oneShot ? ' · <span style="color:#167a2f"><b>One-shot kill found</b></span>' : '')
+        + '<br><br>'
+        + simulationDetailsHtml(analysis) + '<br><br>'
+        + `<span style="color:#52636b">${escapeHtml(note)}</span>`
+      );
+    };
+
+    const candidateTestingHtml = (candidate) => {
+      const name = String(candidate?.name ?? 'Unknown candidate');
+      const move = name.match(/^Move\s+(.+)\s+to\s+(\d+):(\d+)$/i);
+      if (move) {
+        return '<b>Testing</b><br>'
+          + `<span style="color:#005f86"><b>Action:</b> Move troop</span><br>`
+          + `<b>Troop:</b> ${escapeHtml(move[1])}<br>`
+          + `<b>Destination:</b> Column ${escapeHtml(move[2])}, Row ${escapeHtml(move[3])}`;
+      }
+      const swap = name.match(/^Swap\s+(.+)\s+\/\s+(.+)$/i);
+      if (swap) {
+        return '<b>Testing</b><br>'
+          + '<span style="color:#005f86"><b>Action:</b> Swap troops</span><br>'
+          + `<b>Troop 1:</b> ${escapeHtml(swap[1])}<br>`
+          + `<b>Troop 2:</b> ${escapeHtml(swap[2])}`;
+      }
+      return `<b>Testing</b><br><span style="color:#005f86">${escapeHtml(name)}</span>`;
+    };
+
     const simulateRecommendation = async () => {
-      recommend.setEnabled(false);
+      const runId = ++recommendationSequence;
       optimizationRunning = true;
+      safeSetEnabled(recommend, true);
+      recommend.setLabel?.('Stop Simulation');
       try {
         const snapshot = this.hub.snapshot();
         const goal = selectedGoal();
         const detail = searchDetail.getSelection?.()?.[0]?.getModel?.() ?? 'detailed';
         const candidates = WarRoomCalculator.candidateFormations(snapshot, goal, detail);
+        setPlannerResult(
+          '<b>Best Formation Result</b><br>'
+          + `<span style="color:#005f86">Comparing ${candidates.length} candidate formations…</span>`
+        );
         let best = null;
         for (let index = 0; index < candidates.length; index += 1) {
           const candidate = candidates[index];
-          plannerStatus.setValue(
-            `Simulating ${index + 1}/${candidates.length}: ${candidate.name}…`
+          if (buildDisposed || runId !== recommendationSequence) return;
+          setPlannerResult(
+            '<b>Best Formation Result</b><br>'
+            + '<span style="color:#005f86"><b>Simulation in progress</b></span><br><br>'
+            + `<b>Candidate:</b> ${index + 1} of ${candidates.length}<br>`
+            + `${candidateTestingHtml(candidate)}<br>`
+            + (best
+              ? '<br><br><span style="color:#52636b">'
+                + `<b>Best so far:</b><br>${escapeHtml(best.candidate.name)}<br>`
+                + `Objective remaining: ${best.result.objectivePercent.toFixed(1)}%`
+                + '</span>'
+              : '')
           );
+          safeSetValue(plannerStatus, `Simulation in progress (${index + 1}/${candidates.length})…`);
           const cacheKey = simulationKey(snapshot, candidate.units);
           const response = simulationCache.get(cacheKey)?.response
             ?? await this.hub.simulateFormation(candidate.units);
+          if (buildDisposed || runId !== recommendationSequence) return;
           simulationCache.set(cacheKey, {
             response, snapshot, at: Date.now(), name: candidate.name,
             units: candidate.units.map((unit) => ({ ...unit }))
           });
+          renderSimulations();
           const result = WarRoomCalculator.scoreSimulation(response, snapshot, goal);
-          if (!best || result.score < best.result.score) best = { candidate, result };
+          if (!best || result.score < best.result.score) best = { candidate, result, response, snapshot };
           if (result.oneShot) break;
           if (index < candidates.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, 3100));
+            if (buildDisposed || runId !== recommendationSequence) return;
           }
         }
         if (!best) throw new Error('No formation could be simulated.');
@@ -687,21 +1154,56 @@ export class WarRoomWindow {
           score: best.result.score,
           grid
         });
-        plannerStatus.setValue(
-          `${best.candidate.name}: ${best.result.oneShot ? 'one-shot kill found; ' : ''}`
-          + `${best.result.objectivePercent.toFixed(1)}% objective health remaining; `
-          + `${best.result.defenderPercent.toFixed(1)}% total defender health remaining; `
-          + `${best.result.blockerPercent.toFixed(1)}% blocking-column health remaining. `
-          + 'Ranked by native battle simulation; troops were not moved.'
+        const analysis = WarRoomCalculator.analyzeNativeSimulation(
+          best.response, best.snapshot, best.candidate.name
         );
+        if (analysis.calculationDiagnostics?.source !== 'native-combat-report') {
+          this.context.logger?.warn?.('War Room simulation used compatibility interpretation; native combat report was not published.', {
+            source: analysis.calculationDiagnostics?.source,
+            resourceTypes: best.snapshot.resourceTypes,
+            nativeEntityLoot: best.response?.nativeEntityLoot,
+            entityDetails: best.response?.nativeEntityDetails,
+            simulationData: best.response?.d,
+            simulationEvents: best.response?.e
+          });
+        }
+        showSimulationResult(analysis, {
+          name: best.candidate.name,
+          oneShot: best.result.oneShot,
+          note: 'Ranked by native battle simulation. Troops were not moved.'
+        });
+        safeSetValue(plannerStatus, `Best formation found: ${best.candidate.name}.`);
       } catch (error) {
-        plannerStatus.setValue(`Formation simulation failed: ${error?.message ?? error}`);
+        safeSetValue(plannerStatus, `Formation simulation failed: ${error?.message ?? error}`);
+        setPlannerResult(
+          '<b>Best Formation Result</b><br>'
+          + `<span style="color:#a32626">Simulation failed: ${escapeHtml(error?.message ?? error)}</span>`
+        );
         this.context.logger?.warn?.('War Room formation simulation failed.', error);
       } finally {
-        optimizationRunning = false;
-        recommend.setEnabled(true);
-        if (liveSimulationQueued) queueLiveSimulation();
+        if (runId === recommendationSequence) {
+          optimizationRunning = false;
+          safeSetEnabled(recommend, true);
+          recommend.setLabel?.('Simulate Best Formation');
+          if (!buildDisposed && liveSimulationQueued) queueLiveSimulation();
+        }
       }
+    };
+
+    const cancelRecommendation = () => {
+      if (!optimizationRunning) return false;
+      recommendationSequence += 1;
+      optimizationRunning = false;
+      liveSimulationQueued = false;
+      safeSetEnabled(recommend, true);
+      recommend.setLabel?.('Simulate Best Formation');
+      safeSetValue(plannerStatus, 'Best-formation simulation stopped.');
+      setPlannerResult(
+        '<b>Best Formation Result</b><br>'
+        + '<span style="color:#8b4f00"><b>Simulation stopped by user.</b></span><br><br>'
+        + '<span style="color:#52636b">Completed cached results remain available in Battle Simulator.</span>'
+      );
+      return true;
     };
 
     const loadCachedPreview = (entry) => {
@@ -736,6 +1238,7 @@ export class WarRoomWindow {
     });
 
     const renderSimulations = () => {
+      if (!widgetAlive(simulator.grid.widget) || !widgetAlive(cachedResults)) return;
       const snapshot = this.hub.snapshot();
       const alternatives = [...simulationCache.values()].filter((entry) =>
         String(entry.snapshot?.target?.id) === String(snapshot.target?.id)
@@ -754,13 +1257,15 @@ export class WarRoomWindow {
         `${entry.analysis.defenderRemaining.toFixed(1)}%`,
         `${entry.analysis.ownRemaining.toFixed(1)}%`,
         duration(entry.analysis.repairSeconds),
+        Math.round(entry.analysis.repairCostResources.tiberium),
+        Math.round(entry.analysis.repairCostResources.crystal),
         Math.round(entry.analysis.loot),
         Math.round(entry.analysis.research),
         duration(entry.analysis.durationSeconds),
         entry.analysis.outcome,
         entry.analysis.morale,
         entry.analysis.autoRepair ? 'Yes' : 'No',
-        entry.name ? 'Cached candidate' : 'Native live simulation'
+        entry.source === 'live-formation' ? 'Native live formation' : 'Cached candidate'
       ]);
       simulator.grid.model.setData(rows);
       cachedResults.removeAll();
@@ -779,21 +1284,9 @@ export class WarRoomWindow {
           textColor: color, font: bold ? 'bold' : 'default', wrap: false
         });
         card.add(cardText(`${rankIndex + 1}. ${result.label}`, '#233239', true));
-        card.add(cardText(`Duration  ${duration(result.durationSeconds)}`));
-        card.add(cardText(`Outcome  ${result.outcome}`, result.outcome === 'Victory' ? '#19733a' : '#b32323', true));
-        card.add(cardText('Defender', '#45565e', true));
-        card.add(cardText(`Structures  ${result.defenderBreakdown.structures.remainingPercent.toFixed(1)}%`));
-        card.add(cardText(`Defense  ${result.defenderBreakdown.defense.remainingPercent.toFixed(1)}%`));
-        card.add(cardText(`Armored  ${result.defenderBreakdown.armored.remainingPercent.toFixed(1)}%`));
-        card.add(cardText(`CY / DF / CC  ${result.cyRemaining?.toFixed(0) ?? '—'} / ${result.dfRemaining?.toFixed(0) ?? '—'} / ${result.ccRemaining?.toFixed(0) ?? '—'}%`));
-        card.add(cardText('Own repair', '#45565e', true));
-        card.add(cardText(`Total  ${duration(result.repairSeconds)}`, result.repairSeconds ? '#b36b00' : '#19733a'));
-        card.add(cardText(`Inf / Veh / Air  ${result.offenseBreakdown.infantry.remainingPercent.toFixed(0)} / ${result.offenseBreakdown.vehicle.remainingPercent.toFixed(0)} / ${result.offenseBreakdown.aircraft.remainingPercent.toFixed(0)}%`));
-        card.add(cardText('Loot', '#45565e', true));
-        card.add(cardText(`Tib  ${Math.round(result.lootResources.tiberium).toLocaleString()}`, '#19733a'));
-        card.add(cardText(`Crystal  ${Math.round(result.lootResources.crystal).toLocaleString()}`, '#15729b'));
-        card.add(cardText(`Credits  ${Math.round(result.lootResources.credits).toLocaleString()}`, '#9a7600'));
-        card.add(cardText(`RP  ${Math.round(result.lootResources.research).toLocaleString()}`, '#6b4ca5'));
+        card.add(new qx.ui.basic.Label(simulationDetailsHtml(result)).set({
+          rich: true, wrap: true, textColor: '#344448'
+        }));
         const actions = new qx.ui.container.Composite(new qx.ui.layout.HBox(3));
         const replay = new qx.ui.form.Button('▶ Sim').set({ toolTipText: 'Play this cached simulation in the game window' });
         const use = new qx.ui.form.Button('Use').set({
@@ -841,11 +1334,10 @@ export class WarRoomWindow {
       try {
         targetStatus.setValue(`Loading intelligence for ${target.type} at ${target.x}:${target.y}…`);
         const intel = await this.hub.getTargetInformation(target);
-        const activeTargetId = this.hub.snapshot().target?.id;
-        if (activeTargetId != null && String(activeTargetId) !== String(target.id)) {
-          syncFromGameTarget();
-          return;
-        }
+        // Search selection is authoritative for this information request. The
+        // combat snapshot may still reference a previously opened attack until
+        // the user explicitly chooses Open Attack.
+        if (selectedSearchTarget && String(selectedSearchTarget.id) !== String(target.id)) return;
         this.intelTargetId = intel.id;
         const levels = Object.entries(intel.forgottenLevels)
           .sort(([left], [right]) => Number(right) - Number(left))
@@ -862,14 +1354,14 @@ export class WarRoomWindow {
           ]];
         });
         targetIntel.model.setData([
-          ['Target', `${intel.name} (${intel.type} Lvl ${intel.level ?? target.level ?? '—'})`],
-          ['Level / coordinates', `${intel.level} / ${intel.x}:${intel.y}`],
+          ['Target', `${intel.name} · ${intel.type} Lvl ${intel.level ?? target.level ?? '—'}`],
+          ['Coordinates', `${intel.x}:${intel.y}`],
           ['Owner', intel.owner],
-          ['Alliance', intel.alliance || '—'],
+          ['Alliance', intel.alliance || ''],
           ['Attack cost', `${intel.cp} CP`],
           ['Attack from', intel.attacker],
           ['Attack possible', intel.attackPossible ? 'Yes' : 'No'],
-          ['Estimated attacks', `${intel.attackEstimate?.possibleAttacks ?? 0} (${intel.attackEstimate?.commandPointAttacks ?? 0} by CP; ${Number.isFinite(intel.attackEstimate?.repairTimeAttacks) ? `${intel.attackEstimate.repairTimeAttacks} by repair time` : 'repair time not limiting'})`],
+          ['Estimated attacks', `${intel.attackEstimate?.possibleAttacks ?? 0} possible (${intel.attackEstimate?.commandPointAttacks ?? 0} by CP; ${Number.isFinite(intel.attackEstimate?.fullyRepairableAttacks) ? `${intel.attackEstimate.fullyRepairableAttacks} fully repairable + 1 final hit` : 'repair time not limiting'})`],
           ['Available command points', Math.round(intel.attackEstimate?.cpAvailable ?? 0)],
           ['Available repair time', duration(intel.attackEstimate?.repairAvailableSeconds ?? 0)],
           ['Conservative repair per attack', duration(intel.attackEstimate?.maxRepairSeconds ?? 0)],
@@ -889,16 +1381,49 @@ export class WarRoomWindow {
           `${intel.name} selected. All War Room tabs now use this target.`
         );
         render();
-        renderRecommendation();
+        syncLiveFormationPreview(this.currentSnapshot ?? this.hub.snapshot());
         renderSimulations();
       } catch (error) {
         targetStatus.setValue(`Unable to load target: ${error?.message ?? error}`);
       }
     };
 
+    let nativeReportLoad = null;
+    const loadNativeReports = (force = false) => {
+      if (nativeReportLoad) return nativeReportLoad;
+      const category = reportCategory.getSelection?.()?.[0]?.getModel?.() ?? 'offense';
+      if (!force && this.hub.reportCaches.has(category)) return Promise.resolve(this.hub.getCombatReports(category));
+      reportDetail.setValue('Loading native combat reports…');
+      nativeReportStatus = 'Loading native combat reports…';
+      nativeReportLoad = this.hub.refreshCombatReports(100, category).then((loaded) => {
+        const categoryName = reportCategory.getSelection?.()?.[0]?.getLabel?.() ?? 'selected category';
+        nativeReportStatus = loaded.length
+          ? `${loaded.length} native ${categoryName} report(s) loaded. Select a row for details; double-click to open its native report/replay.`
+          : `No native ${categoryName} reports were returned for this account.`;
+        reportDetail.setValue(nativeReportStatus);
+        render();
+        return loaded;
+      }).catch((error) => {
+        nativeReportStatus = `Unable to load native reports: ${error?.message ?? error}`;
+        reportDetail.setValue(nativeReportStatus);
+        this.context.logger?.warn?.('War Room native report loading failed.', error);
+        return [];
+      }).finally(() => { nativeReportLoad = null; });
+      return nativeReportLoad;
+    };
+
+    const loadCombatStatistics = () => this.hub.refreshAllCombatReports(100).then(() => {
+      const allReports = this.hub.getAllCombatReports();
+      render();
+      return allReports;
+    }).catch((error) => {
+      statsStatus.setValue(`Unable to load complete combat statistics: ${error?.message ?? error}`);
+      return [];
+    });
+
     const syncFromGameTarget = () => {
       render();
-      renderRecommendation();
+      syncLiveFormationPreview(this.currentSnapshot ?? this.hub.snapshot());
       renderSimulations();
       if (
         this.currentSnapshot?.target?.id
@@ -926,6 +1451,7 @@ export class WarRoomWindow {
     ].join('::');
 
     const runLiveSimulation = async () => {
+      if (buildDisposed || !windowVisible()) return;
       if (liveSimulationRunning || optimizationRunning) {
         liveSimulationQueued = true;
         return;
@@ -933,24 +1459,36 @@ export class WarRoomWindow {
       const snapshot = this.hub.snapshot();
       if (!snapshot.target?.id || !snapshot.units.length) return;
       liveSimulationRunning = true;
-      simulatorText.setValue('Running native simulation for the current formation…');
+      safeSetValue(simulatorText, 'Running native simulation for the current formation…');
       try {
         const cacheKey = simulationKey(snapshot);
-        const response = simulationCache.get(cacheKey)?.response ?? await this.hub.simulateFormation(snapshot.units);
-        simulationCache.set(cacheKey, {
-          response, snapshot, at: Date.now(), name: 'Live',
+        const cached = simulationCache.get(cacheKey);
+        const response = cached?.response ?? await this.hub.simulateFormation(snapshot.units);
+        if (!cached) liveFormationSequence += 1;
+        const entry = cached ?? {
+          response,
+          snapshot,
+          at: Date.now(),
+          name: liveFormationSequence === 1 ? 'Live formation' : `Manual layout ${liveFormationSequence - 1}`,
+          source: 'live-formation',
           units: snapshot.units.map((unit) => ({ ...unit }))
-        });
+        };
+        simulationCache.set(cacheKey, entry);
         for (const [key, entry] of simulationCache) {
           if (String(entry.snapshot?.target?.id) === String(snapshot.target.id)
             && String(entry.snapshot?.target?.version ?? 0) !== String(snapshot.target?.version ?? 0)) simulationCache.delete(key);
         }
+        // Publish the completed native result as soon as it is cached. The
+        // active formation may already be moving again, but this result still
+        // belongs to the exact coordinate/enabled-state signature captured
+        // above and remains useful as a replayable comparison.
+        renderSimulations();
         const current = this.hub.snapshot();
         if (
           String(current.target?.id) === String(snapshot.target.id)
           && formationSignature(current) === formationSignature(snapshot)
         ) {
-          this.nativeSimulation = WarRoomCalculator.analyzeNativeSimulation(response, snapshot, 'Live');
+          this.nativeSimulation = WarRoomCalculator.analyzeNativeSimulation(response, snapshot, entry.name);
           this.nativeSimulationReplay = {
             response,
             targetId: String(snapshot.target.id),
@@ -974,11 +1512,11 @@ export class WarRoomWindow {
           liveSimulationQueued = true;
         }
       } catch (error) {
-        simulatorText.setValue(`Live simulation failed: ${error?.message ?? error}`);
+        safeSetValue(simulatorText, `Live simulation failed: ${error?.message ?? error}`);
         this.context.logger?.warn?.('War Room live simulation failed.', error);
       } finally {
         liveSimulationRunning = false;
-        if (liveSimulationQueued) {
+        if (!buildDisposed && windowVisible() && liveSimulationQueued) {
           liveSimulationQueued = false;
           liveTimer = setTimeout(() => { void runLiveSimulation(); }, 3100);
         }
@@ -986,11 +1524,27 @@ export class WarRoomWindow {
     };
 
     const queueLiveSimulation = () => {
+      if (buildDisposed || !windowVisible()) return;
       clearTimeout(liveTimer);
       liveTimer = setTimeout(() => { void runLiveSimulation(); }, 400);
     };
 
+    root.addListenerOnce?.('dispose', () => {
+      buildDisposed = true;
+      recommendationSequence += 1;
+      liveSimulationQueued = false;
+      clearTimeout(liveTimer);
+      unsubscribePresetChanges?.();
+      unsubscribePresetChanges = null;
+    });
+
     this.context.events?.on?.('game:tick', () => {
+      // ObjectRegistry contains most of the live Qooxdoo UI. Walking it while
+      // War Room is closed made the central 500 ms game-state callback scale
+      // with the entire game interface and could block the UI for 50–100 ms.
+      // These controls and live simulations are relevant only to a visible
+      // War Room, so leave the dormant module at constant cost.
+      if (!this.record?.window?.isVisible?.()) return;
       const registry = qx.core?.ObjectRegistry?.getRegistry?.() ?? {};
       for (const widget of Object.values(registry)) {
         const name = String(widget?.classname ?? widget?.constructor?.classname ?? '');
@@ -1001,7 +1555,6 @@ export class WarRoomWindow {
           if (/^repair$/i.test(text)) widget.setEnabled?.(!simulatorSettings.lockRepair);
         }
       }
-      if (!this.record?.window?.isVisible?.()) return;
       const snapshot = this.hub.snapshot();
       const targetId = snapshot.target?.id == null ? null : String(snapshot.target.id);
       const formation = formationSignature(snapshot);
@@ -1018,13 +1571,75 @@ export class WarRoomWindow {
       }
       if (formation !== observedFormation) {
         observedFormation = formation;
+        render();
+        syncLiveFormationPreview(this.currentSnapshot ?? snapshot);
+        renderSimulations();
         queueLiveSimulation();
       }
     });
 
-    this.refreshAll = syncFromGameTarget;
-    refresh.addListener('execute', syncFromGameTarget);
-    recommend.addListener('execute', () => { void simulateRecommendation(); });
+    this.refreshAll = () => {
+      syncFromGameTarget();
+      void loadFormationPresets(selectedPreset()?.id ?? null);
+      void loadNativeReports(true);
+    };
+    const selectReportRow = (row, openNative = false) => {
+      selectedReport = displayedReports[Number(row)];
+      if (!selectedReport) return;
+      const at = Number(selectedReport.at) < 1e12 ? Number(selectedReport.at) * 1000 : Number(selectedReport.at);
+      const loot = Object.entries(selectedReport.loot ?? {})
+        .map(([type, amount]) => `${escapeHtml(selectedReport.lootLabels?.[type] ?? `Resource ${type}`)}: ${Math.round(Number(amount || 0)).toLocaleString()}`)
+        .join(' · ') || 'No loot recorded';
+      reportDetail.setValue(
+        `<div style="padding:7px;background:#c8d3d7;color:#17262d;border-top:3px solid #edf5f7;border-bottom:4px solid #667a83">`
+        + `<b style="color:#075d7a">${escapeHtml(selectedReport.ownBase)} → ${escapeHtml(selectedReport.target)}</b><br>`
+        + `${at ? escapeHtml(new Date(at).toLocaleString()) : 'Unknown time'} · ${escapeHtml(selectedReport.type)} · `
+        + `<b>${selectedReport.won ? 'Victory' : 'Defeat'}</b>${selectedReport.destroyed ? ' · Target destroyed' : ''}<br>`
+        + `Command points: ${selectedReport.cp} · Repair: ${duration(selectedReport.repairSeconds)}<br>${loot}</div>`
+      );
+      if (openNative) {
+        void this.hub.openCombatReport(selectedReport).catch((error) => {
+          reportDetail.setValue(`${reportDetail.getValue()}<br><span style="color:#b32323">${escapeHtml(error?.message ?? error)}</span>`);
+        });
+      }
+    };
+    reports.grid.widget.addListener('cellTap', (event) => selectReportRow(event.getRow?.(), Number(event.getColumn?.()) === 13));
+    reports.grid.widget.addListener('cellDbltap', (event) => selectReportRow(event.getRow?.(), true));
+    refresh.addListener('execute', () => {
+      syncFromGameTarget();
+      void loadNativeReports(true);
+    });
+    reportCategory.addListener('changeSelection', () => {
+      selectedReport = null;
+      this.hub.reportCache = null;
+      void loadNativeReports(true);
+    });
+    armyBase.addListener('changeSelection', () => render());
+    repairArmy.addListener('execute', () => {
+      try {
+        const baseId = armyBase.getSelection?.()?.[0]?.getModel?.();
+        if (baseId == null) throw new Error('Choose an offense base first.');
+        const result = this.hub.repairOffense(baseId);
+        armySummary.setValue(result.repaired
+          ? `${result.name} · all damaged offense troops were submitted for repair.`
+          : `${result.name} · no offense repairs are currently needed.`);
+        render();
+        if (result.repaired) {
+          setTimeout(() => { if (!buildDisposed) render(); }, 500);
+          setTimeout(() => { if (!buildDisposed) render(); }, 1500);
+        }
+      } catch (error) {
+        armySummary.setValue(`Offense repair failed: ${error?.message ?? error}`);
+        this.context.logger?.warn?.('War Room offense repair failed.', error);
+      }
+    });
+    statsBase.addListener('changeSelection', () => {
+      if (!this.updatingStatsBase) render();
+    });
+    recommend.addListener('execute', () => {
+      if (optimizationRunning) cancelRecommendation();
+      else void simulateRecommendation();
+    });
     shiftLeft.addListener('execute', () => transformPreview(shiftGrid(-1, 0), 'Shifted formation left'));
     shiftRight.addListener('execute', () => transformPreview(shiftGrid(1, 0), 'Shifted formation right'));
     shiftUp.addListener('execute', () => transformPreview(shiftGrid(0, -1), 'Shifted formation up'));
@@ -1041,9 +1656,18 @@ export class WarRoomWindow {
           const snapshot = this.hub.snapshot();
           const units = displayedRecommendation?.grid?.flat().filter(Boolean) ?? [];
           if (!snapshot.target?.id || !units.length) {
-            throw new Error('Open a target attack screen and arrange a preview first.');
+            plannerStatus.setValue('Open a target attack screen and arrange a preview before simulating.');
+            setPlannerResult(
+              '<b>Preview Simulation</b><br>'
+              + '<span style="color:#52636b">No attack screen is open. Select a target before simulating.</span>'
+            );
+            return;
           }
           plannerStatus.setValue('Simulating the manually arranged preview…');
+          setPlannerResult(
+            '<b>Preview Simulation Result</b><br>'
+            + '<span style="color:#005f86"><b>Simulating the manually arranged preview…</b></span>'
+          );
           const cacheKey = simulationKey(snapshot, units);
           const cached = simulationCache.get(cacheKey);
           const response = cached?.response ?? await this.hub.simulateFormation(units);
@@ -1056,13 +1680,18 @@ export class WarRoomWindow {
           });
           const analysis = WarRoomCalculator.analyzeNativeSimulation(response, snapshot, 'Manual preview');
           renderSimulations();
-          plannerStatus.setValue(
-            `Manual preview: ${analysis.outcome}; defender ${analysis.defenderRemaining.toFixed(1)}% remaining; `
-            + `own army ${analysis.ownRemaining.toFixed(1)}% remaining; repair ${duration(analysis.repairSeconds)}. `
-            + 'Open Battle Simulator for the complete result and replay controls.'
-          );
+          showSimulationResult(analysis, {
+            title: 'Preview Simulation Result',
+            name: 'Manual preview',
+            note: 'This result uses the manually arranged preview. Open Battle Simulator for replay controls.'
+          });
+          plannerStatus.setValue('Manual preview simulation complete.');
         } catch (error) {
           plannerStatus.setValue(`Manual preview simulation failed: ${error?.message ?? error}`);
+          setPlannerResult(
+            '<b>Preview Simulation Result</b><br>'
+            + `<span style="color:#a32626">Simulation failed: ${escapeHtml(error?.message ?? error)}</span>`
+          );
           this.context.logger?.warn?.('War Room manual preview simulation failed.', error);
         } finally {
           simulatePreview.setEnabled(Boolean(displayedRecommendation));
@@ -1181,9 +1810,11 @@ export class WarRoomWindow {
           const name = presetName.getValue?.()?.trim()
             || `Formation ${formationPresets.filter((preset) =>
               String(preset.attackerId) === String(captured.attackerId)
+              && String(preset.target?.id) === String(captured.target?.id)
             ).length + 1}`;
           const existing = formationPresets.find((preset) =>
             String(preset.attackerId) === String(captured.attackerId)
+            && String(preset.target?.id) === String(captured.target?.id)
             && preset.name.toLowerCase() === name.toLowerCase()
           );
           const preset = {
@@ -1201,7 +1832,12 @@ export class WarRoomWindow {
           await this.context.storage.set(presetStorageKey, formationPresets);
           renderPresets(preset.id);
           presetName.setValue('');
-          plannerStatus.setValue(`${name} saved for ${captured.attackerName}.`);
+          this.context.eventBus?.emit?.('war-room:formation-presets-changed', {
+            presetId: preset.id,
+            attackerId: captured.attackerId,
+            targetId: captured.target?.id
+          });
+          plannerStatus.setValue(`${name} saved for ${captured.attackerName} against ${captured.target?.name ?? 'this target'}.`);
         } catch (error) {
           plannerStatus.setValue(`Unable to save formation: ${error?.message ?? error}`);
         }
@@ -1225,6 +1861,11 @@ export class WarRoomWindow {
           if (!preset) throw new Error('Choose a saved formation first.');
           formationPresets = formationPresets.filter((item) => item.id !== preset.id);
           await this.context.storage.set(presetStorageKey, formationPresets);
+          this.context.eventBus?.emit?.('war-room:formation-presets-changed', {
+            presetId: null,
+            attackerId: preset.attackerId,
+            targetId: preset.target?.id
+          });
           renderPresets();
           plannerStatus.setValue(`${preset.name} deleted.`);
         } catch (error) {
@@ -1233,7 +1874,7 @@ export class WarRoomWindow {
       })();
     });
     plannerGoal.addListener('changeSelection', renderRecommendation);
-    runSimulations.addListener('execute', () => {
+    const playCurrentFormation = () => {
       try {
         const snapshot = this.hub.snapshot();
         const signature = formationSignature(snapshot);
@@ -1251,7 +1892,9 @@ export class WarRoomWindow {
       } catch (error) {
         simulatorText.setValue(`Unable to play simulation: ${error?.message ?? error}`);
       }
-    });
+    };
+    this.playCurrentFormation = playCurrentFormation;
+    runSimulations.addListener('execute', playCurrentFormation);
     favorite.addListener('execute', () => {
       const active = this.stats.toggleFavorite(this.currentSnapshot?.target);
       favorite.setLabel(active ? '★ Favorited' : '☆ Favorite');
@@ -1283,16 +1926,138 @@ export class WarRoomWindow {
         footer.setValue(error?.message ?? String(error));
       }
     });
+    const searchRows = () => this.searchResults ?? [];
+    const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    const downloadCsv = (filename, headers, rows) => {
+      const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = globalThis.document?.createElement?.('a');
+      if (!anchor) throw new Error('Browser downloads are unavailable.');
+      anchor.href = url;
+      anchor.download = filename;
+      globalThis.document?.body?.appendChild?.(anchor);
+      anchor.click();
+      anchor.remove?.();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    exportArmyCsv.addListener('execute', () => {
+      try {
+        const rows = this.currentArmyRows ?? [];
+        if (!rows.length) throw new Error('Choose a base with an offensive army first.');
+        const base = armyBase.getSelection?.()?.[0]?.getLabel?.() ?? 'army';
+        downloadCsv(
+          `cnc-ta-army-${String(base).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`,
+          ['Unit', 'Role', 'Level', 'Health', 'State', 'Position', 'Range', 'Speed', 'Best against', 'Est. 1v1 ceiling', 'Repair crystal needed'],
+          rows
+        );
+        armySummary.setValue(`${base} · ${rows.length} troop record(s) exported.`);
+        render();
+      } catch (error) {
+        armySummary.setValue(`Army export failed: ${error?.message ?? error}`);
+        render();
+      }
+    });
+    exportStatsCsv.addListener('execute', () => {
+      try {
+        const rows = this.currentStatsRows ?? [];
+        if (!rows.length) throw new Error('Load combat statistics first.');
+        const base = statsBase.getSelection?.()?.[0]?.getLabel?.() ?? 'all-bases';
+        downloadCsv(
+          `cnc-ta-combat-statistics-${String(base).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`,
+          ['Metric', 'Attack players', 'Attack Forgotten', 'Defend Forgotten', 'Defend players', 'All attacks', 'All defense'],
+          rows
+        );
+        statsStatus.setValue(`${base} combat statistics exported.`);
+        render();
+      } catch (error) {
+        statsStatus.setValue(`Combat statistics export failed: ${error?.message ?? error}`);
+        render();
+      }
+    });
+    const searchCsv = () => [
+      ['Type', 'Base', 'Owner', 'Alliance', 'Level', 'X', 'Y', 'Coordinates', 'Distance'],
+      ...searchRows().map((target) => [
+        target.type, target.name, target.owner, target.alliance, target.level,
+        target.x, target.y, `${target.x}:${target.y}`,
+        Number(target.distance ?? 0).toFixed(2)
+      ])
+    ].map((row) => row.map(csvCell).join(',')).join('\r\n');
+    const searchShareText = () => {
+      const alliance = allianceCheck.getValue()
+        ? allianceSelect.getSelection?.()?.[0]?.getLabel?.()
+        : '';
+      const heading = alliance ? `[b]${alliance} target bases[/b]` : '[b]War Room target list[/b]';
+      return [heading, ...searchRows().map((target) => {
+        const owner = target.owner ? `${target.owner} — ` : '';
+        const name = target.name && target.name !== 'Player Base' ? `${target.name} — ` : '';
+        return `${owner}${name}${target.type} L${target.level} [coords]${target.x}:${target.y}[/coords]`;
+      })].join('\n');
+    };
+    const setSearchExportEnabled = (enabled) => {
+      for (const button of [exportSearchCsv, copySearchList, messageSearchList]) button.setEnabled(Boolean(enabled));
+    };
+    exportSearchCsv.addListener('execute', () => {
+      try {
+        if (!searchRows().length) throw new Error('Run a search before exporting.');
+        const blob = new Blob([searchCsv()], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = globalThis.document?.createElement?.('a');
+        if (!anchor) throw new Error('Browser downloads are unavailable.');
+        const label = allianceCheck.getValue()
+          ? allianceSelect.getSelection?.()?.[0]?.getLabel?.() ?? 'alliance'
+          : 'targets';
+        anchor.href = url;
+        anchor.download = `cnc-ta-${String(label).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+        globalThis.document?.body?.appendChild?.(anchor);
+        anchor.click();
+        anchor.remove?.();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        targetStatus.setValue(`${searchRows().length} search result(s) exported as CSV.`);
+      } catch (error) {
+        targetStatus.setValue(`CSV export failed: ${error?.message ?? error}`);
+      }
+    });
+    copySearchList.addListener('execute', () => {
+      void (async () => {
+        try {
+          if (!searchRows().length) throw new Error('Run a search before copying.');
+          const text = searchShareText();
+          if (globalThis.navigator?.clipboard?.writeText) await globalThis.navigator.clipboard.writeText(text);
+          else globalThis.prompt?.('Copy target list', text);
+          targetStatus.setValue(`${searchRows().length} target(s) copied for sharing.`);
+        } catch (error) {
+          targetStatus.setValue(`Copy failed: ${error?.message ?? error}`);
+        }
+      })();
+    });
+    messageSearchList.addListener('execute', () => {
+      void (async () => {
+        try {
+          if (!searchRows().length) throw new Error('Run a search before creating a message.');
+          const communications = this.context.modules?.get?.('communications');
+          if (!communications) throw new Error('The Communications module is not installed.');
+          await this.context.modules.open('communications');
+          communications.append?.(searchShareText());
+          communications.editor?.focus?.();
+          targetStatus.setValue('Target list opened in Communications. Review and copy it into game mail or chat.');
+        } catch (error) {
+          targetStatus.setValue(`Message draft failed: ${error?.message ?? error}`);
+        }
+      })();
+    });
     targetSearch.addListener('execute', () => {
       try {
+        setSearchExportEnabled(false);
         const snapshot = this.hub.snapshot();
         const types = Object.entries(targetTypes)
           .filter(([, check]) => check.getValue())
           .map(([type]) => type);
-        const allianceName = allianceCheck.getValue()
+        const allianceKey = allianceCheck.getValue()
           ? allianceSelect.getSelection?.()?.[0]?.getModel?.()
           : null;
-        if (allianceCheck.getValue() && !allianceName) {
+        const selectedAlliance = allianceKey ? allianceOptions.get(String(allianceKey)) : null;
+        if (allianceCheck.getValue() && !selectedAlliance) {
           throw new Error('Choose an alliance first.');
         }
         this.searchResults = this.hub.searchTargets({
@@ -1300,20 +2065,24 @@ export class WarRoomWindow {
           minLevel: minLevel.getValue(),
           maxLevel: maxLevel.getValue(),
           cpLimit: maxCp.getValue(),
-          radius: maxDistance.getValue(),
+          radius: searchRadius,
           types,
-          allianceName
+          allianceId: selectedAlliance?.id ?? null,
+          allianceName: selectedAlliance?.name ?? null
         });
         search.grid.model.setData(this.searchResults.map((target) => [
           `${target.type} Lvl ${target.level}`,
           `${target.x}:${target.y}`,
           target.level,
           target.cp,
-          target.distance.toFixed(2)
+          '▶ Open Attack'
         ]));
         targetStatus.setValue(
-          `${this.searchResults.length} targets found. Click a row to open its attack setup.`
+          `${this.searchResults.length} targets found. Click a row to inspect it; use Open Attack to enter combat setup.`
         );
+        selectedSearchTarget = null;
+        render();
+        setSearchExportEnabled(this.searchResults.length > 0);
       } catch (error) {
         targetStatus.setValue(`Target search failed: ${error?.message ?? error}`);
         this.context.logger?.warn?.('War Room target search failed.', error);
@@ -1322,11 +2091,27 @@ export class WarRoomWindow {
     search.grid.widget.addListener('cellTap', (event) => {
       const target = this.searchResults?.[event.getRow?.()];
       if (!target) return;
+      selectedSearchTarget = target;
+      this.intelTargetId = target.id;
+      render();
+      const openAttack = Number(event.getColumn?.()) === 4;
       try {
-        this.hub.openTargetAttack(target);
-        targetStatus.setValue(
-          `Opening ${target.type} at ${target.x}:${target.y}. Its attack screen will become the War Room target.`
-        );
+        if (openAttack) {
+          this.hub.openTargetAttack(target);
+          targetStatus.setValue(
+            `Opening ${target.type} at ${target.x}:${target.y}. Its attack screen will become the War Room target.`
+          );
+        } else {
+          targetStatus.setValue(`Selected ${target.type} at ${target.x}:${target.y}. Loading attack information…`);
+          void (async () => {
+            try {
+              await this.hub.selectSearchTarget(target);
+              await populateTargetIntel(target);
+            } catch (error) {
+              targetStatus.setValue(`Unable to select target: ${error?.message ?? error}`);
+            }
+          })();
+        }
       } catch (error) {
         targetStatus.setValue(`Unable to open target: ${error?.message ?? error}`);
       }
@@ -1337,6 +2122,7 @@ export class WarRoomWindow {
       this.context.logger?.warn?.('War Room formation presets failed to load.', error);
     });
     syncFromGameTarget();
+    void loadNativeReports();
     return root;
   }
 
@@ -1349,12 +2135,13 @@ export class WarRoomWindow {
     }
     this.record = await this.context.windows.open({
       id: 'war-room',
-      title: 'War Room v1.0',
+      title: 'War Room v0.5',
       content: this.build(),
       x: 120,
       y: 70,
-      width: 1040,
+      width: 832,
       height: 650,
+      sizeRevision: 'war-room-0.1-compact-width',
       resizable: true,
       singleton: true
     });

@@ -22,7 +22,7 @@ const settings = Object.freeze({
 export const upgradeManagerManifest = Object.freeze({
   id: 'upgrade-manager',
   name: 'Upgrade Manager',
-  version: '1.0.0',
+  version: '0.1.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Plan, filter, rank, and manually apply upgrades across owned bases.',

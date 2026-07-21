@@ -287,7 +287,8 @@ export class WarRoomCalculator {
     );
     if (!objectiveRecord) return Object.freeze({ score: Number.POSITIVE_INFINITY, objectivePercent: 100 });
     const remaining = (record) => Number(states.get(record.ci)?.h ?? record.h * 16 ?? 0);
-    const starting = (record) => Math.max(1, Number(record.h || 0) * 16);
+    const starting = (record) => Math.max(1,
+      Number(states.get(record.ci)?.sh ?? Number(record.h || 0) * 16));
     const objectivePercent = Math.max(0, remaining(objectiveRecord) / starting(objectiveRecord) * 100);
     const blockers = [...buildings, ...defenders].filter((record) =>
       Number(record.x) === Number(objectiveRecord.x)
@@ -320,13 +321,28 @@ export class WarRoomCalculator {
     const attackers = response?.d?.a ?? [];
     const remaining = (record) => Number(states.get(record.ci)?.h ?? Number(record.h || 0) * 16);
     const starting = (record) => Math.max(1, Number(record.h || 0) * 16);
+    const snapshotEntities = [
+      ...(snapshot.buildings ?? []),
+      ...(snapshot.defenseUnits ?? []),
+      ...(snapshot.units ?? [])
+    ];
+    const maximum = (record) => {
+      const entity = atPosition(snapshotEntities, record);
+      // TABS only trusted the response `mh` value for player cities. Forgotten
+      // simulations publish a different scaled value; their native unit-data
+      // maximum is the value used by the game summary.
+      const isDefensiveUnit = (snapshot.defenseUnits ?? []).some((unit) => unit === entity);
+      const simulatedMaximum = !snapshot.target?.npc || isDefensiveUnit
+        ? Number(states.get(record.ci)?.mh ?? 0) : 0;
+      return Math.max(starting(record), simulatedMaximum, Number(entity?.maxHealth ?? 0));
+    };
     const remainingPercent = (records) => {
-      const start = records.reduce((sum, record) => sum + starting(record), 0);
+      const start = records.reduce((sum, record) => sum + maximum(record), 0);
       const end = records.reduce((sum, record) => sum + remaining(record), 0);
       return start > 0 ? Math.max(0, Math.min(100, end / start * 100)) : 100;
     };
     const healthSummary = (records) => {
-      const start = records.reduce((sum, record) => sum + starting(record), 0);
+      const start = records.reduce((sum, record) => sum + maximum(record), 0);
       const end = records.reduce((sum, record) => sum + remaining(record), 0);
       return Object.freeze({ start, end, damage: Math.max(0, start - end),
         remainingPercent: start > 0 ? Math.max(0, Math.min(100, end / start * 100)) : 100 });
@@ -346,6 +362,29 @@ export class WarRoomCalculator {
       const domain = this.combatProfile(item).domain;
       attackerGroups[domain === 'air' ? 'aircraft' : domain]?.push(record);
     }
+    const repairTimeByGroup = Object.freeze(Object.fromEntries(
+      Object.entries(attackerGroups).map(([group, records]) => {
+        const damagePercent = 100 - remainingPercent(records);
+        return [group, Number(snapshot.repair?.[group] ?? 0) * damagePercent / 100];
+      })
+    ));
+    const repairSeconds = Math.max(0, ...Object.values(repairTimeByGroup));
+    const repairCosts = {};
+    const repairCostsByGroup = { infantry: {}, vehicle: {}, aircraft: {} };
+    for (const record of attackers) {
+      const item = atPosition(snapshot.units ?? [], record);
+      if (!item) continue;
+      const domain = this.combatProfile(item).domain;
+      const group = domain === 'air' ? 'aircraft' : domain;
+      const damageRatio = Math.max(0, Math.min(1,
+        (starting(record) - remaining(record)) / maximum(record)
+      ));
+      for (const [type, fullCost] of Object.entries(item.repairCosts ?? {})) {
+        const amount = Number(fullCost || 0) * damageRatio;
+        repairCosts[type] = (repairCosts[type] ?? 0) + amount;
+        repairCostsByGroup[group][type] = (repairCostsByGroup[group][type] ?? 0) + amount;
+      }
+    }
     const objectivePercent = (goal) => {
       const objective = this.objective(snapshot, goal);
       if (!objective) return null;
@@ -355,42 +394,132 @@ export class WarRoomCalculator {
       );
       return record ? remainingPercent([record]) : null;
     };
+    const namedBuildingPercent = (pattern) => {
+      const objective = (snapshot.buildings ?? []).find((building) => pattern.test(String(building.name ?? '')));
+      if (!objective) return null;
+      const record = buildings.find((building) =>
+        (Number(building.x) === Number(objective.x) && Number(building.y) === Number(objective.y))
+        || Number(building.i) === Number(objective.id));
+      return record ? remainingPercent([record]) : null;
+    };
     const defenderRemaining = remainingPercent([...buildings, ...defenders]);
     const ownRemaining = remainingPercent(attackers);
     const defenderDamage = 100 - defenderRemaining;
     const ownDamage = 100 - ownRemaining;
-    const lootTotal = Object.values(snapshot.loot)
-      .reduce((sum, value) => sum + Number(value || 0), 0);
-    const researchType = snapshot.resourceTypes?.ResearchPoints;
-    const researchTotal = Number(snapshot.loot?.[researchType] ?? 0);
-    const repairSeconds = Object.values(snapshot.repair)
-      .reduce((sum, value) => sum + Number(value || 0), 0) * (ownDamage / 100);
-    const lootByResource = Object.fromEntries(Object.entries(snapshot.loot).map(([type, amount]) => [
-      type, Number(amount || 0) * (defenderDamage / 100)
-    ]));
-    const resourceName = (wanted) => Object.entries(snapshot.resourceTypes ?? {})
-      .find(([name]) => name.toLowerCase().includes(wanted))?.[1];
+    const resourceName = (...wantedNames) => {
+      const entries = Object.entries(snapshot.resourceTypes ?? {});
+      const normalized = wantedNames.map((name) => String(name).toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const exact = entries.find(([name]) => normalized.includes(
+        String(name).toLowerCase().replace(/[^a-z0-9]/g, '')
+      ));
+      if (exact) return exact[1];
+      return entries.find(([name]) => normalized.some((wanted) =>
+        String(name).toLowerCase().replace(/[^a-z0-9]/g, '').includes(wanted)
+      ))?.[1];
+    };
+    const rewardTypes = [
+      resourceName('Tiberium'),
+      resourceName('Crystal', 'Chrystal'),
+      resourceName('Credits', 'Gold'),
+      resourceName('ResearchPoints')
+    ].filter((type) => type != null);
+    const nativeLoot = {};
+    const lootDiagnostics = [];
+    let hasNativeResourceValues = false;
+    for (const record of [...buildings, ...defenders]) {
+      const entity = atPosition([...(snapshot.buildings ?? []), ...(snapshot.defenseUnits ?? [])], record);
+      const values = entity?.resourceValue ?? {};
+      if (Object.keys(values).length) hasNativeResourceValues = true;
+      const maximumHealth = maximum(record);
+      const damageRatio = Math.max(0, Math.min(1,
+        (starting(record) - remaining(record)) / maximumHealth
+      ));
+      const attackCounter = Math.max(0, Number(record.ac ?? entity?.attackCounter ?? 0));
+      const attackDecay = Math.pow(0.7, attackCounter);
+      const entityLoot = {};
+      for (const type of rewardTypes) {
+        const fullValue = Number(values[type] ?? 0);
+        let amount = fullValue * damageRatio * attackDecay;
+        amount = Math.max(0, amount);
+        // Research Points are explicitly floored by the native client and have
+        // a minimum award of one whenever a damaged entity carries RP. Other
+        // resources retain precision until the presentation layer rounds the
+        // aggregate, avoiding per-entity rounding drift.
+        if (type === resourceName('ResearchPoints') && fullValue > 0 && damageRatio > 0) {
+          amount = Math.max(1, Math.floor(amount));
+        }
+        entityLoot[type] = amount;
+        nativeLoot[type] = (nativeLoot[type] ?? 0) + amount;
+      }
+      lootDiagnostics.push(Object.freeze({
+        id: Number(record.i ?? entity?.id ?? 0),
+        x: Number(record.x ?? entity?.x ?? 0),
+        y: Number(record.y ?? entity?.y ?? 0),
+        startHealth: starting(record),
+        endHealth: remaining(record),
+        maxHealth: maximumHealth,
+        damageRatio,
+        attackCounter,
+        attackDecay,
+        resources: Object.freeze(entityLoot)
+      }));
+    }
+    // Older/unknown game builds may not expose target repair values. Retain a
+    // clearly secondary compatibility estimate there, but use the native
+    // per-entity values whenever the client provides them.
+    const reportLoot = response?.nativeReportLoot;
+    const hasNativeReportLoot = reportLoot && Object.keys(reportLoot).length > 0;
+    const interpretedLoot = response?.nativeEntityLoot;
+    const hasInterpretedLoot = interpretedLoot && Object.keys(interpretedLoot).length > 0;
+    const lootByResource = hasNativeReportLoot
+      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(reportLoot[type] ?? 0)]))
+      : hasInterpretedLoot
+        ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
+      : hasNativeResourceValues ? nativeLoot
+      : Object.fromEntries(rewardTypes.map((type) => [
+        type, Number(snapshot.loot?.[type] ?? 0) * (defenderDamage / 100)
+      ]));
+    const lootTotal = rewardTypes.reduce((sum, type) => sum + Number(lootByResource[type] ?? 0), 0);
+    const researchType = resourceName('ResearchPoints');
+    const researchTotal = Number(lootByResource[researchType] ?? 0);
     return Object.freeze({
       label,
       cyRemaining: objectivePercent('cy'),
       dfRemaining: objectivePercent('df'),
       ccRemaining: objectivePercent('cc'),
+      defenseHqRemaining: namedBuildingPercent(/defen[cs]e\s*(?:hq|headquarters)/i),
       defenderRemaining,
       ownRemaining,
       defenderDamage,
       ownDamage,
       repairSeconds,
-      loot: lootTotal * (defenderDamage / 100),
-      research: researchTotal * (defenderDamage / 100),
+      repairTimeByGroup,
+      repairCosts: Object.freeze(repairCosts),
+      repairCostsByGroup: Object.freeze(Object.fromEntries(Object.entries(repairCostsByGroup)
+        .map(([group, costs]) => [group, Object.freeze(costs)]))),
+      repairCostResources: Object.freeze({
+        tiberium: Number(repairCosts[resourceName('Tiberium')] ?? 0),
+        crystal: Number(repairCosts[resourceName('Crystal', 'Chrystal')] ?? 0),
+        credits: Number(repairCosts[resourceName('Credits', 'Gold')] ?? 0),
+        power: Number(repairCosts[resourceName('Power')] ?? 0)
+      }),
+      loot: lootTotal,
+      research: researchTotal,
       lootByResource: Object.freeze(lootByResource),
       lootResources: Object.freeze({
-        tiberium: Number(lootByResource[resourceName('tiberium')] ?? 0),
-        crystal: Number(lootByResource[resourceName('crystal') ?? resourceName('chrystal')] ?? 0),
-        credits: Number(lootByResource[resourceName('credit')] ?? 0),
-        research: Number(lootByResource[resourceName('research')] ?? 0)
+        tiberium: Number(lootByResource[resourceName('Tiberium')] ?? 0),
+        crystal: Number(lootByResource[resourceName('Crystal', 'Chrystal')] ?? 0),
+        credits: Number(lootByResource[resourceName('Credits', 'Gold')] ?? 0),
+        research: Number(lootByResource[resourceName('ResearchPoints')] ?? 0)
+      }),
+      calculationDiagnostics: Object.freeze({
+        source: hasNativeReportLoot ? 'native-combat-report'
+          : hasInterpretedLoot ? 'native-damage-ratio-costs'
+          : hasNativeResourceValues ? 'native-entity-values' : 'compatibility-estimate',
+        entities: Object.freeze(lootDiagnostics)
       }),
       durationSeconds: Number(response?.d?.cs ?? 0) / 10,
-      outcome: defenderRemaining <= 0 ? 'Victory' : ownRemaining <= 0 ? 'Defeat' : 'Incomplete',
+      outcome: ownRemaining <= 0 ? 'Defeat' : defenderRemaining <= 0 ? 'Total Victory' : 'Victory',
       morale: Number(response?.d?.m ?? response?.d?.morale ?? 0),
       autoRepair: Boolean(response?.d?.ar ?? response?.d?.autoRepair),
       repairStorage: snapshot.repairStorage ?? {},

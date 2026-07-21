@@ -19,7 +19,7 @@ Legacy modules without manifests are still discovered, but new modules should us
 {
   "id": "example",
   "name": "Example Module",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "apiVersion": "1.0.0",
   "author": "Author",
   "description": "Description",

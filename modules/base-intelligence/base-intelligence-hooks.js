@@ -146,7 +146,7 @@ export class BaseIntelligenceHooks {
           widget.add(widget.__suiteTargetIntelligence);
         }
         const repairLimit = Number.isFinite(intel.repairAttacks)
-          ? `${intel.repairAttacks} attacks`
+          ? `${intel.repairAttacks} possible · ${intel.fullyRepairableAttacks} fully repairable`
           : 'not limiting attacks';
         const levels = Object.entries(intel.levels)
           .sort(([left], [right]) => Number(right) - Number(left))
@@ -156,7 +156,7 @@ export class BaseIntelligenceHooks {
           + `<div style="color:#2e414a">Command points: <b>${intel.cpAttacks}</b> attacks · Repair capacity: <b>${escapeHtml(repairLimit)}</b></div>`
           + `<div style="color:#006b91">Available CP <b>${compact(intel.cpAvailable)}</b> · Cost per attack <b>${compact(intel.cpCost)}</b></div>`
           + `<div style="color:#725900">Max repair estimate <b>${duration(intel.maxRepairCostSeconds)}</b> · Stored <b>${duration(intel.repairAvailableSeconds)}</b></div>`
-          + '<div style="color:#53656d;font-size:11px">Conservative estimate using the largest offense-group repair cost.</div>';
+          + '<div style="color:#53656d;font-size:11px">Includes one final attack whose damage may not be fully repairable; uses the largest offense-group repair cost.</div>';
         const lootContent = resourceGrid(intel.loot, 1, true)
           + `<table cellspacing="0" cellpadding="0" style="margin-top:4px;font-size:11px;color:#334850">`
           + `<tr><td style="width:65px;color:#006b91;font-weight:bold">Per CP</td><td>${resourceGrid(intel.loot, intel.cpCost)}</td></tr>`

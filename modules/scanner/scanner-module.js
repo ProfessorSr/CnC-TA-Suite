@@ -12,7 +12,7 @@ export class ScannerModule {
     this.id = 'scanner';
     this.name = 'Scanner';
     this.title = 'Scanner Overview';
-    this.version = '1.0.0';
+    this.version = '0.2.0';
     this.author = 'ProfessorSr';
     this.description = 'Scans nearby Camps, Outposts, and Forgotten Bases for selected Tiberium and Crystal layouts.';
     this.category = 'World';

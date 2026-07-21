@@ -24,7 +24,7 @@ import { SupportManagerModule } from '../../modules/support-manager/index.js';
 import { TacticalMapModule } from '../../modules/tactical-map/index.js';
 import { UiToolsModule } from '../../modules/ui-tools/index.js';
 import { UpgradeManagerModule } from '../../modules/upgrade-manager/index.js';
-import { WarRoomModule } from '../../modules/war-room/war-room-module.js';
+import { WarRoomModule } from '../../modules/war-room/index.js';
 import { WorldToolsModule } from '../../modules/world-tools/index.js';
 
 export const registeredModules = Object.freeze([

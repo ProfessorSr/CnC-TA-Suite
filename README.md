@@ -4,6 +4,8 @@ CnC-TA-Suite is a modular Chrome extension for Command & Conquer: Tiberium Allia
 
 Current version: **v1.0.0**
 
+Suite Core, the public module API, and the Hub contract are at **v1.0.0**. Individual feature modules currently begin at **v0.1.0** and version independently: one module can advance without changing the framework or any other module.
+
 ## Highlights
 
 - Native Module Manager with independently enabled modules, a dashboard, dependency visibility, and a read-only API Inspector for public snapshots and redacted diagnostics.
