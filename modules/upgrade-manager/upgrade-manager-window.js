@@ -17,12 +17,13 @@ function escapeHtml(value) {
 }
 
 export class UpgradeManagerWindow {
-  constructor({ context, getState, refresh, upgradeSelected, upgradeAll }) {
+  constructor({ context, getState, refresh, upgradeSelected, upgradeAll, upgradeToLevel }) {
     this.context = context;
     this.getState = getState;
     this.requestRefresh = refresh;
     this.upgradeSelected = upgradeSelected;
     this.upgradeAll = upgradeAll;
+    this.upgradeToLevel = upgradeToLevel;
     this.record = null;
     this.activityEntries = [];
   }
@@ -62,11 +63,20 @@ export class UpgradeManagerWindow {
     const selected = new qx.ui.form.Button('Upgrade Selected');
     const highest = new qx.ui.form.Button('Upgrade Highest Ranked');
     const all = new qx.ui.form.Button('Upgrade All Eligible');
+    const targetLabel = white(qx, 'Target', { alignY: 'middle' });
+    this.bulkTargetLevel = new qx.ui.form.Spinner(1, this.setting('targetLevel', 65), 80).set({ width: 68 });
+    const allToTarget = new qx.ui.form.Button('Upgrade Eligible to Level');
     refresh.addListener('execute', () => this.requestRefresh());
     selected.addListener('execute', () => { void this.upgradeSelected(this.selectedCandidate()); });
     highest.addListener('execute', () => { void this.upgradeSelected(this.filtered?.[0]); });
     all.addListener('execute', () => { void this.upgradeAll(this.filtered ?? []); });
+    allToTarget.addListener('execute', () => {
+      void this.upgradeToLevel(this.filtered ?? [], Number(this.bulkTargetLevel.getValue()));
+    });
     for (const button of [refresh, selected, highest, all]) toolbar.add(button);
+    toolbar.add(targetLabel);
+    toolbar.add(this.bulkTargetLevel);
+    toolbar.add(allToTarget);
     page.add(toolbar);
 
     this.model = new qx.ui.table.model.Simple();

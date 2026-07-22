@@ -1,9 +1,9 @@
 const BUTTON_SIZE = 31;
 const ICON_SIZE = 23;
 const PANEL_COLUMNS = 3;
-const PANEL_ROWS = 6;
+const PANEL_ROWS = 7;
 const PANEL_WIDTH = 135;
-const PANEL_HEIGHT = 272;
+const PANEL_HEIGHT = 307;
 const POSITION_KEY = 'module:war-room:attack-palette-position:v1';
 const PRESET_KEY = 'module:war-room:formation-presets:v1';
 
@@ -28,14 +28,18 @@ const ACTIONS = Object.freeze([
   ['save', 'Save the current live formation', nativeIcon('icon_load_save')],
   ['swap-1-2', 'Swap live troop rows 1 and 2', suiteIcon('formation-swap-12')],
   ['swap-2-3', 'Swap live troop rows 2 and 3', suiteIcon('formation-swap-23')],
-  ['swap-3-4', 'Swap live troop rows 3 and 4', suiteIcon('formation-swap-34')]
+  ['swap-3-4', 'Swap live troop rows 3 and 4', suiteIcon('formation-swap-34')],
+  ['planner', 'Open or close the compact Formation Optimizer', suiteIcon('layout')],
+  ['results', 'Open or close the native-styled Simulation Results', suiteIcon('inspect-data')]
 ]);
 
 export class AttackControlsPalette {
-  constructor({ context, hub, onSimulate = null }) {
+  constructor({ context, hub, onSimulate = null, onOpenPlanner = null, onOpenResults = null }) {
     this.context = context;
     this.hub = hub;
     this.onSimulate = onSimulate;
+    this.onOpenPlanner = onOpenPlanner;
+    this.onOpenResults = onOpenResults;
     this.widget = null;
     this.visible = null;
     this.baseline = null;
@@ -123,6 +127,10 @@ export class AttackControlsPalette {
         }
       } else if (action === 'war-room') {
         await this.context.modules?.open?.('war-room');
+      } else if (action === 'planner') {
+        await this.onOpenPlanner?.();
+      } else if (action === 'results') {
+        await this.onOpenResults?.();
       } else if (action === 'reset') {
         if (!this.baseline) throw new Error('No starting formation has been captured.');
         this.hub.applyFormation(this.baseline);

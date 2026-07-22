@@ -114,6 +114,22 @@ export class AttackSetupCompactLayout {
     return this.installed;
   }
 
+  enforce() {
+    if (!this.installed) return;
+    const app = globalThis.qx?.core?.Init?.getApplication?.();
+    const attackBar = app?.getArmySetupAttackBar?.();
+    if (!attackBar) return;
+    const known = new Set(this.hidden.map(({ widget }) => widget));
+    for (const candidate of [attackBar, ...Object.values(attackBar).filter((value) => value && typeof value === 'object')]) {
+      if (!['cnt_controls', 'btn_toggle'].includes(candidate?.objid)) continue;
+      if (!known.has(candidate)) {
+        this.hidden.push({ widget: candidate, visibility: candidate.getVisibility?.() ?? 'visible' });
+        known.add(candidate);
+      }
+      if (candidate.getVisibility?.() !== 'excluded') candidate.exclude?.();
+    }
+  }
+
   uninstall() {
     for (const { widget, id } of this.listeners) {
       try { widget.removeListenerById?.(id); } catch { /* Widget may already be disposed. */ }

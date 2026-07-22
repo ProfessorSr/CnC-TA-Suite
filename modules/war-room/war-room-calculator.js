@@ -171,6 +171,9 @@ export class WarRoomCalculator {
   }
 
   static candidateFormations(snapshot, goal = 'cy', detail = 'detailed') {
+    const requestedCount = Number.isFinite(Number(detail))
+      ? Math.max(1, Math.floor(Number(detail)))
+      : detail === 'exhaustive' ? 200 : detail === 'quick' ? 25 : 50;
     const width = 9;
     const height = 4;
     const seen = new Set();
@@ -250,8 +253,8 @@ export class WarRoomCalculator {
     const orderedUnits = [...current].sort((left, right) =>
       Number(right.level || 0) - Number(left.level || 0)
     );
-    const moveLimit = detail === 'exhaustive' ? orderedUnits.length : detail === 'quick' ? 3 : 7;
-    const cellLimit = detail === 'exhaustive' ? orderedCells.length : detail === 'quick' ? 3 : 7;
+    const moveLimit = requestedCount >= 150 ? orderedUnits.length : requestedCount <= 25 ? 3 : requestedCount >= 100 ? 10 : 7;
+    const cellLimit = requestedCount >= 150 ? orderedCells.length : requestedCount <= 25 ? 3 : requestedCount >= 100 ? 10 : 7;
     for (const unit of orderedUnits.slice(0, moveLimit)) {
       for (const cell of orderedCells.slice(0, cellLimit)) {
         add(`Move ${unit.name} to ${cell.x + 1}:${cell.y + 1}`, current.map((item) =>
@@ -259,7 +262,7 @@ export class WarRoomCalculator {
         ));
       }
     }
-    const swapLimit = detail === 'exhaustive' ? orderedUnits.length : detail === 'quick' ? 3 : 6;
+    const swapLimit = requestedCount >= 150 ? orderedUnits.length : requestedCount <= 25 ? 3 : requestedCount >= 100 ? 10 : 6;
     for (let first = 0; first < Math.min(swapLimit, orderedUnits.length); first += 1) {
       for (let second = first + 1; second < Math.min(swapLimit, orderedUnits.length); second += 1) {
         const left = orderedUnits[first], right = orderedUnits[second];
@@ -270,8 +273,7 @@ export class WarRoomCalculator {
         }));
       }
     }
-    const cap = detail === 'exhaustive' ? 96 : detail === 'quick' ? 20 : 52;
-    return Object.freeze(candidates.slice(0, cap).map((candidate) => Object.freeze(candidate)));
+    return Object.freeze(candidates.slice(0, requestedCount).map((candidate) => Object.freeze(candidate)));
   }
 
   static scoreSimulation(response, snapshot, goal = 'cy') {
@@ -328,11 +330,12 @@ export class WarRoomCalculator {
     ];
     const maximum = (record) => {
       const entity = atPosition(snapshotEntities, record);
-      // TABS only trusted the response `mh` value for player cities. Forgotten
-      // simulations publish a different scaled value; their native unit-data
-      // maximum is the value used by the game summary.
-      const isDefensiveUnit = (snapshot.defenseUnits ?? []).some((unit) => unit === entity);
-      const simulatedMaximum = !snapshot.target?.npc || isDefensiveUnit
+      // Match the established TABS normalization exactly: player targets use
+      // the simulator's mh, while every Forgotten structure AND defense unit
+      // uses ClientLib.API.Util.GetUnitMaxHealthByLevel(..., false) * 16 as
+      // published into the Hub snapshot. Forgotten `mh` is differently scaled
+      // and was the cause of the understated defensive-unit state.
+      const simulatedMaximum = !snapshot.target?.npc
         ? Number(states.get(record.ci)?.mh ?? 0) : 0;
       return Math.max(starting(record), simulatedMaximum, Number(entity?.maxHealth ?? 0));
     };
@@ -402,8 +405,18 @@ export class WarRoomCalculator {
         || Number(building.i) === Number(objective.id));
       return record ? remainingPercent([record]) : null;
     };
-    const defenderRemaining = remainingPercent([...buildings, ...defenders]);
-    const ownRemaining = remainingPercent(attackers);
+    const nativeSummary = response?.nativeCombatReport?.summary ?? {};
+    const nativeBattleStats = response?.nativeBattleStats ?? {};
+    const nativePercent = (value, fallback) => Number.isFinite(Number(value))
+      ? Math.max(0, Math.min(100, Number(value))) : fallback;
+    const calculatedStructures = healthSummary(buildings);
+    const calculatedDefense = healthSummary(defenders);
+    const defenderRemaining = nativePercent(
+      nativeSummary.targetState,
+      nativePercent(nativeBattleStats.targetState, remainingPercent([...buildings, ...defenders]))
+    );
+    const ownRemaining = nativePercent(nativeSummary.armyState,
+      nativePercent(nativeBattleStats.armyState, remainingPercent(attackers)));
     const defenderDamage = 100 - defenderRemaining;
     const ownDamage = 100 - ownRemaining;
     const resourceName = (...wantedNames) => {
@@ -423,6 +436,26 @@ export class WarRoomCalculator {
       resourceName('Credits', 'Gold'),
       resourceName('ResearchPoints')
     ].filter((type) => type != null);
+    const reportRepairCosts = response?.nativeCombatReport?.repairCosts ?? {};
+    const nativeOffenseRepair = response?.nativeOffenseRepair ?? null;
+    const hasNativeRepairCosts = Object.keys(reportRepairCosts).length > 0;
+    const nativeRepairTimeByGroup = {
+      infantry: Number(reportRepairCosts[resourceName('RepairChargeInf')] ?? 0),
+      vehicle: Number(reportRepairCosts[resourceName('RepairChargeVeh')] ?? 0),
+      aircraft: Number(reportRepairCosts[resourceName('RepairChargeAir')] ?? 0)
+    };
+    const effectiveRepairTimeByGroup = nativeOffenseRepair?.timeByGroup
+      ?? Object.freeze({ infantry: 0, vehicle: 0, aircraft: 0 });
+    const effectiveRepairSeconds = Math.max(0, ...Object.values(effectiveRepairTimeByGroup));
+    const effectiveRepairCostsByGroup = nativeOffenseRepair?.costsByGroup
+      ?? Object.freeze({ infantry: {}, vehicle: {}, aircraft: {} });
+    const groupedRepairCosts = {};
+    for (const costs of Object.values(effectiveRepairCostsByGroup)) {
+      for (const [type, amount] of Object.entries(costs)) {
+        groupedRepairCosts[type] = (groupedRepairCosts[type] ?? 0) + Number(amount || 0);
+      }
+    }
+    const effectiveRepairCosts = groupedRepairCosts;
     const nativeLoot = {};
     const lootDiagnostics = [];
     let hasNativeResourceValues = false;
@@ -471,37 +504,36 @@ export class WarRoomCalculator {
     const hasNativeReportLoot = reportLoot && Object.keys(reportLoot).length > 0;
     const interpretedLoot = response?.nativeEntityLoot;
     const hasInterpretedLoot = interpretedLoot && Object.keys(interpretedLoot).length > 0;
-    const lootByResource = hasNativeReportLoot
-      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(reportLoot[type] ?? 0)]))
-      : hasInterpretedLoot
-        ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
-      : hasNativeResourceValues ? nativeLoot
-      : Object.fromEntries(rewardTypes.map((type) => [
-        type, Number(snapshot.loot?.[type] ?? 0) * (defenderDamage / 100)
-      ]));
+    // TABS statistics are derived from GetUnitRepairCosts for every damaged
+    // defender entity. The combat report is used by TACS's separate compact
+    // game panel, but does not represent the TABS cached-stat columns.
+    const lootByResource = hasInterpretedLoot
+      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
+      : Object.fromEntries(rewardTypes.map((type) => [type, 0]));
     const lootTotal = rewardTypes.reduce((sum, type) => sum + Number(lootByResource[type] ?? 0), 0);
     const researchType = resourceName('ResearchPoints');
     const researchTotal = Number(lootByResource[researchType] ?? 0);
     return Object.freeze({
       label,
-      cyRemaining: objectivePercent('cy'),
-      dfRemaining: objectivePercent('df'),
+      cyRemaining: nativePercent(nativeBattleStats.cy, objectivePercent('cy')),
+      dfRemaining: nativePercent(nativeBattleStats.df, objectivePercent('df')),
       ccRemaining: objectivePercent('cc'),
-      defenseHqRemaining: namedBuildingPercent(/defen[cs]e\s*(?:hq|headquarters)/i),
+      defenseHqRemaining: nativePercent(nativeBattleStats.dhq,
+        namedBuildingPercent(/defen[cs]e\s*(?:hq|headquarters)/i)),
       defenderRemaining,
       ownRemaining,
       defenderDamage,
       ownDamage,
-      repairSeconds,
-      repairTimeByGroup,
-      repairCosts: Object.freeze(repairCosts),
-      repairCostsByGroup: Object.freeze(Object.fromEntries(Object.entries(repairCostsByGroup)
+      repairSeconds: effectiveRepairSeconds,
+      repairTimeByGroup: effectiveRepairTimeByGroup,
+      repairCosts: Object.freeze({ ...effectiveRepairCosts }),
+      repairCostsByGroup: Object.freeze(Object.fromEntries(Object.entries(effectiveRepairCostsByGroup)
         .map(([group, costs]) => [group, Object.freeze(costs)]))),
       repairCostResources: Object.freeze({
-        tiberium: Number(repairCosts[resourceName('Tiberium')] ?? 0),
-        crystal: Number(repairCosts[resourceName('Crystal', 'Chrystal')] ?? 0),
-        credits: Number(repairCosts[resourceName('Credits', 'Gold')] ?? 0),
-        power: Number(repairCosts[resourceName('Power')] ?? 0)
+        tiberium: Number(effectiveRepairCosts[resourceName('Tiberium')] ?? 0),
+        crystal: Number(effectiveRepairCosts[resourceName('Crystal', 'Chrystal')] ?? 0),
+        credits: Number(effectiveRepairCosts[resourceName('Credits', 'Gold')] ?? 0),
+        power: Number(effectiveRepairCosts[resourceName('Power')] ?? 0)
       }),
       loot: lootTotal,
       research: researchTotal,
@@ -513,26 +545,41 @@ export class WarRoomCalculator {
         research: Number(lootByResource[resourceName('ResearchPoints')] ?? 0)
       }),
       calculationDiagnostics: Object.freeze({
-        source: hasNativeReportLoot ? 'native-combat-report'
-          : hasInterpretedLoot ? 'native-damage-ratio-costs'
-          : hasNativeResourceValues ? 'native-entity-values' : 'compatibility-estimate',
+        source: hasInterpretedLoot ? 'tabs-data-d' : 'tabs-data-unavailable',
+        nativeReportAvailable: Boolean(response?.nativeCombatReport),
         entities: Object.freeze(lootDiagnostics)
       }),
-      durationSeconds: Number(response?.d?.cs ?? 0) / 10,
-      outcome: ownRemaining <= 0 ? 'Defeat' : defenderRemaining <= 0 ? 'Total Victory' : 'Victory',
-      morale: Number(response?.d?.m ?? response?.d?.morale ?? 0),
+      durationSeconds: response?.d?.cs != null
+        ? Number(response.d.cs) / 10
+          + (Number(response.d.cs) < Number(response.d.md ?? 0) * 10 ? 3 : 0)
+        : Number(nativeSummary.durationSeconds ?? 0),
+      outcome: typeof nativeSummary.outcome === 'string' && nativeSummary.outcome
+        ? nativeSummary.outcome
+        : ownRemaining <= 0 ? 'Defeat' : defenderRemaining <= 0 ? 'Total Victory' : 'Victory',
+      morale: Number(snapshot.morale?.deficit ?? response?.d?.m ?? response?.d?.morale ?? 0),
+      moraleEffectiveness: Number(snapshot.morale?.effectiveness ?? 100),
       autoRepair: Boolean(response?.d?.ar ?? response?.d?.autoRepair),
       repairStorage: snapshot.repairStorage ?? {},
       defenderBreakdown: Object.freeze({
-        structures: healthSummary(buildings),
-        defense: healthSummary(defenders),
+        structures: Object.freeze({ ...calculatedStructures,
+          remainingPercent: nativePercent(nativeSummary.baseState,
+            nativePercent(nativeBattleStats.baseState, calculatedStructures.remainingPercent)) }),
+        defense: Object.freeze({ ...calculatedDefense,
+          remainingPercent: nativePercent(nativeSummary.defenseState,
+            nativePercent(nativeBattleStats.defenseState, calculatedDefense.remainingPercent)) }),
         armored: healthSummary(armored),
         unarmored: healthSummary(defenders.filter((record) => !armoredSet.has(record)))
       }),
       offenseBreakdown: Object.freeze({
-        infantry: healthSummary(attackerGroups.infantry),
-        vehicle: healthSummary(attackerGroups.vehicle),
-        aircraft: healthSummary(attackerGroups.aircraft)
+        infantry: Object.freeze({ ...healthSummary(attackerGroups.infantry),
+          remainingPercent: nativePercent(nativeBattleStats.infantryState,
+            healthSummary(attackerGroups.infantry).remainingPercent) }),
+        vehicle: Object.freeze({ ...healthSummary(attackerGroups.vehicle),
+          remainingPercent: nativePercent(nativeBattleStats.vehicleState,
+            healthSummary(attackerGroups.vehicle).remainingPercent) }),
+        aircraft: Object.freeze({ ...healthSummary(attackerGroups.aircraft),
+          remainingPercent: nativePercent(nativeBattleStats.aircraftState,
+            healthSummary(attackerGroups.aircraft).remainingPercent) })
       })
     });
   }

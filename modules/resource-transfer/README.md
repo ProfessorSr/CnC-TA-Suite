@@ -9,7 +9,7 @@ Features:
 - Tiberium and Crystal transfers at 10%, 25%, 50%, 75%, or 100%
 - destination-base-specific Quick Transfer profiles for all resources, Crystal only, Tiberium only, or custom percentages of each resource from every other eligible owned base
 - configurable resource reserve retained at every source
-- destination-storage, trade-eligibility, and Credit-cost validation
+- trade-eligibility and Credit-cost validation; destination storage is informational because owned bases may hold transferred resources above nominal capacity
 - optional confirmation before bulk transfers
 - manual transfer history
 - preferred Supplies tab

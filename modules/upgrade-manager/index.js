@@ -52,7 +52,8 @@ export class UpgradeManagerModule extends Module {
       getState: () => this.state(),
       refresh: () => this.refresh(),
       upgradeSelected: (candidate) => this.upgradeOne(candidate, true),
-      upgradeAll: (candidates) => this.upgradeMany(candidates)
+      upgradeAll: (candidates) => this.upgradeMany(candidates),
+      upgradeToLevel: (candidates, targetLevel) => this.upgradeManyToLevel(candidates, targetLevel)
     });
     this.quickWindow = new QuickUpgradeWindow({ context, hub: this.hub });
     context.events?.on?.('game:tick', () => this.hub?.captureSelection?.());
@@ -130,6 +131,32 @@ export class UpgradeManagerModule extends Module {
       if (await this.upgradeOne(candidate, false)) upgraded += 1;
     }
     if (!upgraded) this.window?.addActivity?.('No filtered upgrades were currently eligible');
+    return upgraded;
+  }
+
+  async upgradeManyToLevel(candidates, targetLevel) {
+    const target = Math.max(1, Math.floor(Number(targetLevel) || 1));
+    const eligible = candidates.filter((candidate) => this.eligible(candidate) && candidate.level < target);
+    if (!eligible.length) {
+      this.window?.addActivity?.(`No filtered items are eligible below level ${target}`);
+      return 0;
+    }
+    if (!(globalThis.confirm?.(
+      `Upgrade ${eligible.length} eligible item(s) toward level ${target}? This spends game resources immediately.`
+    ) ?? false)) {
+      this.window?.addActivity?.('Target-level bulk upgrade cancelled');
+      return 0;
+    }
+    let upgraded = 0;
+    for (const candidate of eligible) {
+      const result = this.hub.upgradeCandidateToLevel(candidate, target);
+      if (result.success) {
+        upgraded += 1;
+        this.window?.addActivity?.(`${candidate.base} — ${candidate.name} ${candidate.level} → ${target}`);
+      }
+    }
+    this.context.notifications?.show?.(`Submitted ${upgraded} target-level upgrade${upgraded === 1 ? '' : 's'} toward level ${target}.`);
+    this.refresh();
     return upgraded;
   }
 

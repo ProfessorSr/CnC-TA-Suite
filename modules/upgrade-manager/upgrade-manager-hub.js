@@ -168,11 +168,22 @@ export class UpgradeManagerHub {
   }
 
   lowestUpgradeableLevel(scope = this.currentScope()) {
+    const cap = finite(call(this.root()?.Data?.MainData?.GetInstance?.()?.get_Server?.(), ['get_PlayerUpgradeCap']), 80);
+    const currentCityId = this.cityId(this.currentCity());
+    const eligible = this.candidates().filter((candidate) =>
+      candidate.cityId === currentCityId && candidate.category === scope
+      && !candidate.damaged && !candidate.locked
+    );
+    if (eligible.length) {
+      const levels = eligible.map((candidate) => candidate.level);
+      // Quick Upgrade always advances the lowest healthy eligible tier by
+      // exactly one, regardless of isolated higher-level items.
+      return Math.min(cap, Math.min(...levels) + 1);
+    }
     const api = this.scopeApi(scope);
     const method = scope === 'buildings'
       ? 'GetUpgradeCostsForAllBuildingsToLevel'
       : 'GetUpgradeCostsForAllUnitsToLevel';
-    const cap = finite(call(this.root()?.Data?.MainData?.GetInstance?.()?.get_Server?.(), ['get_PlayerUpgradeCap']), 80);
     for (let level = 1; level <= Math.max(1, cap); level += 1) {
       const costs = this.normalizeCosts(call(api, [method], level), scope);
       if (Object.values(costs).some((amount) => amount > 0)) return level;
@@ -188,25 +199,15 @@ export class UpgradeManagerHub {
     const costMethod = scope === 'buildings'
       ? 'GetUpgradeCostsForAllBuildingsToLevel'
       : 'GetUpgradeCostsForAllUnitsToLevel';
-    const costs = this.normalizeCosts(call(api, [costMethod], targetLevel), scope);
+    let costs = this.normalizeCosts(call(api, [costMethod], targetLevel), scope);
     const resources = this.resourceMap(city);
-    const production = Object.fromEntries(
-      Object.keys(costs).map((resource) => [resource, this.productionPerHour(city, resource)])
-    );
-    const shortfall = Object.fromEntries(
-      Object.keys(costs).map((resource) => [resource, Math.max(0, costs[resource] - resources[resource])])
-    );
-    const etaSeconds = Object.fromEntries(Object.keys(costs).map((resource) => {
-      const missing = shortfall[resource];
-      const hourly = production[resource];
-      return [resource, missing <= 0 ? 0 : hourly > 0 ? (missing / hourly) * 3600 : Infinity];
-    }));
     const currentCityId = this.cityId(city);
     const candidates = this.candidates()
       .filter((item) => item.cityId === currentCityId && item.category === scope
-        && item.level < targetLevel)
+        && item.level < targetLevel && !item.damaged && !item.locked)
       .sort((a, b) => a.level - b.level || a.totalCost - b.totalCost);
     const remaining = { ...resources };
+    const candidateCosts = { tiberium: 0, crystal: 0, credits: 0, power: 0 };
     let affordableCount = 0;
     const affordableCandidates = [];
     for (const candidate of candidates) {
@@ -226,6 +227,7 @@ export class UpgradeManagerHub {
         }
       }
       if (!Object.values(targetCosts).some((amount) => amount > 0)) continue;
+      for (const resource of Object.keys(candidateCosts)) candidateCosts[resource] += targetCosts[resource];
       if (!Object.keys(targetCosts).every((resource) => targetCosts[resource] <= remaining[resource])) continue;
       for (const resource of Object.keys(targetCosts)) remaining[resource] -= targetCosts[resource];
       affordableCount += 1;
@@ -239,6 +241,18 @@ export class UpgradeManagerHub {
         costs: targetCosts
       }));
     }
+    if (candidates.length) costs = candidateCosts;
+    const production = Object.fromEntries(
+      Object.keys(costs).map((resource) => [resource, this.productionPerHour(city, resource)])
+    );
+    const shortfall = Object.fromEntries(
+      Object.keys(costs).map((resource) => [resource, Math.max(0, costs[resource] - resources[resource])])
+    );
+    const etaSeconds = Object.fromEntries(Object.keys(costs).map((resource) => {
+      const missing = shortfall[resource];
+      const hourly = production[resource];
+      return [resource, missing <= 0 ? 0 : hourly > 0 ? (missing / hourly) * 3600 : Infinity];
+    }));
     const aggregateAffordable = Object.values(shortfall).every((value) => value <= 0);
     const hasAggregateCost = Object.values(costs).some((value) => value > 0);
     const totalCount = candidates.length || (hasAggregateCost ? 1 : 0);
@@ -348,13 +362,14 @@ export class UpgradeManagerHub {
   }
 
   upgradeAffordableToLevel(plan) {
-    if (!plan || plan.scope === 'buildings') return this.upgradeAllToLevel(plan?.targetLevel, plan?.scope);
+    if (!plan) return { success: false, reason: 'upgrade plan unavailable' };
     const api = this.scopeApi(plan.scope);
     const manager = this.root()?.Net?.CommunicationManager?.GetInstance?.();
     let upgraded = 0;
     for (const candidate of plan.affordableCandidates ?? []) {
-      if (candidate.hasNativeDetails && typeof api?.UpgradeUnitToLevel === 'function') {
-        api.UpgradeUnitToLevel(candidate.details, plan.targetLevel);
+      const method = plan.scope === 'buildings' ? 'UpgradeBuildingToLevel' : 'UpgradeUnitToLevel';
+      if (candidate.hasNativeDetails && typeof api?.[method] === 'function') {
+        api[method](candidate.details, plan.targetLevel);
         upgraded += 1;
         continue;
       }
@@ -393,6 +408,8 @@ export class UpgradeManagerHub {
       return production > 0 ? Math.max(longest, shortfall[key] / production) : Infinity;
     }, 0);
     const totalCost = costs.tiberium + costs.crystal + costs.credits + costs.power;
+    const condition = call(entity, ['get_HitpointsPercent', 'get_Health', 'get_Condition']);
+    const conditionDamaged = condition != null && finite(condition, 100) < (finite(condition, 100) <= 1 ? 1 : 100);
     return {
       id: `${this.cityId(city)}:${category}:${call(entity, ['get_Id']) ?? `${call(entity, ['get_CoordX'])},${call(entity, ['get_CoordY'])}`}`,
       cityId: this.cityId(city),
@@ -405,7 +422,9 @@ export class UpgradeManagerHub {
       shortfall,
       affordable,
       etaSeconds: Number.isFinite(waitHours) ? waitHours * 3600 : Infinity,
-      damaged: Boolean(call(entity, ['get_IsDamaged'])) || finite(call(entity, ['get_CurrentDamage'])) > 0,
+      damaged: Boolean(call(entity, ['get_IsDamaged']))
+        || finite(call(entity, ['get_CurrentDamage'])) > 0
+        || conditionDamaged,
       locked: Boolean(call(city, ['get_IsLocked'])),
       resourceBuilding: RESOURCE_BUILDINGS.has(name),
       coreBuilding: CORE_BUILDINGS.has(name),
@@ -460,6 +479,34 @@ export class UpgradeManagerHub {
     const details = call(candidate.entity, ['get_UnitDetails']);
     if (!api?.UpgradeUnitToLevel || !details) return { success: false, reason: `${candidate.category} upgrade API unavailable` };
     api.UpgradeUnitToLevel(details, candidate.nextLevel);
+    return { success: true };
+  }
+
+  upgradeCandidateToLevel(candidate, targetLevel) {
+    if (!candidate || candidate.locked || candidate.damaged || candidate.level >= targetLevel) {
+      return { success: false, reason: 'not eligible' };
+    }
+    const api = this.scopeApi(candidate.category);
+    const details = candidate.category === 'buildings'
+      ? call(candidate.entity, ['get_BuildingDetails'])
+      : call(candidate.entity, ['get_UnitDetails']);
+    const method = candidate.category === 'buildings' ? 'UpgradeBuildingToLevel' : 'UpgradeUnitToLevel';
+    if (this.cityId(this.currentCity()) === candidate.cityId && details && typeof api?.[method] === 'function') {
+      api[method](details, targetLevel);
+      return { success: true };
+    }
+    if (candidate.category !== 'buildings') {
+      return { success: false, reason: 'select this base before upgrading units' };
+    }
+    const manager = this.root()?.Net?.CommunicationManager?.GetInstance?.();
+    if (!manager?.SendCommand) return { success: false, reason: 'building upgrade command unavailable' };
+    for (let level = candidate.level + 1; level <= targetLevel; level += 1) {
+      manager.SendCommand('UpgradeBuilding', {
+        cityid: call(candidate.city, ['get_Id']),
+        posX: call(candidate.entity, ['get_CoordX']),
+        posY: call(candidate.entity, ['get_CoordY'])
+      }, null, null, true);
+    }
     return { success: true };
   }
 }

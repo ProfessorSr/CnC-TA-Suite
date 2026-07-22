@@ -78,21 +78,22 @@ export class ResourceTransferHub {
     const destination = snapshot.cities.find((city) => city.id === String(destinationId));
     if (!destination) throw new Error('Select a valid destination base.');
     const none = this.root()?.Data?.ETradeError?.None ?? 0;
-    let remainingCapacity = Math.max(0, destination.storage - destination.amount);
     const entries = [];
     let totalAmount = 0;
     let totalCost = 0;
     for (const source of snapshot.cities.filter((city) => sourceIds.includes(city.id) && city.id !== destination.id)) {
       const available = Math.max(0, source.amount - reserveAmount);
       const requested = Math.floor(available * Math.max(0, Math.min(1, fraction)));
-      const amount = Math.min(requested, remainingCapacity);
+      // The game permits owned bases to hold resources above their nominal
+      // storage capacity. Storage is informational and must not truncate a
+      // user-requested SelfTrade amount.
+      const amount = requested;
       const cost = amount > 0
         ? Math.ceil(finite(call(source.city, ['CalculateTradeCostToCoord'], destination.x, destination.y, amount)))
         : 0;
       const eligible = source.tradeError === none && destination.tradeError === none && amount > 0;
       entries.push({ source, destination, available, amount, cost, eligible });
       if (eligible) {
-        remainingCapacity -= amount;
         totalAmount += amount;
         totalCost += cost;
       }
@@ -103,7 +104,8 @@ export class ResourceTransferHub {
       entries,
       totalAmount,
       totalCost,
-      remainingCapacity,
+      remainingCapacity: null,
+      storageLimitIgnored: true,
       credits: snapshot.credits,
       affordable: totalCost <= snapshot.credits
     };

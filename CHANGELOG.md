@@ -4,6 +4,12 @@ Notable changes to CnC-TA-Suite are recorded here. The project follows semantic 
 
 ## [1.0.0] - 2026-07-20
 
+- Added optional War Room companion windows for formation optimization and native-styled simulation results, including a collapsible view of four previous cached results.
+- Changed attack-view startup to open War Room companion windows instead of the full War Room workspace.
+- Advanced the independently versioned War Room module to v0.8.0.
+- Corrected Quick Upgrade to suggest one level above the lowest healthy eligible item, added a one-confirmation target-level action to the full Upgrade Manager, and expanded War Room best-formation search sizes to 25/50/75/100/150/200 simulations.
+- Advanced the independently versioned War Room module to v0.6.0.
+- Removed the destination storage-capacity restriction from Resource Transfer plans; manual and quick transfers now use the requested source amounts even when the destination will exceed nominal storage.
 - Advanced the independently versioned War Room module to v0.5.0 as the preparation baseline for its next major update.
 - Released War Room module v0.4.0 with complete cross-category combat statistics, improved native report/replay handler discovery, resolved Army Analyzer range/speed data, and dormant-window performance optimization.
 - Corrected War Room combat-report folder semantics, added Command Center base selection and preferred-target/estimated-1v1 Army Analyzer columns, prevented invalid range/speed values from rendering as `NaN`, and connected report handoff directly to the native `ReportsOverlay` singleton.

@@ -65,10 +65,10 @@ export class ResourceTransferWindow {
       });
       this.summary.setValue(
         `<b>${number(this.plan.totalAmount)}</b> ${this.resourceName} to <b>${escapeHtml(this.plan.destination.name)}</b> · `
-        + `Credits ${number(this.plan.totalCost)} · destination space remaining ${number(this.plan.remainingCapacity)}`
+        + `Credits ${number(this.plan.totalCost)} · destination storage does not limit this transfer`
       );
       this.status.setValue(!sourceIds.length ? 'Select one or more source bases.'
-        : !this.plan.totalAmount ? 'Nothing can be transferred with the current reserve and storage limits.'
+        : !this.plan.totalAmount ? 'Nothing can be transferred with the current source reserve setting.'
           : !this.plan.affordable ? 'Not enough Credits for this transfer.' : 'Ready for manual transfer.');
       this.transferButton.setEnabled(this.plan.totalAmount > 0 && this.plan.affordable);
     } catch (error) {

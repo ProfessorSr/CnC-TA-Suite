@@ -72,6 +72,22 @@ test('WarRoomCalculator creates distinct native-simulation candidates', () => {
     .map((unit) => `${unit.entityId}:${unit.x}:${unit.y}`).sort().join('|'))).size, candidates.length);
 });
 
+test('WarRoomCalculator honors explicit best-formation simulation counts', () => {
+  const snapshot = fixture();
+  snapshot.units = Array.from({ length: 20 }, (_, index) => ({
+    id: index + 1,
+    entityId: index + 1,
+    name: `Unit ${index + 1}`,
+    level: 20 - index,
+    health: 1,
+    x: index % 9,
+    y: Math.floor(index / 9)
+  }));
+  for (const count of [25, 50, 75, 100, 150, 200]) {
+    assert.equal(WarRoomCalculator.candidateFormations(snapshot, 'cy', count).length, count);
+  }
+});
+
 test('WarRoomCalculator ranks native simulations by objective destruction', () => {
   const snapshot = fixture();
   const response = {
@@ -85,7 +101,7 @@ test('WarRoomCalculator ranks native simulations by objective destruction', () =
     e: [
       { Key: 1, Value: { h: 0 } },
       { Key: 2, Value: { h: 400 } }
-    ]
+    ],
   };
   const result = WarRoomCalculator.scoreSimulation(response, snapshot, 'cy');
   assert.equal(result.objectivePercent, 0);
@@ -118,7 +134,12 @@ test('WarRoomCalculator summarizes live native battle results', () => {
       { Key: 2, Value: { h: 800 } },
       { Key: 3, Value: { h: 400 } },
       { Key: 4, Value: { h: 1200 } }
-    ]
+    ],
+    nativeEntityLoot: { 1: 1650, 2: 825, 3: 700 },
+    nativeOffenseRepair: {
+      timeByGroup: { infantry: 0, vehicle: 50, aircraft: 0 },
+      costsByGroup: { infantry: {}, vehicle: { 1: 250, 2: 100 }, aircraft: {} }
+    }
   };
   const result = WarRoomCalculator.analyzeNativeSimulation(response, snapshot);
   assert.equal(result.cyRemaining, 0);
@@ -161,16 +182,17 @@ test('WarRoomCalculator prefers simulator maximum health and applies repeated-at
   }];
   const result = WarRoomCalculator.analyzeNativeSimulation({
     d: { s: [], d: [{ i: 500, x: 4, y: 8, h: 100, ac: 2, ci: 1 }], a: [] },
-    e: [{ Key: 1, Value: { h: 800, mh: 2000 } }]
+    e: [{ Key: 1, Value: { h: 800, mh: 2000 } }],
+    nativeEntityLoot: { 1: 196, 4: 98 }
   }, snapshot);
   assert.equal(result.defenderRemaining, 40);
   assert.equal(Math.round(result.lootResources.tiberium), 196);
   assert.equal(result.lootResources.research, 98);
-  assert.equal(result.calculationDiagnostics.source, 'native-entity-values');
+  assert.equal(result.calculationDiagnostics.source, 'tabs-data-d');
   assert.ok(Math.abs(result.calculationDiagnostics.entities[0].attackDecay - 0.49) < 1e-12);
 });
 
-test('WarRoomCalculator prefers authoritative simulated combat-report loot', () => {
+test('WarRoomCalculator ignores compact report loot and uses TABS data.d loot', () => {
   const snapshot = fixture();
   snapshot.resourceTypes = { Tiberium: 1, Crystal: 2, ResearchPoints: 6 };
   snapshot.buildings = snapshot.buildings.map((building) => ({
@@ -179,12 +201,52 @@ test('WarRoomCalculator prefers authoritative simulated combat-report loot', () 
   const result = WarRoomCalculator.analyzeNativeSimulation({
     d: { s: [{ i: 112, x: 6, y: 4, h: 100, ci: 1 }], d: [], a: [] },
     e: [{ Key: 1, Value: { sh: 1600, h: 800, mh: 1600 } }],
-    nativeReportLoot: { 1: 114900, 2: 21345, 6: 51129 }
+    nativeReportLoot: { 1: 999, 2: 999, 6: 999 },
+    nativeEntityLoot: { 1: 114900, 2: 21345, 6: 51129 }
   }, snapshot);
   assert.equal(result.lootResources.tiberium, 114900);
   assert.equal(result.lootResources.crystal, 21345);
   assert.equal(result.lootResources.research, 51129);
-  assert.equal(result.calculationDiagnostics.source, 'native-combat-report');
+  assert.equal(result.calculationDiagnostics.source, 'tabs-data-d');
+});
+
+test('WarRoomCalculator uses native report states and TABS battle duration', () => {
+  const snapshot = fixture();
+  snapshot.resourceTypes = {
+    ...snapshot.resourceTypes, RepairChargeInf: 9, RepairChargeVeh: 10, RepairChargeAir: 8
+  };
+  const result = WarRoomCalculator.analyzeNativeSimulation({
+    d: {
+      cs: 440,
+      s: [{ i: 112, x: 6, y: 4, h: 100, ci: 1 }],
+      d: [{ i: 500, x: 4, y: 8, h: 100, ci: 2 }],
+      a: [{ i: 10, x: 4, y: 0, h: 100, ci: 3 }]
+    },
+    e: [
+      { Key: 1, Value: { h: 1200 } },
+      { Key: 2, Value: { h: 400 } },
+      { Key: 3, Value: { h: 800 } }
+    ],
+    nativeCombatReport: {
+      summary: {
+        targetState: 73, baseState: 99, defenseState: 44, armyState: 5,
+        outcome: 'Victory', durationSeconds: 57
+      },
+      repairCosts: { 2: 79615, 8: 800, 9: 1200, 10: 2400 }
+    },
+    nativeOffenseRepair: {
+      timeByGroup: { infantry: 1200, vehicle: 2400, aircraft: 800 },
+      costsByGroup: { infantry: { 2: 30000 }, vehicle: { 2: 40000 }, aircraft: { 2: 9615 } }
+    }
+  }, snapshot);
+  assert.equal(result.defenderRemaining, 73);
+  assert.equal(result.defenderBreakdown.structures.remainingPercent, 99);
+  assert.equal(result.defenderBreakdown.defense.remainingPercent, 44);
+  assert.equal(result.ownRemaining, 5);
+  assert.equal(result.outcome, 'Victory');
+  assert.equal(result.durationSeconds, 44);
+  assert.equal(result.repairCostResources.crystal, 79615);
+  assert.equal(result.repairSeconds, 2400);
 });
 
 test('War Room attack estimate is limited by CP and the largest active repair requirement', () => {

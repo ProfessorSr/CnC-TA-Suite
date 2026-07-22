@@ -1,5 +1,10 @@
 import { ArmyAnalyzer } from './army-analyzer.js';
 import { WarRoomCalculator } from './war-room-calculator.js';
+import {
+  DEFAULT_WAR_ROOM_COMPANION_SETTINGS,
+  WAR_ROOM_COMPANION_SETTINGS_KEY,
+  normalizeWarRoomCompanionSettings
+} from './companion-settings.js';
 
 // Keep the user-initiated formation executor isolated so it can be disabled
 // independently without removing the read-only planner and simulations.
@@ -111,9 +116,12 @@ export class WarRoomWindow {
     this.simulator = simulator;
     this.stats = stats;
     this.record = null;
+    this.content = null;
+    this.companionWindows = null;
   }
 
   build() {
+    if (this.content && !this.content.isDisposed?.()) return this.content;
     const qx = globalThis.qx;
     const root = new qx.ui.container.Composite(new qx.ui.layout.VBox(6));
     root.set({ padding: 6, textColor: '#ffffff' });
@@ -127,8 +135,22 @@ export class WarRoomWindow {
       if (!widgetAlive(widget)) return false;
       try { widget.setEnabled(value); return true; } catch { return false; }
     };
-    const windowVisible = () => !this.record?.window || Boolean(this.record.window.isVisible?.());
+    const windowVisible = () => Boolean(
+      this.record?.window?.isVisible?.()
+      || compactPlannerWindow?.isVisible?.()
+      || comparisonWindow?.isVisible?.()
+    );
     let unsubscribePresetChanges = null;
+    let unsubscribeGameTick = null;
+    let compactPlannerWindow = null;
+    let compactPlannerResult = null;
+    let comparisonWindow = null;
+    let comparisonResults = null;
+    let comparisonReduced = false;
+    let comparisonHistoryButton = null;
+    let comparisonRenderSignature = '';
+    let companionSettings = { ...DEFAULT_WAR_ROOM_COMPANION_SETTINGS };
+    let attackCompanionsRequested = false;
 
     const toolbar = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
     const stack = new qx.ui.container.Stack();
@@ -140,7 +162,8 @@ export class WarRoomWindow {
       ['simulator', '🎯 Battle Simulator'],
       ['reports', '📋 Report Summary'],
       ['army', '👥 Army Analyzer'],
-      ['stats', '📈 Combat Statistics']
+      ['stats', '📈 Combat Statistics'],
+      ['settings', '⚙ Settings']
     ];
 
     for (const [id, title] of sections) {
@@ -180,9 +203,9 @@ export class WarRoomWindow {
       ['Maximize Research Points (RP)', 'rp']
     ]) plannerGoal.add(new qx.ui.form.ListItem(name, null, id));
     const recommend = new qx.ui.form.Button('Simulate Best Formation');
-    const searchDetail = new qx.ui.form.SelectBox().set({ width: 125 });
-    for (const [name, id] of [['Quick', 'quick'], ['Detailed', 'detailed'], ['Exhaustive', 'exhaustive']]) {
-      searchDetail.add(new qx.ui.form.ListItem(name, null, id));
+    const searchDetail = new qx.ui.form.SelectBox().set({ width: 90 });
+    for (const count of [25, 50, 75, 100, 150, 200]) {
+      searchDetail.add(new qx.ui.form.ListItem(String(count), null, count));
     }
     searchDetail.setSelection([searchDetail.getChildren()[1]]);
     plannerControls.add(label(qx, 'Attack goal'));
@@ -236,6 +259,226 @@ export class WarRoomWindow {
       plannerResultHtml = value;
       if (activeSectionId === 'planner') safeSetValue(bestFormationResult, value);
     };
+
+    // Compact companion for the optimizer controls. It deliberately omits the
+    // troop grid: the live game attack view remains the visual formation.
+    const compactLayout = new qx.ui.layout.VBox(6);
+    compactPlannerWindow = new qx.ui.window.Window('Formation Optimizer').set({
+      layout: compactLayout,
+      padding: 7,
+      width: 440,
+      minWidth: 390,
+      height: 310,
+      minHeight: 245,
+      showMinimize: false,
+      showMaximize: false,
+      allowMinimize: false,
+      allowMaximize: false,
+      resizable: true,
+      movable: true,
+      useMoveFrame: true,
+      alwaysOnTop: false
+    });
+    const compactGoal = new qx.ui.form.SelectBox().set({ width: 225 });
+    for (const [name, id] of [
+      ['Destroy Construction Yard (CY)', 'cy'],
+      ['Destroy Defense Facility (DF)', 'df'],
+      ['Destroy Command Center (CC)', 'cc'],
+      ['Maximize Defense Damage', 'defense'],
+      ['Maximize Research Points (RP)', 'rp']
+    ]) compactGoal.add(new qx.ui.form.ListItem(name, null, id));
+    const compactSearchDetail = new qx.ui.form.SelectBox().set({ width: 72 });
+    for (const count of [25, 50, 75, 100, 150, 200]) {
+      compactSearchDetail.add(new qx.ui.form.ListItem(String(count), null, count));
+    }
+    compactSearchDetail.setSelection([compactSearchDetail.getChildren()[1]]);
+    const compactRecommend = new qx.ui.form.Button('Simulate');
+    const compactTop = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
+    compactTop.add(label(qx, 'Goal'));
+    compactTop.add(compactGoal, { flex: 1 });
+    compactTop.add(label(qx, 'Tests'));
+    compactTop.add(compactSearchDetail);
+    compactTop.add(compactRecommend);
+    compactPlannerWindow.add(compactTop);
+
+    const compactPresetName = new qx.ui.form.TextField().set({ width: 120, placeholder: 'Formation name' });
+    const compactPresetSelect = new qx.ui.form.SelectBox().set({ width: 140 });
+    const compactSavePreset = new qx.ui.form.Button('Save');
+    const compactLoadPreset = new qx.ui.form.Button('Load').set({ enabled: false });
+    const compactDeletePreset = new qx.ui.form.Button('Delete').set({ enabled: false });
+    const compactPresets = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
+    compactPresets.add(label(qx, 'Presets'));
+    compactPresets.add(compactPresetName);
+    compactPresets.add(compactSavePreset);
+    compactPresets.add(compactPresetSelect, { flex: 1 });
+    compactPresets.add(compactLoadPreset);
+    compactPresets.add(compactDeletePreset);
+    compactPlannerWindow.add(compactPresets);
+
+    compactPlannerResult = label(qx,
+      '<b>Formation Optimizer</b><br><span style="color:#52636b">Choose a goal and run a simulation to watch its progress.</span>', {
+      rich: true,
+      padding: 8,
+      allowGrowX: true,
+      allowGrowY: true,
+      textColor: '#17262d',
+      backgroundColor: '#d9ece1'
+    });
+    const compactResultScroll = new qx.ui.container.Scroll().set({
+      scrollbarX: 'off', scrollbarY: 'auto', minHeight: 125
+    });
+    compactResultScroll.add(compactPlannerResult);
+    compactPlannerWindow.add(compactResultScroll, { flex: 1 });
+    const compactApplyFormation = new qx.ui.form.Button('Apply Formation').set({
+      enabled: false,
+      toolTipText: 'Move the active attack formation to the displayed optimized layout'
+    });
+    compactPlannerWindow.add(compactApplyFormation);
+    const applicationRoot = qx.core.Init.getApplication().getDesktop?.()
+      ?? qx.core.Init.getApplication().getRoot?.();
+    applicationRoot?.add?.(compactPlannerWindow, { left: 12, top: 150 });
+    compactPlannerWindow.exclude();
+
+    comparisonWindow = new qx.ui.window.Window('').set({
+      layout: new qx.ui.layout.VBox(0),
+      padding: 0,
+      width: 186,
+      minWidth: 186,
+      maxWidth: 186,
+      height: 837,
+      minHeight: 420,
+      showMinimize: false,
+      showMaximize: false,
+      showClose: false,
+      allowMinimize: false,
+      allowMaximize: false,
+      resizable: true,
+      movable: true,
+      useMoveFrame: true,
+      alwaysOnTop: false
+    });
+    try {
+      comparisonWindow.setDecorator?.(null);
+      comparisonWindow.setBackgroundColor?.('#050707');
+      const captionbar = comparisonWindow.getChildControl?.('captionbar');
+      const captionTitle = comparisonWindow.getChildControl?.('title');
+      const contentPane = comparisonWindow.getChildControl?.('pane');
+      captionbar?.set?.({
+        decorator: null, minHeight: 21, height: 21, padding: 0
+      });
+      captionTitle?.set?.({
+        decorator: 'chat-window-movebar-inactive',
+        width: 128, minWidth: 128, maxWidth: 128,
+        textAlign: 'center', cursor: 'default'
+      });
+      contentPane?.set?.({
+        padding: 0,
+        appearance: null,
+        decorator: null,
+        backgroundColor: '#050707'
+      });
+      const historyIcon = 'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/2a8928214c62d8207ba502a600cfa368.png';
+      const lockIcon = 'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/ebb128a345118cb0256f1e92bd0e1bc0.png';
+      comparisonHistoryButton = new qx.ui.form.Button(null, historyIcon).set({
+        width: 21, minWidth: 21, maxWidth: 21, height: 22, marginLeft: 5,
+        appearance: 'button-friendlist-scroll', show: 'icon',
+        toolTipText: 'Show the reduced building-summary view'
+      });
+      const lockButton = new qx.ui.form.Button(null, lockIcon).set({
+        width: 21, minWidth: 21, maxWidth: 21, height: 22, marginLeft: 5,
+        appearance: 'button-friendlist-scroll', show: 'icon',
+        toolTipText: 'Lock this panel in place'
+      });
+      captionbar?.add?.(comparisonHistoryButton, { row: 0, column: 4 });
+      captionbar?.add?.(lockButton, { row: 0, column: 5 });
+      let panelLocked = false;
+      lockButton.addListener('execute', () => {
+        panelLocked = !panelLocked;
+        comparisonWindow.setMovable(!panelLocked);
+        lockButton.setOpacity(panelLocked ? 0.65 : 1);
+        lockButton.setToolTipText(panelLocked ? 'Unlock this panel' : 'Lock this panel in place');
+      });
+    } catch {
+      // The standard game window decoration remains usable on older themes.
+    }
+    comparisonResults = new qx.ui.container.Composite(new qx.ui.layout.HBox(5)).set({
+      width: 184, minWidth: 184, maxWidth: 184,
+      height: 811, minHeight: 811, maxHeight: 811,
+      padding: 0, backgroundColor: '#050707'
+    });
+    comparisonWindow.add(comparisonResults, {
+      marginTop: 3, marginBottom: 2, marginLeft: 1, marginRight: 1
+    });
+    applicationRoot?.add?.(comparisonWindow, { left: 12, top: 80 });
+    comparisonWindow.exclude();
+    comparisonHistoryButton?.addListener('execute', () => {
+      comparisonReduced = !comparisonReduced;
+      comparisonRenderSignature = '';
+      comparisonHistoryButton.setToolTipText(comparisonReduced
+        ? 'Show the detailed building-image view'
+        : 'Show the reduced building-summary view');
+      renderSimulations();
+    });
+    let syncingCompactControls = false;
+    const syncSelection = (source, target) => {
+      if (syncingCompactControls) return;
+      const model = source.getSelection?.()?.[0]?.getModel?.();
+      const match = target.getChildren?.().find((item) => String(item.getModel?.()) === String(model));
+      if (!match) return;
+      syncingCompactControls = true;
+      target.setSelection([match]);
+      syncingCompactControls = false;
+    };
+    plannerGoal.addListener('changeSelection', () => syncSelection(plannerGoal, compactGoal));
+    compactGoal.addListener('changeSelection', () => syncSelection(compactGoal, plannerGoal));
+    searchDetail.addListener('changeSelection', () => syncSelection(searchDetail, compactSearchDetail));
+    compactSearchDetail.addListener('changeSelection', () => syncSelection(compactSearchDetail, searchDetail));
+    presetSelect.addListener('changeSelection', () => syncSelection(presetSelect, compactPresetSelect));
+    compactPresetSelect.addListener('changeSelection', () => syncSelection(compactPresetSelect, presetSelect));
+    presetName.addListener('changeValue', () => {
+      if (!syncingCompactControls) compactPresetName.setValue(presetName.getValue());
+    });
+    compactPresetName.addListener('changeValue', () => {
+      if (!syncingCompactControls) presetName.setValue(compactPresetName.getValue());
+    });
+    compactRecommend.addListener('execute', () => recommend.execute());
+    compactApplyFormation.addListener('execute', () => {
+      try {
+        const units = displayedRecommendation?.grid?.flat().filter(Boolean) ?? [];
+        if (!units.length) throw new Error('Simulate or load a formation first.');
+        const snapshot = this.hub.snapshot();
+        if (!snapshot.attacker?.id || !snapshot.target?.id) {
+          throw new Error('Open a target attack screen first.');
+        }
+        compactApplyFormation.setEnabled(false);
+        this.hub.applyRecommendedFormation(units);
+        observedFormation = formationSignature(this.hub.snapshot());
+        simulationCache.delete(simulationKey(this.hub.snapshot()));
+        setPlannerResult(
+          '<b>Formation Applied</b><br>'
+          + '<span style="color:#237a38"><b>The optimized troop layout was moved into the active attack formation.</b></span>'
+        );
+        safeSetValue(compactPlannerResult,
+          '<b>Formation Applied</b><br>'
+          + '<span style="color:#237a38"><b>The optimized troop layout was moved into the active attack formation.</b></span>'
+        );
+        queueLiveSimulation();
+      } catch (error) {
+        setPlannerResult(
+          '<b>Unable to Apply Formation</b><br>'
+          + `<span style="color:#a32626">${escapeHtml(error?.message ?? error)}</span>`
+        );
+        safeSetValue(compactPlannerResult,
+          '<b>Unable to Apply Formation</b><br>'
+          + `<span style="color:#a32626">${escapeHtml(error?.message ?? error)}</span>`
+        );
+      } finally {
+        compactApplyFormation.setEnabled(Boolean(displayedRecommendation));
+      }
+    });
+    compactSavePreset.addListener('execute', () => savePreset.execute());
+    compactLoadPreset.addListener('execute', () => loadPreset.execute());
+    compactDeletePreset.addListener('execute', () => deletePreset.execute());
     const formationTools = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
     const previewUndo = new qx.ui.form.Button('Undo').set({ enabled: false });
     const previewRedo = new qx.ui.form.Button('Redo').set({ enabled: false });
@@ -311,7 +554,9 @@ export class WarRoomWindow {
     };
     const renderPresets = (selectedId = null) => {
       presetSelect.removeAll();
+      compactPresetSelect.removeAll();
       let selectedItem = null;
+      let compactSelectedItem = null;
       const snapshot = this.hub.snapshot();
       const attackerId = snapshot.attacker?.id;
       for (const preset of formationPresets.filter((item) =>
@@ -319,13 +564,21 @@ export class WarRoomWindow {
         && presetMatchesTarget(item, snapshot)
       )) {
         const item = new qx.ui.form.ListItem(preset.name, null, preset.id);
+        const compactItem = new qx.ui.form.ListItem(preset.name, null, preset.id);
         presetSelect.add(item);
-        if (String(preset.id) === String(selectedId)) selectedItem = item;
+        compactPresetSelect.add(compactItem);
+        if (String(preset.id) === String(selectedId)) {
+          selectedItem = item;
+          compactSelectedItem = compactItem;
+        }
       }
       if (selectedItem) presetSelect.setSelection([selectedItem]);
+      if (compactSelectedItem) compactPresetSelect.setSelection([compactSelectedItem]);
       const available = Boolean(presetSelect.getSelection?.()?.length);
       loadPreset.setEnabled(available);
       deletePreset.setEnabled(available);
+      compactLoadPreset.setEnabled(available);
+      compactDeletePreset.setEnabled(available);
     };
     const loadFormationPresets = async (selectedId = null) => {
       formationPresets = await this.context.storage?.get?.(presetStorageKey, []) ?? [];
@@ -437,6 +690,91 @@ export class WarRoomWindow {
     statsControls.add(clearHistory);
     stats.page.addAt(statsControls, 0);
 
+    const settings = { page: new qx.ui.container.Composite(new qx.ui.layout.VBox(10)) };
+    settings.page.set({ padding: 10 });
+    settings.page.add(label(qx, 'Companion Windows', {
+      font: 'bold',
+      textColor: '#9edcff'
+    }));
+    settings.page.add(label(qx,
+      'These compact windows supplement the full War Room. Each can be shown or hidden independently without changing the main War Room pages.',
+      { wrap: true, textColor: '#d5e2e8' }
+    ));
+    const companionBox = new qx.ui.container.Composite(new qx.ui.layout.VBox(8)).set({
+      padding: 10,
+      backgroundColor: '#27333a',
+      decorator: new qx.ui.decoration.Decorator(1, 'solid', '#667780')
+    });
+    const formationControlsSetting = new qx.ui.form.CheckBox('Formation Controls').set({
+      textColor: '#ffffff',
+      toolTipText: 'Show the movable formation-control palette while a target attack setup is open.'
+    });
+    const compactOutcomeSetting = new qx.ui.form.CheckBox('Simulation Results').set({
+      textColor: '#ffffff',
+      toolTipText: 'Show the compact native-styled simulation result window beside the attack view.'
+    });
+    const compactPlannerSetting = new qx.ui.form.CheckBox('Formation Optimizer').set({
+      textColor: '#ffffff',
+      toolTipText: 'Show the compact best-formation and saved-preset window beside the attack view.'
+    });
+    companionBox.add(formationControlsSetting);
+    companionBox.add(label(qx,
+      'Movable troop controls for simulation, formation movement, troop visibility, reset, and saved formations.',
+      { textColor: '#b8c8cf', paddingLeft: 22 }
+    ));
+    companionBox.add(compactOutcomeSetting);
+    companionBox.add(label(qx,
+      'A narrow native-styled current result that expands on demand to compare four previous cached simulations.',
+      { textColor: '#b8c8cf', paddingLeft: 22 }
+    ));
+    companionBox.add(compactPlannerSetting);
+    companionBox.add(label(qx,
+      'Attack goal, simulation count, saved formations, and a scrollable live optimizer activity view without the troop grid.',
+      { textColor: '#b8c8cf', paddingLeft: 22 }
+    ));
+    settings.page.add(companionBox);
+    const settingsStatus = label(qx, '', { textColor: '#8fdda8' });
+    settings.page.add(settingsStatus);
+    settings.page.add(new qx.ui.core.Spacer(), { flex: 1 });
+    let loadingCompanionSettings = true;
+    const persistCompanionSettings = () => {
+      if (loadingCompanionSettings) return;
+      companionSettings = normalizeWarRoomCompanionSettings({
+        formationControls: formationControlsSetting.getValue(),
+        compactSimulationOutcome: compactOutcomeSetting.getValue(),
+        compactAttackPlanner: compactPlannerSetting.getValue()
+      });
+      void this.context.storage?.set?.(WAR_ROOM_COMPANION_SETTINGS_KEY, companionSettings);
+      this.context.eventBus?.emit?.('war-room:companion-settings-changed', companionSettings);
+      if (!companionSettings.compactAttackPlanner) compactPlannerWindow.exclude();
+      if (!companionSettings.compactSimulationOutcome) comparisonWindow.exclude();
+      if (attackCompanionsRequested) {
+        if (companionSettings.compactAttackPlanner) compactPlannerWindow.open();
+        if (companionSettings.compactSimulationOutcome) comparisonWindow.open();
+      }
+      settingsStatus.setValue('Companion-window settings saved.');
+    };
+    formationControlsSetting.addListener('changeValue', persistCompanionSettings);
+    compactOutcomeSetting.addListener('changeValue', persistCompanionSettings);
+    compactPlannerSetting.addListener('changeValue', persistCompanionSettings);
+    void this.context.storage?.get?.(
+      WAR_ROOM_COMPANION_SETTINGS_KEY,
+      DEFAULT_WAR_ROOM_COMPANION_SETTINGS
+    ).then((saved) => {
+      companionSettings = normalizeWarRoomCompanionSettings(saved);
+      formationControlsSetting.setValue(companionSettings.formationControls);
+      compactOutcomeSetting.setValue(companionSettings.compactSimulationOutcome);
+      compactPlannerSetting.setValue(companionSettings.compactAttackPlanner);
+      loadingCompanionSettings = false;
+      if (attackCompanionsRequested) {
+        if (companionSettings.compactAttackPlanner) compactPlannerWindow.open();
+        else compactPlannerWindow.exclude();
+        if (companionSettings.compactSimulationOutcome) comparisonWindow.open();
+        else comparisonWindow.exclude();
+      }
+      settingsStatus.setValue('Settings apply whenever an attack setup is open.');
+    });
+
     let allianceLoadSequence = 0;
     const allianceOptions = new Map();
     const loadAlliances = async () => {
@@ -493,7 +831,7 @@ export class WarRoomWindow {
         allianceCheck.setValue(false);
       });
     }
-    for (const [id, value] of Object.entries({ search, planner, simulator, reports, army, stats })) {
+    for (const [id, value] of Object.entries({ search, planner, simulator, reports, army, stats, settings })) {
       pages.set(id, value);
       stack.add(value.page);
     }
@@ -546,7 +884,7 @@ export class WarRoomWindow {
     });
 
     const overview = new qx.ui.container.Composite(new qx.ui.layout.VBox(8));
-    overview.set({ width: 220, minWidth: 180, maxWidth: 280, padding: 8 });
+    overview.set({ width: 252, minWidth: 220, maxWidth: 310, padding: 8 });
     const overviewTitle = label(qx, 'Combat Overview', { font: 'bold' });
     const overviewAttacker = label(qx, 'Attacker: —');
     const overviewTarget = label(qx, 'Target: —');
@@ -565,9 +903,9 @@ export class WarRoomWindow {
     overview.add(new qx.ui.core.Spacer(), { flex: 1 });
 
     const overviewScroll = new qx.ui.container.Scroll().set({
-      width: 238,
-      minWidth: 198,
-      maxWidth: 298,
+      width: 270,
+      minWidth: 238,
+      maxWidth: 328,
       scrollbarX: 'off',
       scrollbarY: 'auto'
     });
@@ -580,6 +918,7 @@ export class WarRoomWindow {
     root.add(footer);
 
     const render = () => {
+      if (buildDisposed || !widgetAlive(planner.grid.widget)) return;
       try {
         const snapshot = this.hub.snapshot();
         const summary = WarRoomCalculator.summarize(snapshot);
@@ -819,6 +1158,7 @@ export class WarRoomWindow {
 
     const selectedGoal = () => plannerGoal.getSelection?.()?.[0]?.getModel?.() ?? 'cy';
     const showRecommendation = (recommendation, { resetHistory = true } = {}) => {
+      if (buildDisposed || !widgetAlive(formationVisual.widget) || !recommendation?.grid) return;
       const snapshot = this.hub.snapshot();
       displayedRecommendation = cloneRecommendation(recommendation);
       if (resetHistory) {
@@ -829,6 +1169,11 @@ export class WarRoomWindow {
       applyRecommendation.setEnabled(Boolean(
         EXPERIMENTAL_ONE_CLICK_FORMATION_ENABLED
         && snapshot.attacker?.id
+        && snapshot.target?.id
+        && recommendation?.grid?.some((row) => row.some(Boolean))
+      ));
+      compactApplyFormation.setEnabled(Boolean(
+        snapshot.attacker?.id
         && snapshot.target?.id
         && recommendation?.grid?.some((row) => row.some(Boolean))
       ));
@@ -1004,9 +1349,12 @@ export class WarRoomWindow {
       } catch { return escapeHtml(fallback); }
     };
     const icons = {
-      cy: gameIcon('FactionUI/icons/icon_building_detail_upgrade.png', 'Construction Yard'),
-      df: gameIcon('FactionUI/icons/icon_building_detail_upgrade.png', 'Defense Facility'),
-      dhq: gameIcon('FactionUI/icons/icon_building_detail_upgrade.png', 'Defense HQ'),
+      // These objectives do not have stable public resource aliases across
+      // worlds. Text glyphs avoid malformed /FactionUI URLs and their repeated
+      // 405 requests while retaining compact visual identifiers.
+      cy: '<span title="Construction Yard" style="color:#d99b2b">CY</span>',
+      df: '<span title="Defense Facility" style="color:#d65f5f">DF</span>',
+      dhq: '<span title="Defense HQ" style="color:#65a9dd">HQ</span>',
       tiberium: gameIcon('webfrontend/ui/common/icn_res_tiberium.png', 'Tiberium'),
       crystal: gameIcon('webfrontend/ui/common/icn_res_chrystal.png', 'Crystal'),
       credits: gameIcon('webfrontend/ui/common/icn_res_dollar.png', 'Credits'),
@@ -1030,35 +1378,37 @@ export class WarRoomWindow {
       const fullyRepairable = Number(attackEstimate.fullyRepairableAttacks ?? Infinity);
       const repairAttackText = Number.isFinite(fullyRepairable)
         ? `${fullyRepairable} with full repairs (+1 not fully repairable)` : 'Not repair-time limited';
+      const section = (title) => `<div style="font-weight:700;color:#273b44;margin-top:11px;margin-bottom:3px">${title}</div>`;
       const repairCell = (group, icon) => `<td style="width:33%;text-align:center;vertical-align:top;padding:3px">`
         + `<b>${icon}</b><br>`
         + `${icons.crystal}${crystal(group)}<br>`
         + `${icons.repair}${escapeHtml(duration(repairGroups[group]))}<br>`
         + `${remaining(offense[group]?.remainingPercent)} remaining</td>`;
-      return `<b>Duration:</b> ${escapeHtml(duration(analysis?.durationSeconds))}<br>`
+      return `<div style="line-height:1.35"><b>Duration:</b> ${escapeHtml(duration(analysis?.durationSeconds))}<br>`
         + `<b>Outcome:</b> <span style="color:${/Victory/i.test(analysis?.outcome ?? '') ? '#19733a' : '#b32323'}"><b>${escapeHtml(analysis?.outcome ?? 'Unknown')}</b></span><br><br>`
-        + '<span style="color:#45565e"><b>Defender</b></span><br>'
+        + (Number(analysis?.morale ?? 0) > 0
+          ? `<b>Morale deficit:</b> <span style="color:#c46a14"><b>-${Number(analysis.morale).toFixed(0)}%</b></span> (${Number(analysis.moraleEffectiveness).toFixed(0)}% effectiveness)<br><br>`
+          : '')
+        + section('Defender')
         + `<b>Target State:</b> ${remaining(analysis?.defenderRemaining)}<br>`
-        + `&nbsp;&nbsp;Base State: ${remaining(defender.structures?.remainingPercent)}<br>`
-        + `&nbsp;&nbsp;Defense State: ${remaining(defender.defense?.remainingPercent)}<br>`
+        + `&nbsp;&nbsp;Structures: ${remaining(defender.structures?.remainingPercent)}<br>`
+        + `&nbsp;&nbsp;Defensive Units: ${remaining(defender.defense?.remainingPercent)}<br>`
         + `${icons.cy}${remaining(analysis?.cyRemaining)}<br>`
         + `${icons.df}${remaining(analysis?.dfRemaining)}<br>`
         + `${icons.dhq}${remaining(analysis?.defenseHqRemaining)}<br>`
-        + `Structures: ${remaining(defender.structures?.remainingPercent)}<br>`
-        + `Defensive Units: ${remaining(defender.defense?.remainingPercent)}<br><br>`
-        + '<span style="color:#45565e"><b>Loot</b></span><br>'
+        + section('Loot')
         + `${icons.research}${Math.round(loot.research ?? 0).toLocaleString()}<br>`
         + `${icons.crystal}${Math.round(loot.crystal ?? 0).toLocaleString()}<br>`
         + `${icons.tiberium}${Math.round(loot.tiberium ?? 0).toLocaleString()}<br>`
         + `${icons.credits}${Math.round(loot.credits ?? 0).toLocaleString()}<br>`
-        + `<b>Total: ${Math.round(analysis?.loot ?? 0).toLocaleString()}</b><br><br>`
-        + '<span style="color:#45565e"><b>Own Repair</b></span>'
+        + `<b>Total: ${Math.round(analysis?.loot ?? 0).toLocaleString()}</b>`
+        + section('Own Repair')
         + `<table style="width:100%;table-layout:fixed"><tr>${repairCell('aircraft', icons.aircraft)}${repairCell('vehicle', icons.vehicle)}${repairCell('infantry', icons.infantry)}</tr></table>`
         + `${icons.crystal}<b>Total:</b> ${Math.round(analysis?.repairCostResources?.crystal ?? 0).toLocaleString()}<br>`
-        + `${icons.repair}<b>Total:</b> ${escapeHtml(duration(analysis?.repairSeconds))}<br><br>`
-        + '<span style="color:#45565e"><b>Possible Attacks</b></span><br>'
+        + `${icons.repair}<b>Total:</b> ${escapeHtml(duration(analysis?.repairSeconds))}`
+        + section('Possible Attacks')
         + `CP: ${Math.round(Number(attackEstimate.commandPointAttacks ?? 0))}<br>`
-        + `RT: ${escapeHtml(repairAttackText)}`;
+        + `RT: ${escapeHtml(repairAttackText)}</div>`;
     };
 
     const showSimulationResult = (analysis, {
@@ -1096,18 +1446,25 @@ export class WarRoomWindow {
       return `<b>Testing</b><br><span style="color:#005f86">${escapeHtml(name)}</span>`;
     };
 
+    const setCompactProcess = (value) => safeSetValue(compactPlannerResult, value);
+
     const simulateRecommendation = async () => {
       const runId = ++recommendationSequence;
       optimizationRunning = true;
       safeSetEnabled(recommend, true);
       recommend.setLabel?.('Stop Simulation');
+      compactRecommend.setLabel?.('Stop');
       try {
         const snapshot = this.hub.snapshot();
         const goal = selectedGoal();
-        const detail = searchDetail.getSelection?.()?.[0]?.getModel?.() ?? 'detailed';
+        const detail = searchDetail.getSelection?.()?.[0]?.getModel?.() ?? 50;
         const candidates = WarRoomCalculator.candidateFormations(snapshot, goal, detail);
         setPlannerResult(
           '<b>Best Formation Result</b><br>'
+          + `<span style="color:#005f86">Comparing ${candidates.length} candidate formations…</span>`
+        );
+        setCompactProcess(
+          '<b>Formation Optimizer</b><br>'
           + `<span style="color:#005f86">Comparing ${candidates.length} candidate formations…</span>`
         );
         let best = null;
@@ -1126,17 +1483,49 @@ export class WarRoomWindow {
                 + '</span>'
               : '')
           );
+          setCompactProcess(
+            '<b>Simulation in progress</b><br><br>'
+            + `<b>Candidate:</b> ${index + 1} of ${candidates.length}<br>`
+            + candidateTestingHtml(candidate)
+            + (best
+              ? `<br><br><b>Best so far:</b><br>${escapeHtml(best.candidate.name)}`
+              : '')
+          );
           safeSetValue(plannerStatus, `Simulation in progress (${index + 1}/${candidates.length})…`);
           const cacheKey = simulationKey(snapshot, candidate.units);
-          const response = simulationCache.get(cacheKey)?.response
-            ?? await this.hub.simulateFormation(candidate.units);
+          let response = simulationCache.get(cacheKey)?.response ?? null;
+          if (!response) {
+            try {
+              response = await this.hub.simulateFormation(candidate.units);
+            } catch (error) {
+              if (buildDisposed || runId !== recommendationSequence) return;
+              this.context.logger?.warn?.('War Room skipped a rejected formation candidate.', {
+                candidate: candidate.name,
+                reason: error?.message ?? String(error)
+              });
+              safeSetValue(plannerStatus,
+                `Candidate ${index + 1}/${candidates.length} was rejected by the game; continuing…`);
+              if (index < candidates.length - 1) {
+                await new Promise((resolve) => setTimeout(resolve, 3100));
+              }
+              continue;
+            }
+          }
           if (buildDisposed || runId !== recommendationSequence) return;
           simulationCache.set(cacheKey, {
             response, snapshot, at: Date.now(), name: candidate.name,
             units: candidate.units.map((unit) => ({ ...unit }))
           });
           renderSimulations();
-          const result = WarRoomCalculator.scoreSimulation(response, snapshot, goal);
+          const scored = WarRoomCalculator.scoreSimulation(response, snapshot, goal);
+          const nativeAnalysis = WarRoomCalculator.analyzeNativeSimulation(response, snapshot, candidate.name);
+          const targetDestroyed = /victory/i.test(String(nativeAnalysis.outcome ?? ''))
+            && !/defeat/i.test(String(nativeAnalysis.outcome ?? ''));
+          const result = {
+            ...scored,
+            oneShot: targetDestroyed || scored.oneShot,
+            score: targetDestroyed ? -1_000_000_000_000_000 + scored.score : scored.score
+          };
           if (!best || result.score < best.result.score) best = { candidate, result, response, snapshot };
           if (result.oneShot) break;
           if (index < candidates.length - 1) {
@@ -1157,21 +1546,16 @@ export class WarRoomWindow {
         const analysis = WarRoomCalculator.analyzeNativeSimulation(
           best.response, best.snapshot, best.candidate.name
         );
-        if (analysis.calculationDiagnostics?.source !== 'native-combat-report') {
-          this.context.logger?.warn?.('War Room simulation used compatibility interpretation; native combat report was not published.', {
-            source: analysis.calculationDiagnostics?.source,
-            resourceTypes: best.snapshot.resourceTypes,
-            nativeEntityLoot: best.response?.nativeEntityLoot,
-            entityDetails: best.response?.nativeEntityDetails,
-            simulationData: best.response?.d,
-            simulationEvents: best.response?.e
-          });
-        }
         showSimulationResult(analysis, {
           name: best.candidate.name,
           oneShot: best.result.oneShot,
           note: 'Ranked by native battle simulation. Troops were not moved.'
         });
+        setCompactProcess(
+          '<b>Optimization complete</b><br>'
+          + `<span style="color:#237a38"><b>${escapeHtml(best.candidate.name)}</b></span><br><br>`
+          + 'The best formation is ready. Use <b>Apply Formation</b> to move it into the game.'
+        );
         safeSetValue(plannerStatus, `Best formation found: ${best.candidate.name}.`);
       } catch (error) {
         safeSetValue(plannerStatus, `Formation simulation failed: ${error?.message ?? error}`);
@@ -1180,11 +1564,16 @@ export class WarRoomWindow {
           + `<span style="color:#a32626">Simulation failed: ${escapeHtml(error?.message ?? error)}</span>`
         );
         this.context.logger?.warn?.('War Room formation simulation failed.', error);
+        setCompactProcess(
+          '<b>Formation simulation failed</b><br>'
+          + `<span style="color:#a32626">${escapeHtml(error?.message ?? error)}</span>`
+        );
       } finally {
         if (runId === recommendationSequence) {
           optimizationRunning = false;
           safeSetEnabled(recommend, true);
           recommend.setLabel?.('Simulate Best Formation');
+          compactRecommend.setLabel?.('Simulate');
           if (!buildDisposed && liveSimulationQueued) queueLiveSimulation();
         }
       }
@@ -1197,11 +1586,15 @@ export class WarRoomWindow {
       liveSimulationQueued = false;
       safeSetEnabled(recommend, true);
       recommend.setLabel?.('Simulate Best Formation');
+      compactRecommend.setLabel?.('Simulate');
       safeSetValue(plannerStatus, 'Best-formation simulation stopped.');
       setPlannerResult(
         '<b>Best Formation Result</b><br>'
         + '<span style="color:#8b4f00"><b>Simulation stopped by user.</b></span><br><br>'
         + '<span style="color:#52636b">Completed cached results remain available in Battle Simulator.</span>'
+      );
+      setCompactProcess(
+        '<b>Simulation stopped</b><br><span style="color:#52636b">Completed results remain available in Simulation Results.</span>'
       );
       return true;
     };
@@ -1298,21 +1691,193 @@ export class WarRoomWindow {
           catch (error) { simulatorText.setValue(`Unable to replay ${result.label}: ${error?.message ?? error}`); }
         });
         card.addListener('tap', () => loadCachedPreview(entry));
-        use.addListener('execute', () => {
-          void (async () => {
-            try {
-              if (!(await confirmExperimentalMove())) return;
-              this.hub.applyRecommendedFormation(entry.units);
-              simulatorText.setValue(`${result.label} formation applied to the active attack setup.`);
-              observedFormation = formationSignature(this.hub.snapshot());
-              queueLiveSimulation();
-            } catch (error) {
-              simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
-            }
-          })();
+        use.addListener('execute', (event) => {
+          event.stopPropagation?.();
+          try {
+            this.hub.applyRecommendedFormation(entry.units);
+            simulatorText.setValue(`${result.label} formation applied to the active attack setup.`);
+            const appliedSnapshot = this.hub.snapshot();
+            observedFormation = formationSignature(appliedSnapshot);
+            simulationCache.delete(simulationKey(appliedSnapshot));
+            queueLiveSimulation();
+          } catch (error) {
+            simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
+          }
         });
         actions.add(replay); actions.add(use); card.add(actions);
         cachedResults.add(card);
+      }
+      const liveCacheEntry = simulationCache.get(simulationKey(snapshot));
+      const currentEntry = alternatives.find((entry) => entry === liveCacheEntry) ?? alternatives.at(-1) ?? null;
+      const comparisonEntries = currentEntry
+        ? [currentEntry]
+        : [];
+      const nextComparisonSignature = JSON.stringify({
+        reduced: comparisonReduced,
+        target: snapshot.target?.id ?? null,
+        entries: comparisonEntries.map((entry) => [
+          entry.name, entry.analysis.outcome,
+          entry.analysis.defenderRemaining, entry.analysis.ownRemaining,
+          entry.analysis.loot, entry.analysis.repairSeconds
+        ])
+      });
+      if (nextComparisonSignature === comparisonRenderSignature) {
+        simulatorText.setValue(this.nativeSimulation
+          ? `Live result for the current formation. ${alternatives.length} cached formation(s).`
+          : 'Waiting for a native simulation result.');
+        return;
+      }
+      comparisonRenderSignature = nextComparisonSignature;
+      comparisonResults?.removeAll?.();
+      if (!comparisonEntries.length) {
+        comparisonResults?.add?.(label(qx, 'Waiting for the first native simulation…', {
+          textColor: '#344448', padding: 10
+        }));
+      }
+      const percent = (value) => Number.isFinite(Number(value)) ? `${Math.round(Number(value))}%` : '—';
+      const nativeMid = [...(globalThis.document?.querySelectorAll?.('.qx-pane-sim-mid') ?? [])]
+        .find((element) => element.parentElement?.querySelectorAll?.('img')?.length >= 6);
+      const nativePanel = nativeMid?.parentElement;
+      const objectiveImages = [
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/79525b00dd204388065cd4561d7548ea.png',
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/f8e4f6ed583c55442d28f592ce5a3f3d.png',
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/e817b4f7a058855f079edc4150be5ce5.png'
+      ];
+      const resourceImages = [
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/43de27430e1fe65304ec436ac7c2367f.png',
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/35f27ef8016a87b77f5cf60c95049815.png',
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/4fc74d74170e9409ae79ea87527f52af.png'
+      ];
+      const repairImage = 'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/0bc8bbd48af9d5915c20d81b9d4a179e.png';
+      const armyImages = [
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/34aae3015689f9f1c2bf92069efa0943.png',
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/01cdc3827dbc9ecc58636f754e97db6e.png',
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/ad5c737dda0063b52f7e17ac276fd3c0.png'
+      ];
+      const nativeImage = (src, size, title, height = size) => src
+        ? `<img src="${escapeHtml(src)}" width="${size}" height="${height}" title="${escapeHtml(title)}" style="vertical-align:middle;margin-right:5px">`
+        : `<span title="${escapeHtml(title)}" style="display:inline-block;width:${size}px;text-align:center;margin-right:5px"><b>${escapeHtml(title)}</b></span>`;
+      for (const [index, entry] of comparisonEntries.entries()) {
+        const result = entry.analysis;
+        const estimate = entry.snapshot?.attackEstimate ?? {};
+        const fullyRepairable = Number(estimate.fullyRepairableAttacks);
+        const simulatedTime = new Date(Number(entry.at) || Date.now()).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        });
+        const resultCard = new qx.ui.container.Composite(new qx.ui.layout.VBox(0)).set({
+          width: 184, minWidth: 184, maxWidth: 184,
+          padding: 0,
+          backgroundColor: '#050707',
+          textColor: '#39434a',
+          cursor: 'pointer',
+          toolTipText: 'Load this result into the War Room formation preview'
+        });
+        const top = new qx.ui.container.Composite(new qx.ui.layout.Canvas()).set({
+          height: 79, minHeight: 79, maxHeight: 79
+        });
+        top.add(new qx.ui.core.Widget().set({ decorator: 'pane-sim-top' }), {
+          left: 0, top: 0, right: 0, bottom: 0
+        });
+        const topContent = new qx.ui.container.Composite(new qx.ui.layout.VBox(0)).set({
+          padding: [12, 6, 2], backgroundColor: null
+        });
+        topContent.add(new qx.ui.basic.Label(`<div style="text-align:center;color:#434a54">`
+          + '<b style="font-size:14px">Simulated outcome:</b><br>'
+          + `Today ${escapeHtml(simulatedTime)}<br><span style="font-size:17px;color:#434a54"><b>${escapeHtml(result.outcome)}</b></span></div>`)
+          .set({ rich: true, wrap: true, textColor: '#434a54' }));
+        top.add(topContent, { left: 0, top: 0, right: 0, bottom: 0 });
+        const mid = new qx.ui.container.Composite(new qx.ui.layout.Canvas()).set({
+          height: 577, minHeight: 577, maxHeight: 577
+        });
+        mid.add(new qx.ui.core.Widget().set({ decorator: 'pane-sim-mid' }), {
+          left: 0, top: 0, right: 0, bottom: 0
+        });
+        const midContent = new qx.ui.container.Composite(new qx.ui.layout.VBox(0)).set({
+          padding: 5, backgroundColor: null
+        });
+        const divider = '<div style="height:1px;margin:5px 16px;background:#aeb5b2"></div>';
+        const resourceRow = (image, value, title) => `<div style="height:20px;margin-left:12px;font-size:12px;font-weight:bold;line-height:20px">${nativeImage(image, 20, title)}${Math.round(value ?? 0).toLocaleString()}</div>`;
+        const html = `<div style="color:#434a54;font-family:'Lucida Grande';font-size:13px;line-height:1.4">`
+          + (Number(result.morale ?? 0) > 0
+            ? `<div style="font-size:14px;font-weight:bold">Morale deficit: <span style="color:#c46a14">-${Number(result.morale).toFixed(0)}%</span></div>${divider}` : '')
+          + '<div style="height:20px;font-size:14px;font-weight:bold">Resource summary</div>'
+          + resourceRow(resourceImages[0], result.lootResources?.research, 'Research')
+          + resourceRow(resourceImages[1], result.lootResources?.tiberium, 'Tiberium')
+          + resourceRow(resourceImages[2], result.lootResources?.crystal, 'Crystal')
+          + (Number(result.lootResources?.credits ?? 0) ? resourceRow('', result.lootResources.credits, 'Credits') : '')
+          + divider
+          + `<div style="height:20px;font-size:14px;font-weight:bold">Target state: ${percent(result.defenderRemaining)}</div>`
+          + `<div style="height:18px;margin-left:12px">Base state: ${percent(result.defenderBreakdown?.structures?.remainingPercent)}</div>`
+          + `<div style="height:18px;margin-left:12px">Defense state: ${percent(result.defenderBreakdown?.defense?.remainingPercent)}</div>`
+          + (comparisonReduced
+            ? `<div style="margin:5px 0 5px 12px;font-size:13px;line-height:18px">`
+              + `Construction Yard: <span style="color:#ff3c3c">${percent(result.cyRemaining)}</span><br>`
+              + `Defense Facility: <span style="color:#ff3c3c">${percent(result.dfRemaining)}</span><br>`
+              + `Defense HQ: <span style="color:#ff3c3c">${percent(result.defenseHqRemaining)}</span></div>`
+            : '<table cellspacing="0" cellpadding="0" style="width:170px;margin:0">'
+              + `<tr style="height:86px"><td style="width:103px;padding-left:18px">${nativeImage(objectiveImages[0], 80, 'CY', 76)}</td><td style="width:50px;font-size:17px;text-align:right"><b>${percent(result.cyRemaining)}</b></td></tr>`
+              + `<tr style="height:86px"><td style="width:103px;padding-left:18px">${nativeImage(objectiveImages[1], 80, 'DF', 76)}</td><td style="width:50px;font-size:17px;text-align:right"><b>${percent(result.dfRemaining)}</b></td></tr>`
+              + `<tr style="height:86px"><td style="width:103px;padding-left:18px">${nativeImage(objectiveImages[2], 80, 'DH', 76)}</td><td style="width:50px;font-size:17px;text-align:right"><b>${percent(result.defenseHqRemaining)}</b></td></tr></table>`)
+          + divider
+          + `<div style="height:20px;font-size:14px;font-weight:bold">Army state: ${percent(result.ownRemaining)}</div>`
+          + '<table cellspacing="0" cellpadding="0" style="width:170px;text-align:center;font-size:13px;font-weight:bold"><tr>'
+          + `<td style="width:56px">${nativeImage(armyImages[0], 26, 'Inf')}<br>${percent(result.offenseBreakdown?.infantry?.remainingPercent)}</td>`
+          + `<td style="width:56px">${nativeImage(armyImages[1], 26, 'Veh')}<br>${percent(result.offenseBreakdown?.vehicle?.remainingPercent)}</td>`
+          + `<td style="width:56px">${nativeImage(armyImages[2], 26, 'Air')}<br>${percent(result.offenseBreakdown?.aircraft?.remainingPercent)}</td></tr></table>`
+          + divider
+          + '<div style="height:20px;font-size:14px;font-weight:bold">Repair costs</div>'
+          + `<div style="height:20px;margin-left:12px;font-size:12px;font-weight:bold;line-height:20px">${nativeImage(repairImage, 20, 'Repair')}<span style="color:#ff6060">${escapeHtml(duration(result.repairSeconds))}</span></div>`
+          + resourceRow(resourceImages[2], result.repairCostResources?.crystal, 'Crystal')
+          + '</div>';
+        const midScroll = new qx.ui.container.Scroll().set({
+          scrollbarX: 'off', scrollbarY: 'off', padding: 0, backgroundColor: null
+        });
+        midScroll.add(new qx.ui.basic.Label(html).set({
+          rich: true, wrap: true, textColor: '#434a54', width: 170, minWidth: 170
+        }));
+        midContent.add(midScroll, { flex: 1 });
+        mid.add(midContent, { left: 0, top: 0, right: 0, bottom: 0 });
+        const bottom = new qx.ui.container.Composite(new qx.ui.layout.Canvas()).set({
+          height: 155, minHeight: 155, maxHeight: 155
+        });
+        bottom.add(new qx.ui.core.Widget().set({ decorator: 'pane-sim-bottom' }), {
+          left: 0, top: 0, right: 0, bottom: 0
+        });
+        const bottomContent = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({
+          padding: [0, 7, 16], backgroundColor: null
+        });
+        bottomContent.add(new qx.ui.basic.Label(`<div style="color:#434a54;text-align:center;line-height:1.4">`
+          + `<b style="font-size:14px">Possible attacks</b><br>with current CP:<br>`
+          + `<span style="font-size:17px"><b>${Math.round(Number(estimate.commandPointAttacks ?? 0))}</b></span><br>`
+          + `with full repairs:<br><span style="font-size:17px"><b>${Number.isFinite(fullyRepairable) ? fullyRepairable : '—'}</b></span></div>`)
+          .set({ rich: true, wrap: true, textColor: '#434a54' }));
+        const resultActions = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
+        const replayResult = new qx.ui.form.Button('Watch Replay');
+        const useResult = index > 0
+          ? new qx.ui.form.Button('Use').set({ enabled: Array.isArray(entry.units) && entry.units.length > 0 })
+          : null;
+        replayResult.addListener('execute', () => this.hub.playSimulation(entry.response));
+        useResult?.addListener('execute', (event) => {
+          event.stopPropagation?.();
+          try {
+            this.hub.applyRecommendedFormation(entry.units);
+            const appliedSnapshot = this.hub.snapshot();
+            observedFormation = formationSignature(appliedSnapshot);
+            simulationCache.delete(simulationKey(appliedSnapshot));
+            queueLiveSimulation();
+          } catch (error) {
+            simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
+          }
+        });
+        resultActions.add(replayResult, { flex: 1 });
+        if (useResult) resultActions.add(useResult);
+        bottomContent.add(resultActions);
+        bottom.add(bottomContent, { left: 0, top: 0, right: 0, bottom: 0 });
+        resultCard.add(top);
+        resultCard.add(mid, { flex: 1 });
+        resultCard.add(bottom);
+        resultCard.addListener('tap', () => loadCachedPreview(entry));
+        comparisonResults?.add?.(resultCard);
       }
       simulatorText.setValue(this.nativeSimulation
         ? `Live result for the current formation. Structures ${this.nativeSimulation.defenderBreakdown.structures.remainingPercent.toFixed(1)}% · `
@@ -1463,7 +2028,10 @@ export class WarRoomWindow {
       try {
         const cacheKey = simulationKey(snapshot);
         const cached = simulationCache.get(cacheKey);
-        const response = cached?.response ?? await this.hub.simulateFormation(snapshot.units);
+        // TABS statistics come from the direct SimulateBattle command payload
+        // (data.d + data.e), not ClientLib.API.Battleground's compact report.
+        const response = cached?.response?.nativeEntityLoot && cached?.response?.nativeOffenseRepair
+          ? cached.response : await this.hub.simulateFormation(snapshot.units);
         if (!cached) liveFormationSequence += 1;
         const entry = cached ?? {
           response,
@@ -1495,6 +2063,12 @@ export class WarRoomWindow {
             formation: formationSignature(snapshot)
           };
           this.stats.record(snapshot, this.nativeSimulation, formationSignature(snapshot));
+          showSimulationResult(this.nativeSimulation, {
+            title: 'Live Formation Result',
+            name: entry.name,
+            oneShot: this.nativeSimulation.oneShot,
+            note: 'Fresh native simulation of the formation currently applied in the game.'
+          });
           renderSimulations();
           stats.grid.model.setData(this.stats.rows());
           if (playSimulationQueued) {
@@ -1536,15 +2110,21 @@ export class WarRoomWindow {
       clearTimeout(liveTimer);
       unsubscribePresetChanges?.();
       unsubscribePresetChanges = null;
+      unsubscribeGameTick?.();
+      unsubscribeGameTick = null;
+      compactPlannerWindow?.destroy?.();
+      comparisonWindow?.destroy?.();
+      this.content = null;
+      this.companionWindows = null;
     });
 
-    this.context.events?.on?.('game:tick', () => {
+    unsubscribeGameTick = this.context.events?.on?.('game:tick', () => {
       // ObjectRegistry contains most of the live Qooxdoo UI. Walking it while
       // War Room is closed made the central 500 ms game-state callback scale
       // with the entire game interface and could block the UI for 50–100 ms.
       // These controls and live simulations are relevant only to a visible
       // War Room, so leave the dormant module at constant cost.
-      if (!this.record?.window?.isVisible?.()) return;
+      if (buildDisposed || !widgetAlive(root) || !windowVisible()) return;
       const registry = qx.core?.ObjectRegistry?.getRegistry?.() ?? {};
       for (const widget of Object.values(registry)) {
         const name = String(widget?.classname ?? widget?.constructor?.classname ?? '');
@@ -1571,7 +2151,11 @@ export class WarRoomWindow {
       }
       if (formation !== observedFormation) {
         observedFormation = formation;
-        render();
+        // Do not rebuild every table from the 500 ms game tick. Qooxdoo can
+        // momentarily detach inactive table panes while attack setup changes;
+        // updating their models in that interval throws from _getPaneScrollerArr.
+        // The live preview and simulation list are the only formation-sensitive
+        // views and can be refreshed safely in isolation.
         syncLiveFormationPreview(this.currentSnapshot ?? snapshot);
         renderSimulations();
         queueLiveSimulation();
@@ -1670,7 +2254,9 @@ export class WarRoomWindow {
           );
           const cacheKey = simulationKey(snapshot, units);
           const cached = simulationCache.get(cacheKey);
-          const response = cached?.response ?? await this.hub.simulateFormation(units);
+          const previewMatchesGame = formationSignature({ units }) === formationSignature(snapshot);
+          const response = cached?.response?.nativeEntityLoot && cached?.response?.nativeOffenseRepair
+            ? cached.response : await this.hub.simulateFormation(units);
           simulationCache.set(cacheKey, {
             response,
             snapshot,
@@ -1683,7 +2269,7 @@ export class WarRoomWindow {
           showSimulationResult(analysis, {
             title: 'Preview Simulation Result',
             name: 'Manual preview',
-            note: 'This result uses the manually arranged preview. Open Battle Simulator for replay controls.'
+            note: `This result uses the TABS SimulateBattle command pipeline${previewMatchesGame ? ' for the active formation' : ''}. Open Battle Simulator for replay controls.`
           });
           plannerStatus.setValue('Manual preview simulation complete.');
         } catch (error) {
@@ -1781,7 +2367,9 @@ export class WarRoomWindow {
           applyRecommendation.setEnabled(false);
           this.hub.applyRecommendedFormation(units);
           plannerStatus.setValue('Recommended formation applied to the active attack setup.');
-          observedFormation = formationSignature(this.hub.snapshot());
+          const appliedSnapshot = this.hub.snapshot();
+          observedFormation = formationSignature(appliedSnapshot);
+          simulationCache.delete(simulationKey(appliedSnapshot));
           queueLiveSimulation();
         } catch (error) {
           plannerStatus.setValue(`Unable to apply recommendation: ${error?.message ?? error}`);
@@ -2123,7 +2711,36 @@ export class WarRoomWindow {
     });
     syncFromGameTarget();
     void loadNativeReports();
+    this.companionWindows = { planner: compactPlannerWindow, results: comparisonWindow };
+    this.setAttackCompanionsVisible = (visible) => {
+      attackCompanionsRequested = Boolean(visible);
+      if (!visible) {
+        compactPlannerWindow.exclude();
+        comparisonWindow.exclude();
+        return;
+      }
+      if (companionSettings.compactAttackPlanner) compactPlannerWindow.open();
+      if (companionSettings.compactSimulationOutcome) comparisonWindow.open();
+    };
+    this.toggleCompanion = (name) => {
+      const window = this.companionWindows?.[name];
+      if (!window) return;
+      if (window.isVisible?.()) window.exclude();
+      else window.open();
+    };
+    this.content = root;
     return root;
+  }
+
+  initializeCompanions() {
+    this.build();
+    return this.companionWindows;
+  }
+
+  destroy() {
+    this.content?.destroy?.();
+    this.content = null;
+    this.companionWindows = null;
   }
 
   async open() {
@@ -2135,7 +2752,7 @@ export class WarRoomWindow {
     }
     this.record = await this.context.windows.open({
       id: 'war-room',
-      title: 'War Room v0.5',
+      title: 'War Room v0.8',
       content: this.build(),
       x: 120,
       y: 70,

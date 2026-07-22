@@ -370,6 +370,16 @@ export class WarRoomHub {
     ].map((name) => Number(call(alliance, [name]) ?? 0));
 
     const attackEstimate = estimatePossibleAttacks({ cpAvailable, cpCost, repair, repairStorage });
+    let morale = Object.freeze({ enabled: false, kind: 0, deficit: 0, effectiveness: 100 });
+    try {
+      const sign = root?.Base?.Util?.GetMoralSignType?.(attacker?.offenseLevel ?? 0, target?.level ?? 0);
+      const serverUsesMorale = Boolean(call(call(main, ['get_Server']), ['get_CombatUseMoral']));
+      const kind = Number(sign?.k ?? 0);
+      const deficit = serverUsesMorale && target?.npc && (kind === 1 || kind === 2)
+        ? Math.max(0, Number(sign?.v ?? 0)) : 0;
+      morale = Object.freeze({ enabled: serverUsesMorale && Boolean(target?.npc), kind,
+        deficit, effectiveness: Math.max(0, 100 - deficit) });
+    } catch {}
     return Object.freeze({
       generatedAt: Date.now(),
       attacker,
@@ -386,6 +396,7 @@ export class WarRoomHub {
       loot: Object.freeze(loot),
       repair: Object.freeze(repair),
       repairStorage: Object.freeze(repairStorage),
+      morale,
       allianceBonuses: Object.freeze(allianceBonuses),
       canSimulate: Boolean(attacker && target && units.length)
     });
@@ -578,19 +589,27 @@ export class WarRoomHub {
       .filter((unit) => unit.entityId != null && unit.enabled !== false && Number(unit.health) > 0)
       .map((unit) => ({ i: unit.entityId, x: unit.x, y: unit.y }));
     return new Promise((resolve, reject) => {
-      let nativeReportLoot = null;
+      let nativeCombatReport = null;
+      let reportAttachedWithNetUtil = false;
       const onReport = (event) => {
-        nativeReportLoot = this.readSimulationReportLoot(event?.getData?.() ?? event?.data ?? event);
+        const report = typeof event?.GetAttackerTotalResourceReceived === 'function'
+          ? event : event?.getData?.() ?? event?.data ?? event;
+        nativeCombatReport = this.readSimulationCombatReport(report);
       };
-      try { battleground?.addListener?.('OnSimulateCombatReport', onReport, this); } catch {}
       try {
         if (netUtil?.attachNetEvent && reportEventType != null) {
           netUtil.attachNetEvent(battleground, 'OnSimulateCombatReport', reportEventType, this, onReport);
+          reportAttachedWithNetUtil = true;
         }
       } catch {}
+      if (!reportAttachedWithNetUtil) {
+        try { battleground?.addListener?.('OnSimulateCombatReport', onReport, this); } catch {}
+      }
       const cleanup = () => {
         clearTimeout(timeout);
-        try { battleground?.removeListener?.('OnSimulateCombatReport', onReport, this); } catch {}
+        if (!reportAttachedWithNetUtil) {
+          try { battleground?.removeListener?.('OnSimulateCombatReport', onReport, this); } catch {}
+        }
         try {
           if (netUtil?.detachNetEvent && reportEventType != null) {
             netUtil.detachNetEvent(battleground, 'OnSimulateCombatReport', reportEventType, this, onReport);
@@ -603,7 +622,21 @@ export class WarRoomHub {
       }, 12000);
       const receiver = {
         done(status, response) {
-          const payload = response?.d ? response : status?.d ? status : null;
+          // CommandResult delegates have changed argument order between game
+          // builds. Some also wrap the command body in getData()/data. Accept
+          // every observed shape instead of treating a valid response as an
+          // empty simulation.
+          const candidates = [
+            response,
+            response?.getData?.(),
+            response?.data,
+            status,
+            status?.getData?.(),
+            status?.data
+          ];
+          const payload = candidates.find((candidate) => candidate?.d && candidate?.e != null)
+            ?? candidates.find((candidate) => candidate?.d?.d && candidate?.d?.e != null)?.d
+            ?? null;
           if (!payload?.d || payload.e == null) {
             const detail = response?.error ?? response?.message ?? status?.error ?? status?.message;
             cleanup();
@@ -620,7 +653,8 @@ export class WarRoomHub {
           setTimeout(() => {
             cleanup();
             resolve(hub.enrichSimulationResponse(
-              { ...payload, e: events, nativeReportLoot }, snapshot
+              { ...payload, e: events, nativeCombatReport,
+                nativeReportLoot: nativeCombatReport?.loot ?? null }, snapshot
             ));
           }, 150);
         }
@@ -645,51 +679,83 @@ export class WarRoomHub {
     const api = root?.API?.Battleground?.GetInstance?.();
     const netUtil = globalThis.webfrontend?.phe?.cnc?.Util;
     const reportEventType = root?.API?.OnSimulateCombatReport;
+    const finishedEventType = root?.API?.OnSimulateBattleFinished;
     if (!api?.SimulateBattle || typeof api.addListener !== 'function') {
       return this.simulateFormation(snapshot.units);
     }
     return new Promise((resolve, reject) => {
       let settled = false;
-      let nativeReportLoot = null;
+      let nativeCombatReport = null;
+      let finishedPayload = null;
+      let reportWaitTimeout = null;
+      const useNativeEvents = Boolean(
+        netUtil?.attachNetEvent && netUtil?.detachNetEvent
+        && reportEventType != null && finishedEventType != null
+      );
+      const complete = () => {
+        if (!finishedPayload) return;
+        const events = Array.isArray(finishedPayload.e)
+          ? finishedPayload.e
+          : typeof finishedPayload.e?.map === 'function'
+            ? Array.from(finishedPayload.e)
+            : values(finishedPayload.e);
+        finish(null, this.enrichSimulationResponse(
+          { ...finishedPayload, e: events, nativeCombatReport,
+            nativeReportLoot: nativeCombatReport?.loot ?? null }, snapshot
+        ));
+      };
       const onReport = (event) => {
-        nativeReportLoot = this.readSimulationReportLoot(event?.getData?.() ?? event?.data ?? event);
+        // attachNetEvent delivers ClientLib's report instance directly. Do not
+        // call its unrelated getData() method; legacy TABS consumes this exact
+        // object via GetAttackerTotalResourceReceived().
+        const report = typeof event?.GetAttackerTotalResourceReceived === 'function'
+          ? event : event?.getData?.() ?? event?.data ?? event;
+        nativeCombatReport = this.readSimulationCombatReport(report);
+        if (nativeCombatReport && finishedPayload) complete();
       };
       const finish = (error, value) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        try { api.removeListener?.('OnSimulateBattleFinished', onFinished, this); } catch {}
-        try { api.removeListener?.('OnSimulateCombatReport', onReport, this); } catch {}
-        try {
-          if (netUtil?.detachNetEvent && reportEventType != null) {
+        clearTimeout(reportWaitTimeout);
+        if (useNativeEvents) {
+          try {
+            netUtil.detachNetEvent(api, 'OnSimulateBattleFinished', finishedEventType, this, onFinished);
+          } catch {}
+          try {
             netUtil.detachNetEvent(api, 'OnSimulateCombatReport', reportEventType, this, onReport);
-          }
-        } catch {}
+          } catch {}
+        } else {
+          try { api.removeListener?.('OnSimulateBattleFinished', onFinished, this); } catch {}
+          try { api.removeListener?.('OnSimulateCombatReport', onReport, this); } catch {}
+        }
         if (error) reject(error);
         else resolve(value);
       };
       const onFinished = (event) => {
-        const payload = event?.getData?.() ?? event?.data ?? event;
+        const payload = event?.d ? event : event?.getData?.() ?? event?.data ?? event;
         if (!payload?.d) {
           finish(new Error('The game returned no battle simulation data.'));
           return;
         }
-        const events = Array.isArray(payload.e)
-          ? payload.e
-          : typeof payload.e?.map === 'function'
-            ? Array.from(payload.e)
-            : values(payload.e);
-        finish(null, this.enrichSimulationResponse(
-          { ...payload, e: events, nativeReportLoot }, snapshot
-        ));
+        finishedPayload = payload;
+        if (nativeCombatReport) complete();
+        else {
+          // The established simulators keep this event subscribed for the
+          // lifetime of their UI. Use a bounded wait here so slower worlds can
+          // publish their report without leaking listeners indefinitely.
+          reportWaitTimeout = setTimeout(complete, 3000);
+        }
       };
       const timeout = setTimeout(() => finish(new Error('Battle simulation timed out.')), 12000);
       try {
-        api.addListener('OnSimulateCombatReport', onReport, this);
-        if (netUtil?.attachNetEvent && reportEventType != null) {
+        if (useNativeEvents) {
+          netUtil.attachNetEvent(api, 'OnSimulateBattleFinished', finishedEventType, this, onFinished);
           netUtil.attachNetEvent(api, 'OnSimulateCombatReport', reportEventType, this, onReport);
+        } else {
+          api.addListener('OnSimulateCombatReport', onReport, this);
+          api.addListener('OnSimulateBattleFinished', onFinished, this);
         }
-        api.addListener('OnSimulateBattleFinished', onFinished, this);
         api.SimulateBattle();
       } catch (error) {
         finish(error);
@@ -709,49 +775,318 @@ export class WarRoomHub {
     return Object.keys(loot).length ? Object.freeze(loot) : null;
   }
 
+  readSimulationCombatReport(report) {
+    if (!report) return null;
+    const root = this.clientLib()?.root ?? globalThis.ClientLib;
+    const types = root?.Base?.EResourceType ?? {};
+    const loot = this.readSimulationReportLoot(report) ?? {};
+    const repairCosts = {};
+    if (typeof report.GetAttackerRepairCosts === 'function') {
+      for (const type of new Set(Object.values(types).filter((value) => Number.isFinite(Number(value))))) {
+        try {
+          const amount = Number(report.GetAttackerRepairCosts(type) ?? 0);
+          if (amount) repairCosts[type] = amount;
+        } catch {}
+      }
+    }
+    const scalars = {};
+    const seenNames = new Set();
+    let cursor = report;
+    for (let depth = 0; cursor && depth < 4; depth += 1, cursor = Object.getPrototypeOf(cursor)) {
+      for (const name of Object.getOwnPropertyNames(cursor)) {
+        if (seenNames.has(name) || name === 'constructor') continue;
+        seenNames.add(name);
+        let fn;
+        try { fn = report[name]; } catch { continue; }
+        if (typeof fn !== 'function' || fn.length !== 0
+          || !/^(?:get_|Get).*(?:condition|state|health|result|outcome|repair|duration|combat)/i.test(name)) continue;
+        try {
+          const value = fn.call(report);
+          if (value == null || ['string', 'number', 'boolean'].includes(typeof value)) scalars[name] = value;
+        } catch {}
+      }
+    }
+    const ownData = {};
+    for (const [name, value] of Object.entries(report)) {
+      if (value == null || ['string', 'number', 'boolean'].includes(typeof value)) ownData[name] = value;
+    }
+    return Object.freeze({
+      raw: report,
+      loot: Object.freeze({ ...loot }),
+      repairCosts: Object.freeze(repairCosts),
+      summary: this.readSimulationReportSummary(report),
+      scalars: Object.freeze(scalars),
+      ownData: Object.freeze(ownData)
+    });
+  }
+
+  readSimulationReportSummary(report) {
+    if (!report) return null;
+    const getters = new Map();
+    let cursor = report;
+    for (let depth = 0; cursor && depth < 5; depth += 1, cursor = Object.getPrototypeOf(cursor)) {
+      for (const name of Object.getOwnPropertyNames(cursor)) {
+        if (name === 'constructor' || getters.has(name)) continue;
+        try {
+          if (typeof report[name] === 'function' && report[name].length === 0 && /^(?:get_|Get)/.test(name)) {
+            getters.set(name, report[name]);
+          }
+        } catch {}
+      }
+    }
+    const invokeGetter = (names) => {
+      for (const name of names) {
+        const fn = getters.get(name);
+        if (!fn) continue;
+        try {
+          const value = fn.call(report);
+          if (value !== undefined && value !== null) return value;
+        } catch {}
+      }
+      return null;
+    };
+    const findGetter = ({ include, exclude = [] }) => {
+      for (const [name, fn] of getters) {
+        const normalized = name.toLowerCase();
+        if (!include.every((token) => normalized.includes(token))
+          || exclude.some((token) => normalized.includes(token))) continue;
+        try {
+          const value = fn.call(report);
+          if (value !== undefined && value !== null) return value;
+        } catch {}
+      }
+      return null;
+    };
+    const percentValue = (value) => {
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0) return null;
+      const percent = number <= 1 ? number * 100 : number;
+      return percent <= 100.5 ? Math.max(0, Math.min(100, percent)) : null;
+    };
+    const targetState = percentValue(invokeGetter([
+      'GetDefenderConditionInPercent', 'get_DefenderConditionInPercent',
+      'GetDefenderTotalConditionInPercent', 'get_DefenderTotalConditionInPercent',
+      'GetTargetState', 'get_TargetState'
+    ]) ?? findGetter({ include: ['defender', 'condition'], exclude: ['building', 'base', 'defense'] }));
+    const baseState = percentValue(invokeGetter([
+      'GetDefenderBuildingsConditionInPercent', 'get_DefenderBuildingsConditionInPercent',
+      'GetDefenderBaseConditionInPercent', 'get_DefenderBaseConditionInPercent',
+      'GetBaseState', 'get_BaseState'
+    ]) ?? findGetter({ include: ['defender', 'building', 'condition'] })
+      ?? findGetter({ include: ['base', 'state'] }));
+    const defenseState = percentValue(invokeGetter([
+      'GetDefenderDefenseConditionInPercent', 'get_DefenderDefenseConditionInPercent',
+      'GetDefenseState', 'get_DefenseState'
+    ]) ?? findGetter({ include: ['defender', 'defense', 'condition'] })
+      ?? findGetter({ include: ['defense', 'state'] }));
+    const armyState = percentValue(invokeGetter([
+      'GetAttackerConditionInPercent', 'get_AttackerConditionInPercent',
+      'GetAttackerArmyConditionInPercent', 'get_AttackerArmyConditionInPercent',
+      'GetArmyState', 'get_ArmyState'
+    ]) ?? findGetter({ include: ['attacker', 'condition'] })
+      ?? findGetter({ include: ['army', 'state'] }));
+    const outcome = invokeGetter([
+      'get_CombatResult', 'GetCombatResult', 'get_Result', 'GetResult',
+      'get_Outcome', 'GetOutcome'
+    ]) ?? findGetter({ include: ['combat', 'result'] });
+    const duration = invokeGetter([
+      'get_BattleDuration', 'GetBattleDuration', 'get_CombatDuration', 'GetCombatDuration',
+      'get_Duration', 'GetDuration'
+    ]) ?? findGetter({ include: ['duration'] });
+    return Object.freeze({
+      targetState, baseState, defenseState, armyState,
+      outcome,
+      durationSeconds: Number.isFinite(Number(duration))
+        ? (Number(duration) > 10000 ? Number(duration) / 1000 : Number(duration)) : null,
+      availableGetters: Object.freeze([...getters.keys()].sort())
+    });
+  }
+
   enrichSimulationResponse(response, snapshot) {
     if (!response?.d || !Array.isArray(response.e)) return response;
     const root = this.clientLib()?.root ?? globalThis.ClientLib;
+    const placement = root?.Base?.EPlacementType ?? {};
+    const movement = root?.Base?.EUnitMovementType ?? {};
+    const getMaximum = root?.API?.Util?.GetUnitMaxHealthByLevel;
+    const resourceMain = root?.Res?.ResMain?.GetInstance?.();
+    const activeModules = values(response.d.dm)
+      .map((module) => Number(module?.i ?? module?.Id ?? module))
+      .filter(Number.isFinite);
+    const hitpointOverride = root?.Base?.EUnitModuleType?.HitpointOverride;
+    const patchedUnit = (unit) => {
+      if (!unit || hitpointOverride == null || !activeModules.length) return unit;
+      const override = values(unit.m).find((module) =>
+        Number(module?.t) === Number(hitpointOverride)
+        && activeModules.includes(Number(module?.i)));
+      return override?.h == null ? unit : { ...unit, lp: override.h };
+    };
+    const totals = {
+      all: [0, 0], structures: [0, 0], defense: [0, 0], offense: [0, 0],
+      infantry: [0, 0], vehicle: [0, 0], aircraft: [0, 0]
+    };
+    const objectives = { cy: null, df: null, dhq: null };
+    const addHealth = (bucket, maximum, end) => {
+      bucket[0] += maximum;
+      bucket[1] += end;
+    };
+    const pct = ([maximum, end]) => maximum > 0
+      ? Math.max(0, Math.min(100, end / maximum * 100)) : 100;
+    for (const entry of response.e) {
+      const state = entry?.Value ?? entry?.value;
+      if (!state) continue;
+      const unitId = Number(state.t ?? state.i ?? 0);
+      const level = Number(state.l ?? 0);
+      const rawUnit = resourceMain?.GetUnit_Obj?.(unitId);
+      const unit = patchedUnit(rawUnit);
+      if (!unit || typeof getMaximum !== 'function') continue;
+      let maximum = 0;
+      try { maximum = Number(getMaximum(level, unit, false) ?? 0) * 16; } catch {}
+      maximum = Math.max(maximum, Number(state.sh ?? 0), Number(state.h ?? 0));
+      const end = Math.max(0, Number(state.h ?? maximum));
+      const placementType = Number(rawUnit.pt);
+      if (placementType === Number(placement.Structure)) {
+        addHealth(totals.structures, maximum, end);
+        addHealth(totals.all, maximum, end);
+      } else if (placementType === Number(placement.Defense)) {
+        addHealth(totals.defense, maximum, end);
+        addHealth(totals.all, maximum, end);
+      } else if (placementType === Number(placement.Offense)) {
+        addHealth(totals.offense, maximum, end);
+        const mt = Number(rawUnit.mt);
+        if (mt === Number(movement.Feet)) addHealth(totals.infantry, maximum, end);
+        else if (mt === Number(movement.Air) || mt === Number(movement.Air2)) addHealth(totals.aircraft, maximum, end);
+        else addHealth(totals.vehicle, maximum, end);
+      }
+      if ([112, 151, 177, 251].includes(unitId)) objectives.cy = end / maximum * 100;
+      if ([131, 158, 195].includes(unitId)) objectives.df = end / maximum * 100;
+      const techName = Number(root?.Base?.Tech?.GetTechNameFromTechId?.(rawUnit.tl, rawUnit.f));
+      if (techName === Number(root?.Base?.ETechName?.Defense_HQ)) objectives.dhq = end / maximum * 100;
+    }
+    const nativeBattleStats = Object.freeze({
+      targetState: pct(totals.all), baseState: pct(totals.structures),
+      defenseState: pct(totals.defense), armyState: pct(totals.offense),
+      infantryState: pct(totals.infantry), vehicleState: pct(totals.vehicle),
+      aircraftState: pct(totals.aircraft), ...objectives
+    });
     const getCosts = root?.API?.Util?.GetUnitRepairCosts;
-    if (typeof getCosts !== 'function') return response;
+    if (typeof getCosts !== 'function') return { ...response, nativeBattleStats };
+    const cities = root?.Data?.MainData?.GetInstance?.()?.get_Cities?.();
+    const setCostCity = (cityId) => {
+      if (cityId == null || !cities?.set_CurrentCityId) return;
+      cities.set_CurrentCityId(cityId);
+    };
     const states = new Map(response.e.map((entry) => [entry.Key, entry.Value]));
     const resourceTypes = root?.Base?.EResourceType ?? {};
-    const researchType = resourceTypes.ResearchPoints;
-    const rewardTypes = new Set([
-      resourceTypes.Tiberium, resourceTypes.Crystal,
-      resourceTypes.Gold ?? resourceTypes.Credits, researchType
-    ].filter((type) => type != null));
-    const entities = [...(response.d.s ?? []), ...(response.d.d ?? [])];
-    const normalized = {};
-    const details = [];
-    const snapshotEntities = [...(snapshot.buildings ?? []), ...(snapshot.defenseUnits ?? [])];
-    for (const record of entities) {
+    const offenseRepairCostsByGroup = { infantry: {}, vehicle: {}, aircraft: {} };
+    const offenseRepairTimeByGroup = { infantry: 0, vehicle: 0, aircraft: 0 };
+    const attackerModules = values(response.d.am)
+      .map((module) => Number(module?.i ?? module?.Id ?? module)).filter(Number.isFinite);
+    const patchAttackerUnit = (unit) => {
+      if (!unit || hitpointOverride == null || !attackerModules.length) return unit;
+      const override = values(unit.m).find((module) =>
+        Number(module?.t) === Number(hitpointOverride)
+        && attackerModules.includes(Number(module?.i)));
+      return override?.h == null ? unit : { ...unit, lp: override.h };
+    };
+    // TABS evaluates offense costs with the attacker as ClientLib's current
+    // city. GetUnitRepairCosts is city-context-sensitive.
+    setCostCity(response.d.ai);
+    for (const record of response.d.a ?? []) {
       const state = states.get(record.ci) ?? {};
-      const entity = snapshotEntities.find((item) =>
-        (Number(item.x) === Number(record.x) && Number(item.y) === Number(record.y))
-        || Number(item.id) === Number(record.i));
-      const start = Math.max(0, Number(state.sh ?? Number(record.h || 0) * 16));
+      const rawUnit = resourceMain?.GetUnit_Obj?.(Number(record.i));
+      if (!rawUnit) continue;
+      let maximum = 0;
+      try {
+        maximum = Number(getMaximum(Number(record.l), patchAttackerUnit(rawUnit), false) ?? 0) * 16;
+      } catch {}
+      const start = Math.max(0, Number(record.h ?? 0) * 16);
       const end = Math.max(0, Number(state.h ?? start));
-      const isDefensiveUnit = (snapshot.defenseUnits ?? []).some((unit) => unit === entity);
-      const responseMaximum = !snapshot.target?.npc || isDefensiveUnit ? Number(state.mh ?? 0) : 0;
-      const maximum = Math.max(1, responseMaximum, Number(entity?.maxHealth ?? 0), start);
+      maximum = Math.max(1, maximum, start);
       const damageRatio = Math.max(0, Math.min(1, (start - end) / maximum));
       if (damageRatio <= 0) continue;
-      const attackCounter = Math.max(0, Number(record.ac ?? entity?.attackCounter ?? 0));
+      const mt = Number(rawUnit.mt);
+      const group = mt === Number(movement.Feet) ? 'infantry'
+        : mt === Number(movement.Air) || mt === Number(movement.Air2) ? 'aircraft' : 'vehicle';
+      try {
+        for (const cost of values(getCosts(Number(record.l), Number(record.i), damageRatio))) {
+          const type = parseInt(cost.Type, 10);
+          const amount = Number(cost.Count ?? cost.count ?? cost.c ?? 0);
+          offenseRepairCostsByGroup[group][type] =
+            (offenseRepairCostsByGroup[group][type] ?? 0) + amount;
+          switch (type) {
+            case resourceTypes.RepairChargeBase:
+            case resourceTypes.RepairChargeInf:
+            case resourceTypes.RepairChargeVeh:
+            case resourceTypes.RepairChargeAir:
+              offenseRepairTimeByGroup[group] += amount;
+              break;
+            default:
+              break;
+          }
+        }
+      } catch {}
+    }
+    const researchType = resourceTypes.ResearchPoints;
+    const structures = response.d.s ?? [];
+    const defenders = response.d.d ?? [];
+    const entities = [...structures, ...defenders];
+    const structureRecords = new Set(structures);
+    const normalized = {};
+    const details = [];
+    const factions = root?.Base?.EFactionType ?? {};
+    const playerDefender = Number(response.d.df) === Number(factions.GDIFaction)
+      || Number(response.d.df) === Number(factions.NODFaction);
+    // TABS switches back to the defender before evaluating destroyed target
+    // entities. Without this, ClientLib returns costs for the attacker's city.
+    setCostCity(response.d.di);
+    for (const record of entities) {
+      const state = states.get(record.ci) ?? {};
+      const rawUnit = resourceMain?.GetUnit_Obj?.(Number(record.i));
+      let calculatedMaximum = 0;
+      try {
+        calculatedMaximum = Math.floor(Number(getMaximum(
+          Number(record.l), patchedUnit(rawUnit), playerDefender
+        )) || 0) * 16;
+      } catch {}
+      // This is the exact TABS split: player-owned structures use the
+      // simulator event's h/mh; every NPC entity and every defense unit uses
+      // the command payload's h*16 and GetUnitMaxHealthByLevel(...)*16.
+      const playerStructure = playerDefender && structureRecords.has(record);
+      const start = Math.max(0, playerStructure
+        ? Number(state.h ?? 0)
+        : Number(record.h ?? 0) * 16);
+      const end = Math.max(0, Number(state.h ?? start));
+      const maximum = Math.max(1,
+        playerStructure ? Number(state.mh ?? 0) : calculatedMaximum,
+        start);
+      const damageRatio = Math.max(0, Math.min(1, (start - end) / maximum));
+      if (damageRatio <= 0) continue;
+      const attackCounter = Math.max(0, Number(record.ac ?? 0));
       const decay = Math.pow(0.7, attackCounter);
       const resources = {};
       try {
         for (const cost of values(getCosts(
-          Number(record.l ?? entity?.level ?? 0), Number(record.i ?? entity?.id), damageRatio
+          Number(record.l ?? 0), Number(record.i), damageRatio
         ))) {
-          const type = cost.Type ?? cost.type ?? cost.t;
-          if (!rewardTypes.has(type)) continue;
-          let amount = Number(cost.Count ?? cost.count ?? cost.c ?? 0) * decay;
-          if (type === researchType && amount > 0) {
-            amount = Math.max(1, Math.floor(amount * damageRatio));
+          const type = parseInt(cost.Type, 10);
+          switch (type) {
+            case resourceTypes.Tiberium:
+            case resourceTypes.Crystal:
+            case resourceTypes.Gold:
+            case resourceTypes.ResearchPoints: {
+              let amount = Number(cost.Count ?? 0) * decay;
+              // TABS uniquely applies the entity damage ratio a second time
+              // to Research Points after attack-counter decay.
+              if (type === researchType && amount > 0) {
+                amount = Math.max(1, Math.floor(amount * damageRatio));
+              }
+              resources[type] = amount;
+              normalized[type] = (normalized[type] ?? 0) + amount;
+              break;
+            }
+            default:
+              break;
           }
-          resources[type] = amount;
-          normalized[type] = (normalized[type] ?? 0) + amount;
         }
       } catch (error) {
         this.logger?.debug?.('Unable to interpret simulated entity loot.', {
@@ -759,13 +1094,19 @@ export class WarRoomHub {
         });
       }
       details.push(Object.freeze({
-        id: Number(record.i ?? 0), level: Number(record.l ?? entity?.level ?? 0),
+        id: Number(record.i ?? 0), level: Number(record.l ?? 0),
         start, end, maximum, damageRatio, attackCounter, decay,
         resources: Object.freeze(resources)
       }));
     }
     return {
       ...response,
+      nativeBattleStats,
+      nativeOffenseRepair: Object.freeze({
+        timeByGroup: Object.freeze(offenseRepairTimeByGroup),
+        costsByGroup: Object.freeze(Object.fromEntries(Object.entries(offenseRepairCostsByGroup)
+          .map(([group, costs]) => [group, Object.freeze(costs)])))
+      }),
       nativeEntityLoot: Object.keys(normalized).length ? Object.freeze(normalized) : null,
       nativeEntityDetails: Object.freeze(details)
     };
@@ -803,7 +1144,6 @@ export class WarRoomHub {
     playArea.setView(mode, snapshot.target.id, 0, 0);
     battleground.Init?.();
     loadCombat.call(battleground, response.d);
-    this.ensureReplayReturnControl();
     const start = () => {
       battleground.RestartReplay?.();
       battleground.set_ReplaySpeed?.(1);

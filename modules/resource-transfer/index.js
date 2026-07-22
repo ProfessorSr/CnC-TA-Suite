@@ -166,7 +166,12 @@ export class ResourceTransferModule extends Module {
       confirm.setEnabled(false);
       let submitted = 0;
       try {
-        for (const plan of plans) submitted += (await this.execute(plan, { notify: false })).length;
+        for (const plan of plans) {
+          // A configured resource with nothing currently transferable is a
+          // normal no-op; it must not prevent the other resource from moving.
+          if (plan.totalAmount <= 0 || !plan.entries.some((entry) => entry.eligible && entry.amount > 0)) continue;
+          submitted += (await this.execute(plan, { notify: false })).length;
+        }
         this.context.notifications?.show?.(`Submitted ${submitted} transfer(s) to ${destination}.`);
         this.context.windows.close('resource-transfer-quick');
       } catch (error) {

@@ -22,6 +22,7 @@ export class QuickUpgradeWindow {
     this.selectedKey = null;
     this.timer = null;
     this.viewKey = null;
+    this.advanceAfterUpgrade = false;
   }
 
   palette() {
@@ -186,6 +187,15 @@ export class QuickUpgradeWindow {
   render(resetLevel = false) {
     try {
       if (!this.level || this.level.isDisposed?.()) return;
+      if (!resetLevel && this.advanceAfterUpgrade) {
+        const current = Number(this.level.getValue());
+        const suggested = Math.min(this.level.getMaximum(), this.hub.lowestUpgradeableLevel(this.hub.currentScope()));
+        if (suggested > current) {
+          this.advanceAfterUpgrade = false;
+          this.level.setValue(suggested);
+          return;
+        }
+      }
       if (resetLevel) {
         const scope = this.hub.currentScope();
         const suggested = this.hub.lowestUpgradeableLevel(scope);
@@ -232,11 +242,9 @@ export class QuickUpgradeWindow {
 
   apply() {
     const targetLevel = Number(this.level?.getValue?.());
-    const partialUnits = this.plan?.scope !== 'buildings' && !this.plan?.affordable;
-    const result = partialUnits
-      ? this.hub.upgradeAffordableToLevel(this.plan)
-      : this.hub.upgradeAllToLevel(targetLevel, this.plan?.scope);
+    const result = this.hub.upgradeAffordableToLevel(this.plan);
     if (result.success) {
+      this.advanceAfterUpgrade = true;
       const upgraded = Number(result.upgraded ?? this.plan?.affordableCount ?? 0);
       this.context.notifications?.show?.(
         `Upgrading ${upgraded} ${LABELS[result.scope].toLowerCase()} toward level ${targetLevel}.`

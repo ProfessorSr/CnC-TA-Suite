@@ -6,15 +6,20 @@ import { WarRoomWindow } from './war-room-window.js';
 import { AttackControlsPalette } from './attack-controls-palette.js';
 import { AttackSetupCompactLayout } from './attack-setup-compact-layout.js';
 import { FormationTargetHighlighter } from './formation-target-highlighter.js';
+import {
+  DEFAULT_WAR_ROOM_COMPANION_SETTINGS,
+  WAR_ROOM_COMPANION_SETTINGS_KEY,
+  normalizeWarRoomCompanionSettings
+} from './companion-settings.js';
 
 export const warRoomManifest = Object.freeze({
   id: 'war-room',
   name: 'War Room',
-  version: '0.5.0',
+  version: '0.8.0',
   apiVersion: '1.0.0',
   hubApiVersion: '1.0.0',
   author: 'ProfessorSr',
-  lastUpdated: '2026-07-21',
+  lastUpdated: '2026-07-22',
   description: 'Unified attack planning, native simulation, reports, army, target, and combat analysis.',
   dependencies: Object.freeze([]),
   permissions: Object.freeze([
@@ -41,10 +46,20 @@ export class WarRoomModule extends Module {
     this.palette = null;
     this.compactLayout = null;
     this.highlighter = null;
+    this.companionSettings = { ...DEFAULT_WAR_ROOM_COMPANION_SETTINGS };
+    this.unsubscribeCompanionSettings = null;
   }
 
   async enable(context) {
     this.context = context;
+    this.companionSettings = normalizeWarRoomCompanionSettings(
+      await context.storage?.get?.(WAR_ROOM_COMPANION_SETTINGS_KEY, DEFAULT_WAR_ROOM_COMPANION_SETTINGS)
+    );
+    this.unsubscribeCompanionSettings?.();
+    this.unsubscribeCompanionSettings = context.eventBus?.on?.('war-room:companion-settings-changed', (settings) => {
+      this.companionSettings = normalizeWarRoomCompanionSettings(settings);
+      if (!this.companionSettings.formationControls) this.palette?.setVisible?.(false);
+    });
     const sharedHub = new WarRoomHub(context);
     this.highlighter = new FormationTargetHighlighter({ context, hub: sharedHub });
     this.highlighter.install();
@@ -63,16 +78,33 @@ export class WarRoomModule extends Module {
         onSimulate: () => {
           this.ensureInitialized(context);
           return this.window?.playCurrentFormation?.();
+        },
+        onOpenPlanner: () => {
+          this.ensureInitialized(context);
+          this.window?.initializeCompanions?.();
+          this.window?.toggleCompanion?.('planner');
+        },
+        onOpenResults: () => {
+          this.ensureInitialized(context);
+          this.window?.initializeCompanions?.();
+          this.window?.toggleCompanion?.('results');
         }
       });
       this.compactLayout ??= new AttackSetupCompactLayout({ context, hub });
-      this.palette.setVisible(active);
-      if (active) this.compactLayout.install();
+      this.palette.setVisible(active && this.companionSettings.formationControls);
+      if (active) {
+        this.compactLayout.install();
+        this.compactLayout.enforce();
+      }
       else this.compactLayout.uninstall();
       const ready = Boolean(active && snapshot.target?.id && snapshot.attacker?.id && snapshot.units?.length);
       const targetId = ready ? String(snapshot.target.id) : null;
       if (ready && (!this.attackSetupActive || targetId !== this.attackTargetId)) {
-        void this.open(context, 'planner').catch((error) => context.logger?.warn?.('War Room could not auto-open for attack setup.', error));
+        this.ensureInitialized(context);
+        this.window?.initializeCompanions?.();
+        this.window?.setAttackCompanionsVisible?.(true);
+      } else if (!ready && this.attackSetupActive) {
+        this.window?.setAttackCompanionsVisible?.(false);
       }
       this.attackSetupActive = ready;
       this.attackTargetId = targetId;
@@ -102,6 +134,7 @@ export class WarRoomModule extends Module {
       stats,
       simulator: new BattleSimulator(hub)
     });
+    this.window.initializeCompanions?.();
   }
 
   async open(context, page = null) {
@@ -116,6 +149,8 @@ export class WarRoomModule extends Module {
     this.unsubscribeTick = null;
     this.unsubscribeSelection?.();
     this.unsubscribeSelection = null;
+    this.unsubscribeCompanionSettings?.();
+    this.unsubscribeCompanionSettings = null;
     this.palette?.destroy?.();
     this.palette = null;
     this.compactLayout?.uninstall?.();
@@ -123,10 +158,12 @@ export class WarRoomModule extends Module {
     this.highlighter?.destroy?.();
     this.highlighter = null;
     context?.windows?.close?.('war-room');
+    this.window?.destroy?.();
     this.window = null;
     this.context = null;
     this.attackSetupActive = false;
     this.attackTargetId = null;
+    this.companionSettings = { ...DEFAULT_WAR_ROOM_COMPANION_SETTINGS };
   }
 
   async destroy(context) {

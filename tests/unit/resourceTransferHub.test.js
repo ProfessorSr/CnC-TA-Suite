@@ -36,6 +36,28 @@ test('Resource Transfer builds quick plans from the current base profile', () =>
   assert.deepEqual(calls.map((call) => call.fraction), [0.2, 0.65]);
 });
 
+test('Resource Transfer does not cap transfers at destination storage', () => {
+  const hub = new ResourceTransferHub({});
+  hub.root = () => ({ Data: { ETradeError: { None: 0 } } });
+  hub.snapshot = () => ({
+    credits: 1_000_000,
+    cities: [
+      { id: 'home', name: 'Home', x: 1, y: 1, amount: 990, storage: 1_000, tradeError: 0 },
+      {
+        id: 'source', name: 'Source', x: 2, y: 2, amount: 500, storage: 1_000, tradeError: 0,
+        city: { CalculateTradeCostToCoord: () => 25 }
+      }
+    ]
+  });
+  const plan = hub.plan({
+    destinationId: 'home', sourceIds: ['source'], resourceName: 'tiberium', fraction: 1
+  });
+  assert.equal(plan.totalAmount, 500);
+  assert.equal(plan.entries[0].amount, 500);
+  assert.equal(plan.remainingCapacity, null);
+  assert.equal(plan.storageLimitIgnored, true);
+});
+
 test('Resource Transfer submits SelfTrade commands sequentially with native callbacks', async () => {
   const originalWebfrontend = globalThis.webfrontend;
   const calls = [];
