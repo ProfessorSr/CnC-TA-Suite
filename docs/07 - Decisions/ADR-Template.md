@@ -1,25 +1,25 @@
-# ADR-Template
+# ADR-NNNN: Decision title
 
->Status: Specification
+> Status: Proposed | Accepted | Superseded | Rejected
 
-## Purpose
+Date: YYYY-MM-DD
 
-Define this area of the project before implementation begins.
+## Context
 
-## Scope
+Describe the problem, constraints, affected users/components, and why a decision is required.
 
-This specification is the authoritative design document for this subject.
+## Decision
 
-## Sections
+State the chosen approach precisely, including scope and ownership.
 
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
+## Alternatives considered
 
+List viable alternatives and why they were not selected.
+
+## Consequences
+
+Record benefits, costs, risks, migration work, security/privacy impact, testing, and documentation obligations.
+
+## Supersession
+
+Link the replacing or replaced ADR when applicable.

@@ -1,25 +1,7 @@
 # Defense
 
->Status: Specification
+> Status: Implemented across War Room, Base Intelligence, Repair Manager, and Upgrade Manager
 
-## Purpose
+Defense functionality is intentionally distributed rather than exposed as a redundant standalone window. War Room reads target defensive units and structures for native simulation, objective ranking, target intelligence, and damage summaries. Base Intelligence reports owned-base defense levels, composition, condition, repair capacity, and region details. Repair Manager provides explicit defense repair controls, while Quick Upgrade follows the active Defense view and upgrades the currently affordable eligible subset toward the selected level.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+All data flows through shared game/Hub services. Repairs and upgrades are user-initiated; no unattended defense automation is enabled.

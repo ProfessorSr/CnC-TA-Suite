@@ -1,25 +1,7 @@
 # Icons
 
->Status: Specification
+> Status: Baseline for v1.0.0
 
-## Purpose
+Prefer icons already provided by the game theme. Icon-only buttons must define tooltip and accessible-label text and retain a visible focus state. Do not use emoji as permanent navigation controls. Keep common control icons near the native game size and provide a text fallback when an icon resource is unavailable. New bundled artwork must have a documented license and live under `assets/`.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Every shortcut in the right-side Suite dock has a unique icon. Prefer the game's colored resource, alliance-bonus, combat-result, command-point, morale, target-range, and unit-category artwork when it communicates the action clearly. FactionUI paths continue to follow the active GDI/Nod theme. Automated coverage rejects duplicate right-dock icon assignments; live-game validation must still confirm that newly selected game resources exist in the current asset revision.

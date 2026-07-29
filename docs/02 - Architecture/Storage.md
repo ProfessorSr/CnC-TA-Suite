@@ -1,25 +1,7 @@
 # Storage
 
->Status: Specification
+> Status: Implemented for v1.0.0
 
-## Purpose
+`StorageService` uses the Chrome storage bridge when available and falls back to local storage for development compatibility. The page bridge correlates asynchronous requests by ID and returns serializable results or error messages.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Reserved keys include `settings` and `window:<id>`. Callers should use service methods rather than browser globals, keep values JSON/structured-clone compatible, and handle rejected writes. `clear` affects suite storage and should be exposed only through deliberate recovery UI. Future incompatible key changes require migration through the storage migration layer.

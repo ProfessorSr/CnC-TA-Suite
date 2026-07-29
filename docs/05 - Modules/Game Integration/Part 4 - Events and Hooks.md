@@ -20,13 +20,12 @@ Individual modules must not run independent timers to detect game-state changes.
 They subscribe to the central event bus instead.
 
 ```javascript
-const unsubscribe = context.eventBus.on(
-  Events.CITY_CHANGED,
+const unsubscribe = context.events.on(
+  'game:city-changed',
   ({ city }) => {
     // Module-specific reaction.
   }
 );
 ```
 
-Modules should register cleanup callbacks with `context.hooks` or
-`context.observers` so shutdown and replacement remain deterministic.
+Subscriptions made through `context.events` are cleared when the module is disabled. Modules should use `context.hooks` or `context.observers` for other managed integration resources so shutdown and replacement remain deterministic.

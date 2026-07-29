@@ -1,25 +1,5 @@
 # CSS
 
->Status: Specification
+> Status: Active
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Qooxdoo appearance and widget properties are preferred for in-game UI. CSS is appropriate for the injection shell or a browser surface that cannot be expressed natively. Scope selectors with `cnc-suite-`, avoid game-global selectors and `!important`, and do not depend on obfuscated game class names. Keep layout in Qooxdoo layout managers. Test any CSS against supported pages and remove obsolete module styles when widgets no longer consume them.

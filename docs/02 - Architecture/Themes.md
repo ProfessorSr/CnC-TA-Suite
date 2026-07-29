@@ -1,25 +1,7 @@
 # Themes
 
->Status: Specification
+> Status: Implemented baseline for v1.0.0
 
-## Purpose
+In-game suite UI uses the active Qooxdoo game theme and native appearances. Core components create Qooxdoo widgets; windows enforce a white content foreground for readability. Custom colors, fonts, icons, and CSS tokens remain compatibility helpers and must not create a parallel visual system.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Prefer inherited appearances, semantic widget states, and native layouts. Any override must be scoped, maintain readable contrast, and be tested against supported game themes. `theme:changed` is reserved for suite theme-setting changes.

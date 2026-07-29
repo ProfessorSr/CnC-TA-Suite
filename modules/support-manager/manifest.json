@@ -1,0 +1,11 @@
+{
+  "id": "support-manager",
+  "name": "Support Manager",
+  "version": "0.1.0",
+  "apiVersion": "1.0.0",
+  "author": "ProfessorSr",
+  "lastUpdated": "2026-07-20",
+  "description": "Inspect, manually recall, and manually calibrate support weapons.",
+  "permissions": ["game", "notifications", "windows"],
+  "settings": {}
+}

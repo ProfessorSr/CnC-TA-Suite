@@ -1,25 +1,5 @@
 # Reviews
 
->Status: Specification
+> Status: Active
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Review each change for correct layer ownership, module permissions, dependency behavior, startup ordering, error recovery, listener/timer/widget cleanup, storage compatibility, and safe game access. UI changes must be native Qooxdoo, readable, keyboard-usable, and free of duplicate entry points. Require proportional automated tests, updated reference/specification text, successful build, and no secrets. Changes touching discovery, ClientLib, or top navigation also require live-game validation.

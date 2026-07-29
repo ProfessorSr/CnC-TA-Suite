@@ -19,12 +19,12 @@ Included:
 
 Modules must not discover combat, selection, army, or unit objects independently.
 
-Use:
+Use the v1.0.0 public facade:
 
 ```javascript
-Suite.game.api.battle
-Suite.game.api.selection
-Suite.game.api.objects
+CnCTASuite.game.battle
+CnCTASuite.game.selection
+CnCTASuite.game.objects
 ```
 
 ## Notes

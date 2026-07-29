@@ -1,25 +1,5 @@
 # JavaScript
 
->Status: Specification
+> Status: Active
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Target current Chromium with native ES modules, classes, async/await, optional chaining, private-free interoperable objects, and structured cloning. Export named classes/functions and add a default only when discovery requires it. Treat game methods as optional and use ordered compatibility fallbacks. Do not use `eval`, remote code, unbounded polling, or swallowed errors. Timers need bounds and cleanup. Freeze public facades and metadata when callers should not mutate them.

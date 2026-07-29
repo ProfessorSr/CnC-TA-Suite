@@ -1,25 +1,15 @@
 # Keyboard Shortcuts
 
->Status: Specification
+> Status: Implemented for v1.0.0
 
-## Purpose
+The Hotkeys module provides configurable page-level shortcuts. It is independently enabled and ignores key events while focus is in an input or text area.
 
-Define this area of the project before implementation begins.
+| Default | Action |
+| --- | --- |
+| `Alt+M` | Module Manager |
+| `Alt+W` | War Room |
+| `Alt+S` | Scanner |
+| `Alt+B` | Base Intelligence |
+| `Alt+P` | Insert player details through Communications |
 
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+Change bindings in the Hotkeys window using forms such as `Ctrl+Shift+W` or `Meta+B`. Every shortcut has an equivalent visible action. Browser- or game-reserved combinations may take precedence.

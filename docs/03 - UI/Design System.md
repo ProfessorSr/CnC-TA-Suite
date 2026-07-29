@@ -1,25 +1,5 @@
 # Design System
 
->Status: Specification
+> Status: Baseline for v1.0.0
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+The design system is the game's Qooxdoo theme plus suite interaction rules. Use native widget appearances, 4–10 px layout spacing, clear information hierarchy, short action labels, tooltips for unfamiliar controls, and scroll containers for variable content. Primary entry is Module Manager in the game navigation. Suite Status and Launcher are on-demand modules. Avoid duplicate launch surfaces, raw DOM windows, decorative animation, or controls that resemble game actions without clear suite labeling.

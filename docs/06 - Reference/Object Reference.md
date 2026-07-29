@@ -1,25 +1,7 @@
 # Object Reference
 
->Status: Specification
+> Status: Implemented baseline for v1.0.0
 
-## Purpose
+Service snapshots intentionally expose stable subsets rather than promising raw ClientLib classes. Player contains identity and progression data when available; city/base identify current or selected bases and levels; world contains server/map facts and distance helpers; alliance contains current membership; selection describes selected object and type; battle contains active state, target, and attacker/defender formations.
 
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+`FormationModel` groups a side's ordered slots and wrapped units. `UnitModel` exposes discovered identity, level, position, and underlying metadata where available. Missing game state returns `null` or empty collections. Raw objects obtained through diagnostic registries are compatibility-sensitive and should not be persisted or treated as public contracts.

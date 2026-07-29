@@ -1,25 +1,14 @@
 # Mission
 
->Status: Specification
+> Status: Active for v1.0.0
 
-## Purpose
+Provide module authors and players with one coherent extension runtime that:
 
-Define this area of the project before implementation begins.
+- discovers ClientLib and the Qooxdoo application once;
+- exposes stable game-facing services and events;
+- manages module metadata, dependencies, permissions, settings, and lifecycle;
+- supplies native windows, dialogs, notifications, controls, and top-bar integration;
+- persists settings safely through the browser bridge; and
+- makes failures observable through structured logging and diagnostics.
 
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+The project favors compatibility, cleanup, transparency, and incremental evolution over fragile direct access to obfuscated game internals.

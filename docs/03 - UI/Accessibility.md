@@ -1,25 +1,5 @@
 # Accessibility
 
->Status: Specification
+> Status: Baseline for v1.0.0
 
-## Purpose
-
-Define this area of the project before implementation begins.
-
-## Scope
-
-This specification is the authoritative design document for this subject.
-
-## Sections
-
-- Objectives
-- Functional Requirements
-- Non-Functional Requirements
-- Architecture / Design
-- Interfaces
-- Data Flow
-- Error Handling
-- Performance
-- Security
-- Future Considerations
-
+All actions require visible labels or tooltips, keyboard focus, and native Qooxdoo execute/change events. Windows must support keyboard traversal and a clear close action. Do not communicate status by color alone; pair it with text. Maintain readable contrast, including the suite's white window foreground, and wrap long descriptions. Icon-only actions require an accessible label. New UI should be tested at common zoom levels and without mouse input. Reduced motion and formal screen-reader validation remain pre-v1 work.

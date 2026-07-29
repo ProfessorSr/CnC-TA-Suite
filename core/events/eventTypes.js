@@ -26,6 +26,8 @@ export const Events = Object.freeze({
   WINDOW_OPENED: 'window:opened',
   WINDOW_CLOSED: 'window:closed',
   MODULE_REGISTERED: 'module:registered',
+  MODULE_LOADED: 'module:loaded',
+  MODULE_UNLOADED: 'module:unloaded',
   MODULE_STARTED: 'module:started',
   MODULE_STOPPED: 'module:stopped'
 });
