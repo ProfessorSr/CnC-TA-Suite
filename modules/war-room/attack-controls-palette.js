@@ -11,17 +11,16 @@ const nativeIcon = (name) => `FactionUI/icons/${name}.png`;
 const suiteIcon = (name) => new URL(`../../assets/icons/${name}.svg`, import.meta.url).href;
 
 const ACTIONS = Object.freeze([
-  ['simulate', 'Simulate and play the live formation', nativeIcon('icon_attack_start_combat')],
-  ['up', 'Move all live troops up', nativeIcon('icon_step_up_button')],
   ['war-room', 'Open War Room', suiteIcon('war-room')],
-  ['left', 'Move all live troops left', nativeIcon('icon_step_left_button')],
+  ['up', 'Move all live troops up', nativeIcon('icon_step_up_button')],
   ['toggle-one', 'Toggle one troop: enable, then click troops until disabled', nativeIcon('icon_disable_unit')],
+  ['left', 'Move all live troops left', nativeIcon('icon_step_left_button')],
+  ['toggle-all', 'Hide or unhide all troops', nativeIcon('icon_arsnl_show_all')],
   ['right', 'Move all live troops right', nativeIcon('icon_step_right_button')],
   ['mirror-horizontal', 'Mirror the live formation horizontally', suiteIcon('formation-mirror-horizontal')],
   ['down', 'Move all live troops down', nativeIcon('icon_step_down_button')],
   ['mirror-vertical', 'Mirror the live formation vertically', suiteIcon('formation-mirror-vertical')],
   ['toggle-infantry', 'Hide or unhide infantry', nativeIcon('icon_arsnl_off_squad')],
-  ['toggle-all', 'Hide or unhide all troops', nativeIcon('icon_arsnl_show_all')],
   ['toggle-aircraft', 'Hide or unhide aircraft', nativeIcon('icon_arsnl_off_plane')],
   ['toggle-vehicles', 'Hide or unhide vehicles', nativeIcon('icon_arsnl_off_vehicle')],
   ['reset', 'Reset the live formation to its attack-screen starting layout', nativeIcon('icon_refresh_funds')],
@@ -29,8 +28,7 @@ const ACTIONS = Object.freeze([
   ['swap-1-2', 'Swap live troop rows 1 and 2', suiteIcon('formation-swap-12')],
   ['swap-2-3', 'Swap live troop rows 2 and 3', suiteIcon('formation-swap-23')],
   ['swap-3-4', 'Swap live troop rows 3 and 4', suiteIcon('formation-swap-34')],
-  ['planner', 'Open or close the compact Formation Optimizer', suiteIcon('layout')],
-  ['results', 'Open or close the native-styled Simulation Results', suiteIcon('inspect-data')]
+  ['planner', 'Open or close the compact Formation Optimizer', suiteIcon('layout')]
 ]);
 
 export class AttackControlsPalette {

@@ -1,6 +1,7 @@
 import { eventBus } from '../events/eventBus.js';
 import { Events } from '../events/eventTypes.js';
 import { logger } from '../utils/logger.js';
+import { delay } from '../utils/timers.js';
 import { Lifecycle } from './lifecycle.js';
 import { createApplication } from './startup.js';
 import { waitForGameUi } from './gameUiReady.js';
@@ -22,6 +23,9 @@ export function bootstrap() {
 
     try {
       await context.game.initialize();
+      // Give the native client a short quiet period after its readiness
+      // probes pass before suite modules begin constructing and attaching UI.
+      await delay(2000);
     } catch (error) {
       logger.warn(
         'Game integration is not ready yet. Core UI will still start.',

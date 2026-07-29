@@ -363,6 +363,10 @@ export class UpgradeManagerHub {
 
   upgradeAffordableToLevel(plan) {
     if (!plan) return { success: false, reason: 'upgrade plan unavailable' };
+    if (plan.affordableCount > 0) {
+      const bulk = this.upgradeAllToLevel(plan.targetLevel, plan.scope);
+      if (bulk.success) return { ...bulk, upgraded: plan.affordableCount };
+    }
     const api = this.scopeApi(plan.scope);
     const manager = this.root()?.Net?.CommunicationManager?.GetInstance?.();
     let upgraded = 0;
@@ -396,7 +400,9 @@ export class UpgradeManagerHub {
       ?? call(entity, ['get_Name'])
       ?? call(entity, ['get_UnitGameData_Obj', 'get_TechGameData_Obj'])?.dn
       ?? 'Unknown');
-    const level = finite(call(entity, ['get_CurrentLevel', 'get_Level', 'get_Lvl']), 0);
+    const level = finite(call(entity, [
+      'get_CurrentLevel', 'get_BuildingLevel', 'get_UnitLevel', 'get_Level', 'get_Lvl'
+    ]), 0);
     const nextLevel = level + 1;
     const costs = this.normalizeCosts(this.requirements(entity, nextLevel), category);
     const resources = this.resourceMap(city);

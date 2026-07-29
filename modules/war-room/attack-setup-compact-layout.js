@@ -19,6 +19,7 @@ export class AttackSetupCompactLayout {
     this.installed = false;
     this.hidden = [];
     this.rebuilt = [];
+    this.replacements = [];
     this.listeners = [];
   }
 
@@ -88,6 +89,96 @@ export class AttackSetupCompactLayout {
     const path = root?.Data?.Missions?.PATH?.BAR_ATTACKSETUP;
     const armyRoot = (path != null ? app.getUIItem?.(path) : null) ?? attackBar;
 
+    // Replace the game's redundant simulator shortcut beside Attack with a
+    // War Room shortcut in the exact same layout slot.
+    const candidates = [
+      ...Object.entries(attackBar),
+      ...Object.entries(armyRoot ?? {}),
+      ...descendants(attackBar, 5).map((widget, index) => [`attack-child-${index}`, widget]),
+      ...descendants(armyRoot, 7).map((widget, index) => [`army-child-${index}`, widget])
+    ];
+    const describeButton = (key, widget) => [
+      key,
+      widget?.objid,
+      widget?.getToolTipText?.(),
+      widget?.getLabel?.(),
+      widget?.getIcon?.()
+    ].filter(Boolean).join(' ');
+    const armySetupRight = (armyRoot?.getChildren?.() ?? []).find((widget) =>
+      widget?.$$user_decorator === 'pane-armysetup-right'
+      || widget?.getDecorator?.() === 'pane-armysetup-right'
+    );
+    let simulationEntry = armySetupRight?.getChildren?.()?.[1]
+      ? ['pane-armysetup-right-center', armySetupRight.getChildren()[1]]
+      : null;
+    simulationEntry ??= candidates.find(([key, widget]) => {
+      if (!widget?.getLayoutParent?.() || typeof widget?.getIcon !== 'function') return false;
+      return /(?:^|\/)icon_attack_simulate_combat\.png(?:$|\?)/i.test(String(widget.getIcon?.() ?? ''));
+    }) ?? candidates.find(([key, widget]) => {
+      if (!widget?.getLayoutParent?.() || typeof widget?.getIcon !== 'function') return false;
+      return /simulat/i.test(describeButton(key, widget));
+    });
+    if (!simulationEntry) {
+      const buttonEntries = candidates.filter(([, widget]) =>
+        widget?.getLayoutParent?.() && typeof widget?.getIcon === 'function'
+      );
+      for (const [repairKey, repairButton] of buttonEntries) {
+        if (!/repair/i.test(describeButton(repairKey, repairButton))) continue;
+        const parent = repairButton.getLayoutParent?.();
+        const children = parent?.getChildren?.() ?? [];
+        const repairIndex = children.indexOf(repairButton);
+        const attackEntry = buttonEntries.find(([attackKey, attackButton]) =>
+          attackButton.getLayoutParent?.() === parent
+          && /^attack$|(?:^|\s)attack(?:\s|$)/i.test(describeButton(attackKey, attackButton))
+          && children.indexOf(attackButton) > repairIndex
+        );
+        if (!attackEntry) continue;
+        const attackIndex = children.indexOf(attackEntry[1]);
+        const between = children.slice(repairIndex + 1, attackIndex)
+          .find((widget) => typeof widget?.getIcon === 'function');
+        if (between) {
+          simulationEntry = ['between-repair-and-attack', between];
+          break;
+        }
+      }
+    }
+    if (simulationEntry) {
+      const nativeButton = simulationEntry[1];
+      const parent = nativeButton.getLayoutParent?.();
+      const children = parent?.getChildren?.() ?? [];
+      const index = children.indexOf(nativeButton);
+      if (parent && index >= 0) {
+        const layoutProperties = { ...(nativeButton.getLayoutProperties?.() ?? {}) };
+        const width = Number(nativeButton.getWidth?.() ?? nativeButton.getBounds?.()?.width ?? 31);
+        const height = Number(nativeButton.getHeight?.() ?? nativeButton.getBounds?.()?.height ?? 31);
+        const replacement = this.button(
+          suiteIcon('war-room'),
+          'Open War Room',
+          'open-war-room',
+          0,
+          {
+            width: Number.isFinite(width) && width > 0 ? width : 31,
+            height: Number.isFinite(height) && height > 0 ? height : 31,
+            appearance: nativeButton.getAppearance?.() ?? 'button-friendlist-scroll'
+          }
+        );
+        replacement.removeAllListeners?.('execute');
+        replacement.addListener('execute', () => {
+          void this.context.modules?.open?.('war-room');
+        });
+        replacement.addListener('appear', () => {
+          replacement.getChildControl?.('icon', true)?.set?.({
+            width: 22,
+            height: 22,
+            scale: true
+          });
+        });
+        parent.remove?.(nativeButton);
+        parent.addAt?.(replacement, index, layoutProperties);
+        this.replacements.push({ parent, nativeButton, replacement, index, layoutProperties });
+      }
+    }
+
     // Remove the two redundant horizontal control sections. Keep their exact
     // prior visibility so disabling War Room restores the native interface.
     for (const candidate of [attackBar, ...Object.values(attackBar).filter((value) => value && typeof value === 'object')]) {
@@ -110,7 +201,7 @@ export class AttackSetupCompactLayout {
       this.rememberAndReplace(row, layout, controls);
     });
 
-    this.installed = this.hidden.length > 0 || this.rebuilt.length > 0;
+    this.installed = this.hidden.length > 0 || this.rebuilt.length > 0 || this.replacements.length > 0;
     return this.installed;
   }
 
@@ -135,6 +226,12 @@ export class AttackSetupCompactLayout {
       try { widget.removeListenerById?.(id); } catch { /* Widget may already be disposed. */ }
     }
     this.listeners = [];
+    for (const { parent, nativeButton, replacement, index, layoutProperties } of this.replacements.reverse()) {
+      if (parent?.isDisposed?.()) continue;
+      try { parent.remove?.(replacement); } catch {}
+      if (!nativeButton?.isDisposed?.()) parent.addAt?.(nativeButton, index, layoutProperties);
+    }
+    this.replacements = [];
     for (const { container, previous, previousLayout } of this.rebuilt.reverse()) {
       if (container?.isDisposed?.()) continue;
       container.removeAll?.();

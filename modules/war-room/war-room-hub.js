@@ -680,18 +680,20 @@ export class WarRoomHub {
     const netUtil = globalThis.webfrontend?.phe?.cnc?.Util;
     const reportEventType = root?.API?.OnSimulateCombatReport;
     const finishedEventType = root?.API?.OnSimulateBattleFinished;
-    if (!api?.SimulateBattle || typeof api.addListener !== 'function') {
-      return this.simulateFormation(snapshot.units);
+    const canAttachNativeEvents = Boolean(
+      netUtil?.attachNetEvent && netUtil?.detachNetEvent
+      && reportEventType != null && finishedEventType != null
+    );
+    const canAttachListeners = typeof api?.addListener === 'function';
+    if (!api?.SimulateBattle || (!canAttachNativeEvents && !canAttachListeners)) {
+      return Promise.reject(new Error('The native game simulation report API is unavailable.'));
     }
     return new Promise((resolve, reject) => {
       let settled = false;
       let nativeCombatReport = null;
       let finishedPayload = null;
       let reportWaitTimeout = null;
-      const useNativeEvents = Boolean(
-        netUtil?.attachNetEvent && netUtil?.detachNetEvent
-        && reportEventType != null && finishedEventType != null
-      );
+      const useNativeEvents = canAttachNativeEvents;
       const complete = () => {
         if (!finishedPayload) return;
         const events = Array.isArray(finishedPayload.e)
@@ -885,17 +887,32 @@ export class WarRoomHub {
       'GetArmyState', 'get_ArmyState'
     ]) ?? findGetter({ include: ['attacker', 'condition'] })
       ?? findGetter({ include: ['army', 'state'] }));
-    const outcome = invokeGetter([
+    const outcomeValue = invokeGetter([
       'get_CombatResult', 'GetCombatResult', 'get_Result', 'GetResult',
       'get_Outcome', 'GetOutcome'
     ]) ?? findGetter({ include: ['combat', 'result'] });
+    const resultEnums = this.clientLib()?.root?.Data?.Reports?.ECombatResult
+      ?? this.clientLib()?.root?.Data?.Reports?.ECombatResultType ?? {};
+    const resultName = typeof outcomeValue === 'string'
+      ? outcomeValue
+      : Object.entries(resultEnums)
+        .find(([, value]) => Number(value) === Number(outcomeValue))?.[0] ?? null;
+    const outcome = resultName == null ? null : String(resultName)
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
     const duration = invokeGetter([
       'get_BattleDuration', 'GetBattleDuration', 'get_CombatDuration', 'GetCombatDuration',
       'get_Duration', 'GetDuration'
     ]) ?? findGetter({ include: ['duration'] });
+    const timestamp = invokeGetter([
+      'get_Time', 'GetTime', 'get_ReportTime', 'GetReportTime',
+      'get_Timestamp', 'GetTimestamp', 'get_Date', 'GetDate'
+    ]) ?? findGetter({ include: ['time'], exclude: ['duration', 'repair'] });
     return Object.freeze({
       targetState, baseState, defenseState, armyState,
       outcome,
+      timestamp: Number.isFinite(Number(timestamp)) ? Number(timestamp) : null,
       durationSeconds: Number.isFinite(Number(duration))
         ? (Number(duration) > 10000 ? Number(duration) / 1000 : Number(duration)) : null,
       availableGetters: Object.freeze([...getters.keys()].sort())

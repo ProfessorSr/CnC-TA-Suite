@@ -3,7 +3,7 @@ export const WAR_ROOM_COMPANION_SETTINGS_KEY = 'module:war-room:companion-window
 export const DEFAULT_WAR_ROOM_COMPANION_SETTINGS = Object.freeze({
   formationControls: true,
   compactSimulationOutcome: true,
-  compactAttackPlanner: true
+  compactAttackPlanner: false
 });
 
 export function normalizeWarRoomCompanionSettings(value = {}) {

@@ -249,6 +249,8 @@ export class QuickUpgradeWindow {
       this.context.notifications?.show?.(
         `Upgrading ${upgraded} ${LABELS[result.scope].toLowerCase()} toward level ${targetLevel}.`
       );
+      setTimeout(() => this.render(), 500);
+      setTimeout(() => this.render(), 1500);
     } else {
       this.context.notifications?.show?.(`Upgrade failed: ${result.reason}`);
     }

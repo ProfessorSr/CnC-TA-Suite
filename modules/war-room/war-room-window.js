@@ -139,6 +139,7 @@ export class WarRoomWindow {
       this.record?.window?.isVisible?.()
       || compactPlannerWindow?.isVisible?.()
       || comparisonWindow?.isVisible?.()
+      || historyWindow?.isVisible?.()
     );
     let unsubscribePresetChanges = null;
     let unsubscribeGameTick = null;
@@ -146,9 +147,14 @@ export class WarRoomWindow {
     let compactPlannerResult = null;
     let comparisonWindow = null;
     let comparisonResults = null;
+    let historyWindow = null;
+    let historyResults = null;
     let comparisonReduced = false;
     let comparisonHistoryButton = null;
     let comparisonRenderSignature = '';
+    let nativeHistoryControl = null;
+    let nativeSimulationPanelElement = null;
+    let nativeSimulationContentElement = null;
     let companionSettings = { ...DEFAULT_WAR_ROOM_COMPANION_SETTINGS };
     let attackCompanionsRequested = false;
 
@@ -257,7 +263,9 @@ export class WarRoomWindow {
     let plannerResultHtml = bestFormationResult.getValue();
     const setPlannerResult = (value) => {
       plannerResultHtml = value;
-      if (activeSectionId === 'planner') safeSetValue(bestFormationResult, value);
+      if (activeSectionId === 'planner' || activeSectionId === 'simulator') {
+        safeSetValue(bestFormationResult, value);
+      }
     };
 
     // Compact companion for the optimizer controls. It deliberately omits the
@@ -333,23 +341,23 @@ export class WarRoomWindow {
       enabled: false,
       toolTipText: 'Move the active attack formation to the displayed optimized layout'
     });
-    compactPlannerWindow.add(compactApplyFormation);
     const applicationRoot = qx.core.Init.getApplication().getDesktop?.()
       ?? qx.core.Init.getApplication().getRoot?.();
     applicationRoot?.add?.(compactPlannerWindow, { left: 12, top: 150 });
     compactPlannerWindow.exclude();
 
-    comparisonWindow = new qx.ui.window.Window('').set({
-      layout: new qx.ui.layout.VBox(0),
+    comparisonWindow = new qx.ui.window.Window('History').set({
+      layout: new qx.ui.layout.Canvas(),
+      appearance: 'window-chat',
       padding: 0,
-      width: 186,
-      minWidth: 186,
-      maxWidth: 186,
+      width: 735,
+      minWidth: 360,
       height: 837,
-      minHeight: 420,
+      minHeight: 837,
+      maxHeight: 837,
       showMinimize: false,
       showMaximize: false,
-      showClose: false,
+      showClose: true,
       allowMinimize: false,
       allowMaximize: false,
       resizable: true,
@@ -358,39 +366,48 @@ export class WarRoomWindow {
       alwaysOnTop: false
     });
     try {
-      comparisonWindow.setDecorator?.(null);
+      comparisonWindow.setDecorator?.('window-chat-pane');
       comparisonWindow.setBackgroundColor?.('#050707');
       const captionbar = comparisonWindow.getChildControl?.('captionbar');
       const captionTitle = comparisonWindow.getChildControl?.('title');
       const contentPane = comparisonWindow.getChildControl?.('pane');
       captionbar?.set?.({
-        decorator: null, minHeight: 21, height: 21, padding: 0
+        decorator: null, minHeight: 21, height: 21, padding: 0, zIndex: 20
       });
       captionTitle?.set?.({
         decorator: 'chat-window-movebar-inactive',
         width: 128, minWidth: 128, maxWidth: 128,
+        height: 21, minHeight: 21, maxHeight: 21,
+        marginLeft: 2, marginTop: 4,
         textAlign: 'center', cursor: 'default'
       });
       contentPane?.set?.({
         padding: 0,
-        appearance: null,
         decorator: null,
-        backgroundColor: '#050707'
+        backgroundColor: null
       });
       const historyIcon = 'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/2a8928214c62d8207ba502a600cfa368.png';
       const lockIcon = 'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/ebb128a345118cb0256f1e92bd0e1bc0.png';
-      comparisonHistoryButton = new qx.ui.form.Button(null, historyIcon).set({
-        width: 21, minWidth: 21, maxWidth: 21, height: 22, marginLeft: 5,
-        appearance: 'button-friendlist-scroll', show: 'icon',
-        toolTipText: 'Show the reduced building-summary view'
+      comparisonHistoryButton = new qx.ui.form.Button('Top 10').set({
+        width: 58, minWidth: 58, maxWidth: 58,
+        height: 21, minHeight: 21, maxHeight: 21,
+        marginLeft: 3, marginTop: 4,
+        appearance: 'button-friendlist-scroll',
+        toolTipText: 'Open the ten best cached simulations'
       });
       const lockButton = new qx.ui.form.Button(null, lockIcon).set({
-        width: 21, minWidth: 21, maxWidth: 21, height: 22, marginLeft: 5,
+        width: 21, minWidth: 21, maxWidth: 21,
+        height: 21, minHeight: 21, maxHeight: 21,
+        marginLeft: 4, marginRight: 3, marginTop: 4,
         appearance: 'button-friendlist-scroll', show: 'icon',
         toolTipText: 'Lock this panel in place'
       });
       captionbar?.add?.(comparisonHistoryButton, { row: 0, column: 4 });
       captionbar?.add?.(lockButton, { row: 0, column: 5 });
+      comparisonWindow.addListenerOnce('appear', () => {
+        const captionElement = captionbar?.getContentElement?.().getDomElement?.();
+        if (captionElement) captionElement.style.overflow = 'visible';
+      });
       let panelLocked = false;
       lockButton.addListener('execute', () => {
         panelLocked = !panelLocked;
@@ -401,24 +418,119 @@ export class WarRoomWindow {
     } catch {
       // The standard game window decoration remains usable on older themes.
     }
-    comparisonResults = new qx.ui.container.Composite(new qx.ui.layout.HBox(5)).set({
-      width: 184, minWidth: 184, maxWidth: 184,
-      height: 811, minHeight: 811, maxHeight: 811,
-      padding: 0, backgroundColor: '#050707'
+    comparisonResults = new qx.ui.container.Composite(new qx.ui.layout.HBox(6)).set({
+      padding: 0, backgroundColor: null
     });
-    comparisonWindow.add(comparisonResults, {
-      marginTop: 3, marginBottom: 2, marginLeft: 1, marginRight: 1
+    const comparisonScroll = new qx.ui.container.Scroll().set({
+      scrollbarX: 'auto', scrollbarY: 'auto', padding: 0
     });
+    comparisonScroll.add(comparisonResults);
+    comparisonWindow.add(comparisonScroll, { left: 5, right: 5, top: 26, bottom: 5 });
     applicationRoot?.add?.(comparisonWindow, { left: 12, top: 80 });
-    comparisonWindow.exclude();
-    comparisonHistoryButton?.addListener('execute', () => {
-      comparisonReduced = !comparisonReduced;
-      comparisonRenderSignature = '';
-      comparisonHistoryButton.setToolTipText(comparisonReduced
-        ? 'Show the detailed building-image view'
-        : 'Show the reduced building-summary view');
-      renderSimulations();
+    comparisonWindow.addListenerOnce('appear', () => {
+      comparisonWindow.getContentElement?.().getDomElement?.()
+        ?.setAttribute?.('data-cnc-ta-war-room-history-window', 'true');
     });
+    comparisonWindow.exclude();
+    const openHistory = () => {
+      comparisonReduced = true;
+      comparisonRenderSignature = '';
+      comparisonWindow.setWidth(735);
+      renderSimulations();
+      comparisonWindow.open();
+      void runLiveSimulation();
+    };
+
+    historyWindow = new qx.ui.window.Window('Top 10').set({
+      layout: new qx.ui.layout.Canvas(),
+      appearance: 'window-chat',
+      padding: 0,
+      width: 735,
+      minWidth: 360,
+      height: 837,
+      minHeight: 837,
+      maxHeight: 837,
+      showMinimize: false,
+      showMaximize: false,
+      showClose: true,
+      allowMinimize: false,
+      allowMaximize: false,
+      resizable: true,
+      movable: true,
+      useMoveFrame: true,
+      alwaysOnTop: false
+    });
+    try {
+      historyWindow.setDecorator?.('window-chat-pane');
+      historyWindow.setBackgroundColor?.('#050707');
+      historyWindow.getChildControl?.('pane')?.set?.({
+        padding: 0, decorator: null, backgroundColor: null
+      });
+    } catch {}
+    historyResults = new qx.ui.container.Composite(new qx.ui.layout.HBox(6)).set({
+      minHeight: 800, padding: 0, backgroundColor: null
+    });
+    const historyScroll = new qx.ui.container.Scroll().set({
+      scrollbarX: 'auto', scrollbarY: 'auto', padding: 0
+    });
+    historyScroll.add(historyResults);
+    historyWindow.add(historyScroll, { left: 5, right: 5, top: 26, bottom: 5 });
+    applicationRoot?.add?.(historyWindow, { left: 12, top: 80 });
+    historyWindow.exclude();
+    comparisonHistoryButton?.addListener('execute', () => {
+      comparisonRenderSignature = '';
+      renderSimulations();
+      const bounds = comparisonWindow.getContentElement?.().getDomElement?.()?.getBoundingClientRect?.();
+      if (bounds) {
+        historyWindow.setLayoutProperties?.({
+          left: Math.round(bounds.right + 2),
+          top: Math.round(bounds.top)
+        });
+      }
+      historyWindow.open();
+    });
+
+    const installNativeHistoryControl = () => {
+      const nativeTop = [...(globalThis.document?.querySelectorAll?.('.qx-pane-sim-top') ?? [])]
+        .find((element) => !comparisonResults?.getContentElement?.().getDomElement?.()?.contains?.(element));
+      if (!nativeTop) return;
+      nativeSimulationContentElement = nativeTop;
+      if (
+        nativeTop.offsetParent == null
+        || globalThis.getComputedStyle?.(nativeTop)?.display === 'none'
+      ) return;
+      let panel = nativeTop.parentElement;
+      for (let depth = 0; panel?.parentElement && depth < 6; depth += 1) {
+        const bounds = panel.getBoundingClientRect?.();
+        if (bounds?.height >= 820 && bounds?.width >= 175 && bounds?.width <= 240) break;
+        panel = panel.parentElement;
+      }
+      if (!panel || panel.querySelector?.('[data-cnc-ta-war-room-history]')) return;
+      nativeSimulationPanelElement = panel;
+      const control = globalThis.document.createElement('button');
+      control.type = 'button';
+      control.dataset.cncTaWarRoomHistory = 'true';
+      control.textContent = 'History';
+      control.title = 'Show every cached simulation for this target';
+      control.style.cssText = 'position:absolute;left:3px;top:4px;width:128px;height:21px;z-index:1000;'
+        + 'padding:0;border:0;color:#d8eef5;font:bold 12px "Lucida Grande";cursor:pointer;'
+        + 'background:linear-gradient(#12647c,#063747);border-radius:3px;';
+      control.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const bounds = panel.getBoundingClientRect?.();
+        if (bounds) {
+          comparisonWindow.setLayoutProperties?.({
+            left: Math.round(bounds.right + 2),
+            top: Math.round(bounds.top)
+          });
+        }
+        openHistory();
+      });
+      panel.style.position = panel.style.position || 'relative';
+      panel.appendChild(control);
+      nativeHistoryControl = control;
+    };
     let syncingCompactControls = false;
     const syncSelection = (source, target) => {
       if (syncingCompactControls) return;
@@ -441,7 +553,10 @@ export class WarRoomWindow {
     compactPresetName.addListener('changeValue', () => {
       if (!syncingCompactControls) presetName.setValue(compactPresetName.getValue());
     });
-    compactRecommend.addListener('execute', () => recommend.execute());
+    compactRecommend.addListener('execute', () => {
+      if (optimizationRunning) cancelRecommendation();
+      else void simulateRecommendation();
+    });
     compactApplyFormation.addListener('execute', () => {
       try {
         const units = displayedRecommendation?.grid?.flat().filter(Boolean) ?? [];
@@ -476,7 +591,6 @@ export class WarRoomWindow {
         compactApplyFormation.setEnabled(Boolean(displayedRecommendation));
       }
     });
-    compactSavePreset.addListener('execute', () => savePreset.execute());
     compactLoadPreset.addListener('execute', () => loadPreset.execute());
     compactDeletePreset.addListener('execute', () => deletePreset.execute());
     const formationTools = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
@@ -709,10 +823,6 @@ export class WarRoomWindow {
       textColor: '#ffffff',
       toolTipText: 'Show the movable formation-control palette while a target attack setup is open.'
     });
-    const compactOutcomeSetting = new qx.ui.form.CheckBox('Simulation Results').set({
-      textColor: '#ffffff',
-      toolTipText: 'Show the compact native-styled simulation result window beside the attack view.'
-    });
     const compactPlannerSetting = new qx.ui.form.CheckBox('Formation Optimizer').set({
       textColor: '#ffffff',
       toolTipText: 'Show the compact best-formation and saved-preset window beside the attack view.'
@@ -720,11 +830,6 @@ export class WarRoomWindow {
     companionBox.add(formationControlsSetting);
     companionBox.add(label(qx,
       'Movable troop controls for simulation, formation movement, troop visibility, reset, and saved formations.',
-      { textColor: '#b8c8cf', paddingLeft: 22 }
-    ));
-    companionBox.add(compactOutcomeSetting);
-    companionBox.add(label(qx,
-      'A narrow native-styled current result that expands on demand to compare four previous cached simulations.',
       { textColor: '#b8c8cf', paddingLeft: 22 }
     ));
     companionBox.add(compactPlannerSetting);
@@ -741,21 +846,20 @@ export class WarRoomWindow {
       if (loadingCompanionSettings) return;
       companionSettings = normalizeWarRoomCompanionSettings({
         formationControls: formationControlsSetting.getValue(),
-        compactSimulationOutcome: compactOutcomeSetting.getValue(),
+        compactSimulationOutcome: false,
         compactAttackPlanner: compactPlannerSetting.getValue()
       });
       void this.context.storage?.set?.(WAR_ROOM_COMPANION_SETTINGS_KEY, companionSettings);
       this.context.eventBus?.emit?.('war-room:companion-settings-changed', companionSettings);
       if (!companionSettings.compactAttackPlanner) compactPlannerWindow.exclude();
-      if (!companionSettings.compactSimulationOutcome) comparisonWindow.exclude();
+      comparisonWindow.exclude();
+      historyWindow.exclude();
       if (attackCompanionsRequested) {
-        if (companionSettings.compactAttackPlanner) compactPlannerWindow.open();
-        if (companionSettings.compactSimulationOutcome) comparisonWindow.open();
+        compactPlannerWindow.exclude();
       }
       settingsStatus.setValue('Companion-window settings saved.');
     };
     formationControlsSetting.addListener('changeValue', persistCompanionSettings);
-    compactOutcomeSetting.addListener('changeValue', persistCompanionSettings);
     compactPlannerSetting.addListener('changeValue', persistCompanionSettings);
     void this.context.storage?.get?.(
       WAR_ROOM_COMPANION_SETTINGS_KEY,
@@ -763,14 +867,12 @@ export class WarRoomWindow {
     ).then((saved) => {
       companionSettings = normalizeWarRoomCompanionSettings(saved);
       formationControlsSetting.setValue(companionSettings.formationControls);
-      compactOutcomeSetting.setValue(companionSettings.compactSimulationOutcome);
       compactPlannerSetting.setValue(companionSettings.compactAttackPlanner);
       loadingCompanionSettings = false;
       if (attackCompanionsRequested) {
-        if (companionSettings.compactAttackPlanner) compactPlannerWindow.open();
-        else compactPlannerWindow.exclude();
-        if (companionSettings.compactSimulationOutcome) comparisonWindow.open();
-        else comparisonWindow.exclude();
+        compactPlannerWindow.exclude();
+        comparisonWindow.exclude();
+        historyWindow.exclude();
       }
       settingsStatus.setValue('Settings apply whenever an attack setup is open.');
     });
@@ -1083,7 +1185,7 @@ export class WarRoomWindow {
                 + `Distance: ${Number(selectedSearchTarget.distance || 0).toFixed(2)}`
               : '<br><br><span style="color:#52636b">Select a result to inspect it here.</span>')
           );
-        } else if (activeSectionId === 'planner') {
+        } else if (activeSectionId === 'planner' || activeSectionId === 'simulator') {
           bestFormationResult.setValue(plannerResultHtml);
         } else {
           bestFormationResult.setValue(
@@ -1126,6 +1228,8 @@ export class WarRoomWindow {
     let selectedFormationCell = null;
     let liveSimulationRunning = false;
     let liveSimulationQueued = false;
+    let liveSimulationRetryFormation = null;
+    let liveSimulationRetryCount = 0;
     let playSimulationQueued = false;
     let optimizationRunning = false;
     let recommendationSequence = 0;
@@ -1492,17 +1596,25 @@ export class WarRoomWindow {
               : '')
           );
           safeSetValue(plannerStatus, `Simulation in progress (${index + 1}/${candidates.length})…`);
-          const cacheKey = simulationKey(snapshot, candidate.units);
+          const appliedSnapshot = this.hub.applyRecommendedFormation(candidate.units);
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          if (buildDisposed || runId !== recommendationSequence) return;
+          const liveSnapshot = appliedSnapshot?.units?.length
+            ? appliedSnapshot
+            : this.hub.snapshot();
+          observedFormation = formationSignature(liveSnapshot);
+          this.context.eventBus?.emit?.('war-room:show-native-simulation');
+          const cacheKey = simulationKey(liveSnapshot);
           let response = simulationCache.get(cacheKey)?.response ?? null;
           if (!response) {
             try {
-              response = await this.hub.simulateFormation(candidate.units);
+              // Cache through the command response used by Manual Preview.
+              // The candidate has already been applied to the live grid, so
+              // these are the exact active coordinates shown by the game.
+              response = await this.hub.simulateFormation(liveSnapshot.units);
+              globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
             } catch (error) {
               if (buildDisposed || runId !== recommendationSequence) return;
-              this.context.logger?.warn?.('War Room skipped a rejected formation candidate.', {
-                candidate: candidate.name,
-                reason: error?.message ?? String(error)
-              });
               safeSetValue(plannerStatus,
                 `Candidate ${index + 1}/${candidates.length} was rejected by the game; continuing…`);
               if (index < candidates.length - 1) {
@@ -1513,12 +1625,15 @@ export class WarRoomWindow {
           }
           if (buildDisposed || runId !== recommendationSequence) return;
           simulationCache.set(cacheKey, {
-            response, snapshot, at: Date.now(), name: candidate.name,
-            units: candidate.units.map((unit) => ({ ...unit }))
+            response, snapshot: liveSnapshot, at: Date.now(), name: candidate.name,
+            source: 'optimizer',
+            units: liveSnapshot.units.map((unit) => ({ ...unit }))
           });
           renderSimulations();
-          const scored = WarRoomCalculator.scoreSimulation(response, snapshot, goal);
-          const nativeAnalysis = WarRoomCalculator.analyzeNativeSimulation(response, snapshot, candidate.name);
+          const scored = WarRoomCalculator.scoreSimulation(response, liveSnapshot, goal);
+          const nativeAnalysis = WarRoomCalculator.analyzeNativeSimulation(
+            response, liveSnapshot, candidate.name
+          );
           const targetDestroyed = /victory/i.test(String(nativeAnalysis.outcome ?? ''))
             && !/defeat/i.test(String(nativeAnalysis.outcome ?? ''));
           const result = {
@@ -1526,8 +1641,29 @@ export class WarRoomWindow {
             oneShot: targetDestroyed || scored.oneShot,
             score: targetDestroyed ? -1_000_000_000_000_000 + scored.score : scored.score
           };
-          if (!best || result.score < best.result.score) best = { candidate, result, response, snapshot };
-          if (result.oneShot) break;
+          if (!best || result.score < best.result.score) {
+            best = { candidate, result, response, snapshot: liveSnapshot };
+          }
+          const candidateResult = simulationDetailsHtml(nativeAnalysis);
+          setPlannerResult(
+            '<b>Best Formation Result</b><br>'
+            + '<span style="color:#005f86"><b>Simulation in progress</b></span><br><br>'
+            + `<b>Candidate:</b> ${index + 1} of ${candidates.length}<br>`
+            + `${candidateTestingHtml(candidate)}<br><br>`
+            + `<b>Candidate result</b><br>${candidateResult}`
+            + (best
+              ? '<br><br><span style="color:#52636b">'
+                + `<b>Best so far:</b><br>${escapeHtml(best.candidate.name)}`
+                + '</span>'
+              : '')
+          );
+          setCompactProcess(
+            '<b>Simulation in progress</b><br><br>'
+            + `<b>Candidate:</b> ${index + 1} of ${candidates.length}<br>`
+            + `${candidateTestingHtml(candidate)}<br><br>`
+            + `<b>Candidate result</b><br>${candidateResult}`
+            + (best ? `<br><br><b>Best so far:</b><br>${escapeHtml(best.candidate.name)}` : '')
+          );
           if (index < candidates.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, 3100));
             if (buildDisposed || runId !== recommendationSequence) return;
@@ -1551,10 +1687,14 @@ export class WarRoomWindow {
           oneShot: best.result.oneShot,
           note: 'Ranked by native battle simulation. Troops were not moved.'
         });
+        this.hub.applyRecommendedFormation(best.candidate.units);
+        observedFormation = formationSignature(this.hub.snapshot());
+        this.context.eventBus?.emit?.('war-room:show-native-simulation');
+        globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
         setCompactProcess(
           '<b>Optimization complete</b><br>'
           + `<span style="color:#237a38"><b>${escapeHtml(best.candidate.name)}</b></span><br><br>`
-          + 'The best formation is ready. Use <b>Apply Formation</b> to move it into the game.'
+          + 'The best formation is now active in the game formation grid.'
         );
         safeSetValue(plannerStatus, `Best formation found: ${best.candidate.name}.`);
       } catch (error) {
@@ -1574,6 +1714,7 @@ export class WarRoomWindow {
           safeSetEnabled(recommend, true);
           recommend.setLabel?.('Simulate Best Formation');
           compactRecommend.setLabel?.('Simulate');
+          renderSimulations();
           if (!buildDisposed && liveSimulationQueued) queueLiveSimulation();
         }
       }
@@ -1621,7 +1762,37 @@ export class WarRoomWindow {
         score: WarRoomCalculator.scoreSimulation(entry.response, entry.snapshot, goal).score,
         grid
       });
-      simulatorText.setValue(`${result.label} loaded into the formation preview. Use Preview to apply it to the active attack setup.`);
+      try {
+        this.hub.applyRecommendedFormation(entry.units);
+        observedFormation = formationSignature(this.hub.snapshot());
+        globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
+        simulatorText.setValue(`${result.label} applied to the active attack formation.`);
+      } catch (error) {
+        simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
+      }
+    };
+
+    let cachedFormationApplySequence = 0;
+    const applyCachedFormationToNativePanel = async (entry) => {
+      if (!Array.isArray(entry?.units) || !entry.units.length) {
+        throw new Error('This cached result does not contain a formation layout.');
+      }
+      const applyId = ++cachedFormationApplySequence;
+      const expected = formationSignature({ units: entry.units });
+      this.hub.applyRecommendedFormation(entry.units);
+      let appliedSnapshot = this.hub.snapshot();
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        if (applyId !== cachedFormationApplySequence) return false;
+        if (formationSignature(appliedSnapshot) === expected) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        appliedSnapshot = this.hub.snapshot();
+      }
+      if (formationSignature(appliedSnapshot) !== expected) {
+        throw new Error('The live formation did not settle into the cached layout.');
+      }
+      observedFormation = expected;
+      globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
+      return true;
     };
 
     simulator.grid.widget.addListener('cellTap', (event) => {
@@ -1635,7 +1806,6 @@ export class WarRoomWindow {
       const snapshot = this.hub.snapshot();
       const alternatives = [...simulationCache.values()].filter((entry) =>
         String(entry.snapshot?.target?.id) === String(snapshot.target?.id)
-        && String(entry.snapshot?.target?.version ?? 0) === String(snapshot.target?.version ?? 0)
       ).map((entry) => ({ ...entry, analysis: WarRoomCalculator.analyzeNativeSimulation(entry.response, entry.snapshot, entry.name ?? 'Cached') }));
       const rankedAlternatives = [...alternatives].sort((left, right) =>
         left.analysis.defenderRemaining - right.analysis.defenderRemaining
@@ -1665,11 +1835,11 @@ export class WarRoomWindow {
       if (!rankedAlternatives.length) {
         cachedResults.add(label(qx, 'No cached results for this target yet.', { textColor: '#344448' }));
       }
-      for (const [rankIndex, entry] of rankedAlternatives.entries()) {
+      const createCachedResultCard = (entry, rankIndex) => {
         const result = entry.analysis;
         const card = new qx.ui.container.Composite(new qx.ui.layout.VBox(3)).set({
           width: 158, minWidth: 158, maxWidth: 158, padding: 6,
-          cursor: 'pointer', toolTipText: 'Load this cached formation into the reversible preview',
+          cursor: 'pointer', toolTipText: 'Apply this cached formation to the active attack setup',
           backgroundColor: rankIndex === 0 ? '#d9ece1' : '#e3e8ea',
           decorator: new qx.ui.decoration.Decorator(1, 'solid', rankIndex === 0 ? '#3d8b5a' : '#8a969a')
         });
@@ -1687,8 +1857,14 @@ export class WarRoomWindow {
           toolTipText: 'Arrange the active attack formation to match this result'
         });
         replay.addListener('execute', () => {
-          try { this.hub.playSimulation(entry.response); }
-          catch (error) { simulatorText.setValue(`Unable to replay ${result.label}: ${error?.message ?? error}`); }
+          try {
+            this.hub.applyRecommendedFormation(entry.units);
+            observedFormation = formationSignature(this.hub.snapshot());
+            globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
+            simulatorText.setValue(`${result.label} formation applied to the active attack setup.`);
+          } catch (error) {
+            simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
+          }
         });
         card.addListener('tap', () => loadCachedPreview(entry));
         use.addListener('execute', (event) => {
@@ -1705,13 +1881,18 @@ export class WarRoomWindow {
           }
         });
         actions.add(replay); actions.add(use); card.add(actions);
-        cachedResults.add(card);
+        return card;
+      };
+      for (const [rankIndex, entry] of rankedAlternatives.entries()) {
+        cachedResults.add(createCachedResultCard(entry, rankIndex));
       }
       const liveCacheEntry = simulationCache.get(simulationKey(snapshot));
       const currentEntry = alternatives.find((entry) => entry === liveCacheEntry) ?? alternatives.at(-1) ?? null;
-      const comparisonEntries = currentEntry
-        ? [currentEntry]
-        : [];
+      const recentAlternatives = [...alternatives].sort((left, right) => Number(right.at) - Number(left.at));
+      const comparisonEntries = comparisonReduced
+        ? rankedAlternatives
+        : currentEntry ? [currentEntry] : [];
+      const topTenEntries = rankedAlternatives.slice(0, 10);
       const nextComparisonSignature = JSON.stringify({
         reduced: comparisonReduced,
         target: snapshot.target?.id ?? null,
@@ -1729,24 +1910,26 @@ export class WarRoomWindow {
       }
       comparisonRenderSignature = nextComparisonSignature;
       comparisonResults?.removeAll?.();
+      historyResults?.removeAll?.();
       if (!comparisonEntries.length) {
         comparisonResults?.add?.(label(qx, 'Waiting for the first native simulation…', {
           textColor: '#344448', padding: 10
         }));
+        historyResults?.add?.(label(qx, 'Waiting for the first native simulation…', {
+          textColor: '#344448', padding: 10
+        }));
       }
       const percent = (value) => Number.isFinite(Number(value)) ? `${Math.round(Number(value))}%` : '—';
-      const nativeMid = [...(globalThis.document?.querySelectorAll?.('.qx-pane-sim-mid') ?? [])]
-        .find((element) => element.parentElement?.querySelectorAll?.('img')?.length >= 6);
-      const nativePanel = nativeMid?.parentElement;
-      const objectiveImages = [
-        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/79525b00dd204388065cd4561d7548ea.png',
-        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/f8e4f6ed583c55442d28f592ce5a3f3d.png',
-        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/e817b4f7a058855f079edc4150be5ce5.png'
-      ];
+      let creditsResourceImage = '';
+      try {
+        creditsResourceImage = qx.util.ResourceManager.getInstance()
+          .toUri('webfrontend/ui/common/icn_res_dollar.png');
+      } catch { /* The text fallback remains available on older clients. */ }
       const resourceImages = [
         'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/43de27430e1fe65304ec436ac7c2367f.png',
         'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/35f27ef8016a87b77f5cf60c95049815.png',
-        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/4fc74d74170e9409ae79ea87527f52af.png'
+        'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/4fc74d74170e9409ae79ea87527f52af.png',
+        creditsResourceImage
       ];
       const repairImage = 'https://eaassets-a.akamaihd.net/cncalliancesgame/cdn/data/0bc8bbd48af9d5915c20d81b9d4a179e.png';
       const armyImages = [
@@ -1757,7 +1940,7 @@ export class WarRoomWindow {
       const nativeImage = (src, size, title, height = size) => src
         ? `<img src="${escapeHtml(src)}" width="${size}" height="${height}" title="${escapeHtml(title)}" style="vertical-align:middle;margin-right:5px">`
         : `<span title="${escapeHtml(title)}" style="display:inline-block;width:${size}px;text-align:center;margin-right:5px"><b>${escapeHtml(title)}</b></span>`;
-      for (const [index, entry] of comparisonEntries.entries()) {
+      const createGameStyleHistoryCard = (entry, index) => {
         const result = entry.analysis;
         const estimate = entry.snapshot?.attackEstimate ?? {};
         const fullyRepairable = Number(estimate.fullyRepairableAttacks);
@@ -1765,7 +1948,8 @@ export class WarRoomWindow {
           hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
         });
         const resultCard = new qx.ui.container.Composite(new qx.ui.layout.VBox(0)).set({
-          width: 184, minWidth: 184, maxWidth: 184,
+          width: 180, minWidth: 180, maxWidth: 180,
+          height: 800, minHeight: 800, maxHeight: 800,
           padding: 0,
           backgroundColor: '#050707',
           textColor: '#39434a',
@@ -1787,7 +1971,7 @@ export class WarRoomWindow {
           .set({ rich: true, wrap: true, textColor: '#434a54' }));
         top.add(topContent, { left: 0, top: 0, right: 0, bottom: 0 });
         const mid = new qx.ui.container.Composite(new qx.ui.layout.Canvas()).set({
-          height: 577, minHeight: 577, maxHeight: 577
+          height: 566, minHeight: 566, maxHeight: 566
         });
         mid.add(new qx.ui.core.Widget().set({ decorator: 'pane-sim-mid' }), {
           left: 0, top: 0, right: 0, bottom: 0
@@ -1798,26 +1982,20 @@ export class WarRoomWindow {
         const divider = '<div style="height:1px;margin:5px 16px;background:#aeb5b2"></div>';
         const resourceRow = (image, value, title) => `<div style="height:20px;margin-left:12px;font-size:12px;font-weight:bold;line-height:20px">${nativeImage(image, 20, title)}${Math.round(value ?? 0).toLocaleString()}</div>`;
         const html = `<div style="color:#434a54;font-family:'Lucida Grande';font-size:13px;line-height:1.4">`
-          + (Number(result.morale ?? 0) > 0
-            ? `<div style="font-size:14px;font-weight:bold">Morale deficit: <span style="color:#c46a14">-${Number(result.morale).toFixed(0)}%</span></div>${divider}` : '')
           + '<div style="height:20px;font-size:14px;font-weight:bold">Resource summary</div>'
           + resourceRow(resourceImages[0], result.lootResources?.research, 'Research')
           + resourceRow(resourceImages[1], result.lootResources?.tiberium, 'Tiberium')
           + resourceRow(resourceImages[2], result.lootResources?.crystal, 'Crystal')
-          + (Number(result.lootResources?.credits ?? 0) ? resourceRow('', result.lootResources.credits, 'Credits') : '')
+          + (Number(result.lootResources?.credits ?? 0) ? resourceRow(resourceImages[3], result.lootResources.credits, 'Credits') : '')
           + divider
-          + `<div style="height:20px;font-size:14px;font-weight:bold">Target state: ${percent(result.defenderRemaining)}</div>`
+          + `<div style="height:20px;font-size:14px;font-weight:bold">Target state: ${escapeHtml(percent(result.defenderRemaining))}</div>`
           + `<div style="height:18px;margin-left:12px">Base state: ${percent(result.defenderBreakdown?.structures?.remainingPercent)}</div>`
           + `<div style="height:18px;margin-left:12px">Defense state: ${percent(result.defenderBreakdown?.defense?.remainingPercent)}</div>`
-          + (comparisonReduced
-            ? `<div style="margin:5px 0 5px 12px;font-size:13px;line-height:18px">`
-              + `Construction Yard: <span style="color:#ff3c3c">${percent(result.cyRemaining)}</span><br>`
-              + `Defense Facility: <span style="color:#ff3c3c">${percent(result.dfRemaining)}</span><br>`
-              + `Defense HQ: <span style="color:#ff3c3c">${percent(result.defenseHqRemaining)}</span></div>`
-            : '<table cellspacing="0" cellpadding="0" style="width:170px;margin:0">'
-              + `<tr style="height:86px"><td style="width:103px;padding-left:18px">${nativeImage(objectiveImages[0], 80, 'CY', 76)}</td><td style="width:50px;font-size:17px;text-align:right"><b>${percent(result.cyRemaining)}</b></td></tr>`
-              + `<tr style="height:86px"><td style="width:103px;padding-left:18px">${nativeImage(objectiveImages[1], 80, 'DF', 76)}</td><td style="width:50px;font-size:17px;text-align:right"><b>${percent(result.dfRemaining)}</b></td></tr>`
-              + `<tr style="height:86px"><td style="width:103px;padding-left:18px">${nativeImage(objectiveImages[2], 80, 'DH', 76)}</td><td style="width:50px;font-size:17px;text-align:right"><b>${percent(result.defenseHqRemaining)}</b></td></tr></table>`)
+          + `<div style="margin:7px 12px;font-size:13px;line-height:22px">`
+          + `<div><b>CY</b><span style="float:right">${percent(result.cyRemaining)}</span></div>`
+          + `<div><b>DF</b><span style="float:right">${percent(result.dfRemaining)}</span></div>`
+          + `<div><b>DH</b><span style="float:right">${percent(result.defenseHqRemaining)}</span></div>`
+          + '</div>'
           + divider
           + `<div style="height:20px;font-size:14px;font-weight:bold">Army state: ${percent(result.ownRemaining)}</div>`
           + '<table cellspacing="0" cellpadding="0" style="width:170px;text-align:center;font-size:13px;font-weight:bold"><tr>'
@@ -1829,13 +2007,10 @@ export class WarRoomWindow {
           + `<div style="height:20px;margin-left:12px;font-size:12px;font-weight:bold;line-height:20px">${nativeImage(repairImage, 20, 'Repair')}<span style="color:#ff6060">${escapeHtml(duration(result.repairSeconds))}</span></div>`
           + resourceRow(resourceImages[2], result.repairCostResources?.crystal, 'Crystal')
           + '</div>';
-        const midScroll = new qx.ui.container.Scroll().set({
-          scrollbarX: 'off', scrollbarY: 'off', padding: 0, backgroundColor: null
-        });
-        midScroll.add(new qx.ui.basic.Label(html).set({
+        const midLabel = new qx.ui.basic.Label(html).set({
           rich: true, wrap: true, textColor: '#434a54', width: 170, minWidth: 170
-        }));
-        midContent.add(midScroll, { flex: 1 });
+        });
+        midContent.add(midLabel, { flex: 1 });
         mid.add(midContent, { left: 0, top: 0, right: 0, bottom: 0 });
         const bottom = new qx.ui.container.Composite(new qx.ui.layout.Canvas()).set({
           height: 155, minHeight: 155, maxHeight: 155
@@ -1846,11 +2021,14 @@ export class WarRoomWindow {
         const bottomContent = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({
           padding: [0, 7, 16], backgroundColor: null
         });
-        bottomContent.add(new qx.ui.basic.Label(`<div style="color:#434a54;text-align:center;line-height:1.4">`
+        bottomContent.add(new qx.ui.basic.Label(`<div style="width:166px;color:#434a54;font-family:'Lucida Grande';font-size:13px;text-align:center;line-height:1.4">`
           + `<b style="font-size:14px">Possible attacks</b><br>with current CP:<br>`
           + `<span style="font-size:17px"><b>${Math.round(Number(estimate.commandPointAttacks ?? 0))}</b></span><br>`
-          + `with full repairs:<br><span style="font-size:17px"><b>${Number.isFinite(fullyRepairable) ? fullyRepairable : '—'}</b></span></div>`)
-          .set({ rich: true, wrap: true, textColor: '#434a54' }));
+          + `with full repairs:<br><span style="font-size:17px"><b>${escapeHtml(Number.isFinite(Number(estimate.possibleAttacks)) ? estimate.possibleAttacks : (Number.isFinite(fullyRepairable) ? fullyRepairable + 1 : '—'))}</b></span></div>`)
+          .set({
+            rich: true, wrap: true, textColor: '#434a54', textAlign: 'center',
+            width: 166, minWidth: 166, maxWidth: 166, allowGrowX: true
+          }));
         const resultActions = new qx.ui.container.Composite(new qx.ui.layout.HBox(4));
         const replayResult = new qx.ui.form.Button('Watch Replay');
         const useResult = index > 0
@@ -1859,25 +2037,33 @@ export class WarRoomWindow {
         replayResult.addListener('execute', () => this.hub.playSimulation(entry.response));
         useResult?.addListener('execute', (event) => {
           event.stopPropagation?.();
-          try {
-            this.hub.applyRecommendedFormation(entry.units);
-            const appliedSnapshot = this.hub.snapshot();
-            observedFormation = formationSignature(appliedSnapshot);
-            simulationCache.delete(simulationKey(appliedSnapshot));
-            queueLiveSimulation();
-          } catch (error) {
+          void applyCachedFormationToNativePanel(entry).catch((error) => {
             simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
-          }
+          });
         });
         resultActions.add(replayResult, { flex: 1 });
         if (useResult) resultActions.add(useResult);
         bottomContent.add(resultActions);
         bottom.add(bottomContent, { left: 0, top: 0, right: 0, bottom: 0 });
         resultCard.add(top);
-        resultCard.add(mid, { flex: 1 });
+        resultCard.add(mid);
         resultCard.add(bottom);
-        resultCard.addListener('tap', () => loadCachedPreview(entry));
-        comparisonResults?.add?.(resultCard);
+        resultCard.addListener('tap', () => {
+          if (!comparisonReduced) {
+            loadCachedPreview(entry);
+            return;
+          }
+          void applyCachedFormationToNativePanel(entry).catch((error) => {
+            simulatorText.setValue(`Unable to use ${result.label}: ${error?.message ?? error}`);
+          });
+        });
+        return resultCard;
+      };
+      for (const [index, entry] of comparisonEntries.entries()) {
+        comparisonResults?.add?.(createGameStyleHistoryCard(entry, index));
+      }
+      for (const [index, entry] of topTenEntries.entries()) {
+        historyResults?.add?.(createGameStyleHistoryCard(entry, index));
       }
       simulatorText.setValue(this.nativeSimulation
         ? `Live result for the current formation. Structures ${this.nativeSimulation.defenderBreakdown.structures.remainingPercent.toFixed(1)}% · `
@@ -2010,42 +2196,41 @@ export class WarRoomWindow {
       .sort()
       .join('|');
     const simulationKey = (snapshot, units = snapshot.units) => [
-      snapshot.target?.id, snapshot.target?.version ?? 0, snapshot.attacker?.id,
+      snapshot.target?.id, snapshot.attacker?.id,
       units.map((unit) => `${unit.entityId ?? unit.id}:${unit.x}:${unit.y}:${unit.enabled !== false ? 1 : 0}`).sort().join('|'),
       (snapshot.allianceBonuses ?? []).join(',')
     ].join('::');
 
     const runLiveSimulation = async () => {
-      if (buildDisposed || !windowVisible()) return;
+      if (buildDisposed) return;
       if (liveSimulationRunning || optimizationRunning) {
         liveSimulationQueued = true;
         return;
       }
       const snapshot = this.hub.snapshot();
-      if (!snapshot.target?.id || !snapshot.units.length) return;
+      if (!this.hub.isAttackSetupOpen(snapshot) || !snapshot.target?.id || !snapshot.units.length) return;
       liveSimulationRunning = true;
       safeSetValue(simulatorText, 'Running native simulation for the current formation…');
       try {
         const cacheKey = simulationKey(snapshot);
-        const cached = simulationCache.get(cacheKey);
-        // TABS statistics come from the direct SimulateBattle command payload
-        // (data.d + data.e), not ClientLib.API.Battleground's compact report.
-        const response = cached?.response?.nativeEntityLoot && cached?.response?.nativeOffenseRepair
-          ? cached.response : await this.hub.simulateFormation(snapshot.units);
-        if (!cached) liveFormationSequence += 1;
-        const entry = cached ?? {
+        // The native panel can repaint even when its completion/report events
+        // are not returned to War Room. Use the command response that Manual
+        // Preview uses so every stable live-grid move produces a cache entry.
+        const response = await this.hub.simulateFormation(snapshot.units);
+        // Refresh the game's own Simulated outcome panel for the same settled
+        // live formation. History keeps the command response above; the
+        // native panel remains useful even when History is closed.
+        globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
+        liveFormationSequence += 1;
+        const entry = {
           response,
           snapshot,
-          at: Date.now(),
+          at: Number(response?.nativeCombatReport?.summary?.timestamp ?? 0) || Date.now(),
           name: liveFormationSequence === 1 ? 'Live formation' : `Manual layout ${liveFormationSequence - 1}`,
           source: 'live-formation',
           units: snapshot.units.map((unit) => ({ ...unit }))
         };
         simulationCache.set(cacheKey, entry);
-        for (const [key, entry] of simulationCache) {
-          if (String(entry.snapshot?.target?.id) === String(snapshot.target.id)
-            && String(entry.snapshot?.target?.version ?? 0) !== String(snapshot.target?.version ?? 0)) simulationCache.delete(key);
-        }
         // Publish the completed native result as soon as it is cached. The
         // active formation may already be moving again, but this result still
         // belongs to the exact coordinate/enabled-state signature captured
@@ -2056,6 +2241,7 @@ export class WarRoomWindow {
           String(current.target?.id) === String(snapshot.target.id)
           && formationSignature(current) === formationSignature(snapshot)
         ) {
+          observedFormation = formationSignature(current);
           this.nativeSimulation = WarRoomCalculator.analyzeNativeSimulation(response, snapshot, entry.name);
           this.nativeSimulationReplay = {
             response,
@@ -2086,22 +2272,38 @@ export class WarRoomWindow {
           liveSimulationQueued = true;
         }
       } catch (error) {
-        safeSetValue(simulatorText, `Live simulation failed: ${error?.message ?? error}`);
-        this.context.logger?.warn?.('War Room live simulation failed.', error);
+        const message = String(error?.message ?? error);
+        if (/returned no battle simulation data/i.test(message)) {
+          safeSetValue(simulatorText,
+            'No simulation result was produced. Check the active target and troop formation.');
+          const failedFormation = formationSignature(snapshot);
+          if (liveSimulationRetryFormation !== failedFormation) {
+            liveSimulationRetryFormation = failedFormation;
+            liveSimulationRetryCount = 0;
+          }
+          if (liveSimulationRetryCount < 2) {
+            liveSimulationRetryCount += 1;
+            liveSimulationQueued = true;
+          }
+        } else {
+          safeSetValue(simulatorText, `Live simulation failed: ${message}`);
+          this.context.logger?.warn?.('War Room live simulation failed.', error);
+        }
       } finally {
         liveSimulationRunning = false;
-        if (!buildDisposed && windowVisible() && liveSimulationQueued) {
+        if (!buildDisposed && liveSimulationQueued && this.hub.isAttackSetupOpen(this.hub.snapshot())) {
           liveSimulationQueued = false;
-          liveTimer = setTimeout(() => { void runLiveSimulation(); }, 3100);
+          liveTimer = setTimeout(() => { void runLiveSimulation(); }, 750);
         }
       }
     };
 
     const queueLiveSimulation = () => {
-      if (buildDisposed || !windowVisible()) return;
+      if (buildDisposed || !this.hub.isAttackSetupOpen(this.hub.snapshot())) return;
       clearTimeout(liveTimer);
       liveTimer = setTimeout(() => { void runLiveSimulation(); }, 400);
     };
+    this.captureCurrentFormation = runLiveSimulation;
 
     root.addListenerOnce?.('dispose', () => {
       buildDisposed = true;
@@ -2114,6 +2316,9 @@ export class WarRoomWindow {
       unsubscribeGameTick = null;
       compactPlannerWindow?.destroy?.();
       comparisonWindow?.destroy?.();
+      historyWindow?.destroy?.();
+      nativeHistoryControl?.remove?.();
+      nativeHistoryControl = null;
       this.content = null;
       this.companionWindows = null;
     });
@@ -2124,18 +2329,35 @@ export class WarRoomWindow {
       // with the entire game interface and could block the UI for 50–100 ms.
       // These controls and live simulations are relevant only to a visible
       // War Room, so leave the dormant module at constant cost.
-      if (buildDisposed || !widgetAlive(root) || !windowVisible()) return;
-      const registry = qx.core?.ObjectRegistry?.getRegistry?.() ?? {};
-      for (const widget of Object.values(registry)) {
-        const name = String(widget?.classname ?? widget?.constructor?.classname ?? '');
-        const text = String(widget?.getLabel?.() ?? '');
-        if (simulatorSettings.suppressTooltips && /ArmySetup|Formation|AttackPreparation/i.test(name)) widget.setToolTip?.(null);
-        if (/ArmySetup|CombatSetup|AttackPreparation/i.test(name)) {
-          if (/^attack$/i.test(text)) widget.setEnabled?.(!simulatorSettings.lockAttack);
-          if (/^repair$/i.test(text)) widget.setEnabled?.(!simulatorSettings.lockRepair);
+      if (buildDisposed || !widgetAlive(root)) return;
+      const snapshot = this.hub.snapshot();
+      if (!windowVisible() && !this.hub.isAttackSetupOpen(snapshot)) return;
+      if (windowVisible()) {
+        const registry = qx.core?.ObjectRegistry?.getRegistry?.() ?? {};
+        for (const widget of Object.values(registry)) {
+          const name = String(widget?.classname ?? widget?.constructor?.classname ?? '');
+          const text = String(widget?.getLabel?.() ?? '');
+          if (simulatorSettings.suppressTooltips && /ArmySetup|Formation|AttackPreparation/i.test(name)) widget.setToolTip?.(null);
+          if (/ArmySetup|CombatSetup|AttackPreparation/i.test(name)) {
+            if (/^attack$/i.test(text)) widget.setEnabled?.(!simulatorSettings.lockAttack);
+            if (/^repair$/i.test(text)) widget.setEnabled?.(!simulatorSettings.lockRepair);
+          }
         }
       }
-      const snapshot = this.hub.snapshot();
+      installNativeHistoryControl();
+      if (
+        nativeSimulationContentElement
+        && (
+          !nativeSimulationContentElement.isConnected
+          || nativeSimulationContentElement.offsetParent == null
+          || globalThis.getComputedStyle?.(nativeSimulationContentElement)?.display === 'none'
+        )
+      ) {
+        nativeHistoryControl?.remove?.();
+        nativeHistoryControl = null;
+        nativeSimulationPanelElement = null;
+        nativeSimulationContentElement = null;
+      }
       const targetId = snapshot.target?.id == null ? null : String(snapshot.target.id);
       const formation = formationSignature(snapshot);
       if (targetId !== observedTargetId) {
@@ -2151,14 +2373,18 @@ export class WarRoomWindow {
       }
       if (formation !== observedFormation) {
         observedFormation = formation;
+        liveSimulationRetryFormation = formation;
+        liveSimulationRetryCount = 0;
         // Do not rebuild every table from the 500 ms game tick. Qooxdoo can
         // momentarily detach inactive table panes while attack setup changes;
         // updating their models in that interval throws from _getPaneScrollerArr.
         // The live preview and simulation list are the only formation-sensitive
         // views and can be refreshed safely in isolation.
-        syncLiveFormationPreview(this.currentSnapshot ?? snapshot);
+        // Use the fresh game snapshot. this.currentSnapshot is the last full
+        // War Room render and can lag behind live formation-grid movement.
+        syncLiveFormationPreview(snapshot);
         renderSimulations();
-        queueLiveSimulation();
+        if (!liveSimulationRunning) queueLiveSimulation();
       }
     });
 
@@ -2390,47 +2616,53 @@ export class WarRoomWindow {
       loadPreset.setEnabled(available);
       deletePreset.setEnabled(available);
     });
-    savePreset.addListener('execute', () => {
-      void (async () => {
-        try {
-          if (!this.context.storage?.set) throw new Error('Suite storage is unavailable.');
-          const captured = this.hub.captureFormation();
-          const name = presetName.getValue?.()?.trim()
-            || `Formation ${formationPresets.filter((preset) =>
-              String(preset.attackerId) === String(captured.attackerId)
-              && String(preset.target?.id) === String(captured.target?.id)
-            ).length + 1}`;
-          const existing = formationPresets.find((preset) =>
-            String(preset.attackerId) === String(captured.attackerId)
-            && String(preset.target?.id) === String(captured.target?.id)
-            && preset.name.toLowerCase() === name.toLowerCase()
-          );
-          const preset = {
-            id: existing?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            name,
-            attackerId: captured.attackerId,
-            attackerName: captured.attackerName,
-            target: captured.target,
-            updatedAt: Date.now(),
-            units: captured.units
-          };
-          formationPresets = existing
-            ? formationPresets.map((item) => item.id === existing.id ? preset : item)
-            : [...formationPresets, preset];
-          await this.context.storage.set(presetStorageKey, formationPresets);
-          renderPresets(preset.id);
-          presetName.setValue('');
-          this.context.eventBus?.emit?.('war-room:formation-presets-changed', {
-            presetId: preset.id,
-            attackerId: captured.attackerId,
-            targetId: captured.target?.id
-          });
-          plannerStatus.setValue(`${name} saved for ${captured.attackerName} against ${captured.target?.name ?? 'this target'}.`);
-        } catch (error) {
-          plannerStatus.setValue(`Unable to save formation: ${error?.message ?? error}`);
-        }
-      })();
-    });
+    const saveCurrentFormationPreset = async () => {
+      if (!this.context.storage?.set) throw new Error('Suite storage is unavailable.');
+      const captured = this.hub.captureFormation();
+      const name = presetName.getValue?.()?.trim()
+        || `Formation ${formationPresets.filter((preset) =>
+          String(preset.attackerId) === String(captured.attackerId)
+          && String(preset.target?.id) === String(captured.target?.id)
+        ).length + 1}`;
+      const existing = formationPresets.find((preset) =>
+        String(preset.attackerId) === String(captured.attackerId)
+        && String(preset.target?.id) === String(captured.target?.id)
+        && preset.name.toLowerCase() === name.toLowerCase()
+      );
+      const preset = {
+        id: existing?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        attackerId: captured.attackerId,
+        attackerName: captured.attackerName,
+        target: captured.target,
+        updatedAt: Date.now(),
+        units: captured.units
+      };
+      formationPresets = existing
+        ? formationPresets.map((item) => item.id === existing.id ? preset : item)
+        : [...formationPresets, preset];
+      await this.context.storage.set(presetStorageKey, formationPresets);
+      renderPresets(preset.id);
+      presetName.setValue('');
+      this.context.eventBus?.emit?.('war-room:formation-presets-changed', {
+        presetId: preset.id,
+        attackerId: captured.attackerId,
+        targetId: captured.target?.id
+      });
+      plannerStatus.setValue(
+        `${name} saved for ${captured.attackerName} against ${captured.target?.name ?? 'this target'}.`
+      );
+    };
+    const saveFromEitherPlanner = () => {
+      void saveCurrentFormationPreset().catch((error) => {
+        plannerStatus.setValue(`Unable to save formation: ${error?.message ?? error}`);
+        safeSetValue(compactPlannerResult,
+          '<b>Unable to save formation</b><br>'
+          + `<span style="color:#a32626">${escapeHtml(error?.message ?? error)}</span>`);
+      });
+    };
+    savePreset.addListener('execute', saveFromEitherPlanner);
+    compactSavePreset.addListener('execute', saveFromEitherPlanner);
     loadPreset.addListener('execute', () => {
       try {
         const preset = selectedPreset();
@@ -2711,16 +2943,16 @@ export class WarRoomWindow {
     });
     syncFromGameTarget();
     void loadNativeReports();
-    this.companionWindows = { planner: compactPlannerWindow, results: comparisonWindow };
+    this.companionWindows = { planner: compactPlannerWindow };
     this.setAttackCompanionsVisible = (visible) => {
       attackCompanionsRequested = Boolean(visible);
       if (!visible) {
         compactPlannerWindow.exclude();
         comparisonWindow.exclude();
+        historyWindow.exclude();
         return;
       }
-      if (companionSettings.compactAttackPlanner) compactPlannerWindow.open();
-      if (companionSettings.compactSimulationOutcome) comparisonWindow.open();
+      compactPlannerWindow.exclude();
     };
     this.toggleCompanion = (name) => {
       const window = this.companionWindows?.[name];

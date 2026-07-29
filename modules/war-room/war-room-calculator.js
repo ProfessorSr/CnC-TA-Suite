@@ -444,8 +444,10 @@ export class WarRoomCalculator {
       vehicle: Number(reportRepairCosts[resourceName('RepairChargeVeh')] ?? 0),
       aircraft: Number(reportRepairCosts[resourceName('RepairChargeAir')] ?? 0)
     };
-    const effectiveRepairTimeByGroup = nativeOffenseRepair?.timeByGroup
-      ?? Object.freeze({ infantry: 0, vehicle: 0, aircraft: 0 });
+    const effectiveRepairTimeByGroup = hasNativeRepairCosts
+      ? Object.freeze(nativeRepairTimeByGroup)
+      : nativeOffenseRepair?.timeByGroup
+        ?? Object.freeze({ infantry: 0, vehicle: 0, aircraft: 0 });
     const effectiveRepairSeconds = Math.max(0, ...Object.values(effectiveRepairTimeByGroup));
     const effectiveRepairCostsByGroup = nativeOffenseRepair?.costsByGroup
       ?? Object.freeze({ infantry: {}, vehicle: {}, aircraft: {} });
@@ -455,7 +457,7 @@ export class WarRoomCalculator {
         groupedRepairCosts[type] = (groupedRepairCosts[type] ?? 0) + Number(amount || 0);
       }
     }
-    const effectiveRepairCosts = groupedRepairCosts;
+    const effectiveRepairCosts = hasNativeRepairCosts ? { ...reportRepairCosts } : groupedRepairCosts;
     const nativeLoot = {};
     const lootDiagnostics = [];
     let hasNativeResourceValues = false;
@@ -507,8 +509,10 @@ export class WarRoomCalculator {
     // TABS statistics are derived from GetUnitRepairCosts for every damaged
     // defender entity. The combat report is used by TACS's separate compact
     // game panel, but does not represent the TABS cached-stat columns.
-    const lootByResource = hasInterpretedLoot
-      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
+    const lootByResource = hasNativeReportLoot
+      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(reportLoot[type] ?? 0)]))
+      : hasInterpretedLoot
+        ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
       : Object.fromEntries(rewardTypes.map((type) => [type, 0]));
     const lootTotal = rewardTypes.reduce((sum, type) => sum + Number(lootByResource[type] ?? 0), 0);
     const researchType = resourceName('ResearchPoints');
@@ -553,6 +557,7 @@ export class WarRoomCalculator {
         ? Number(response.d.cs) / 10
           + (Number(response.d.cs) < Number(response.d.md ?? 0) * 10 ? 3 : 0)
         : Number(nativeSummary.durationSeconds ?? 0),
+      reportedAt: Number(nativeSummary.timestamp ?? 0) || null,
       outcome: typeof nativeSummary.outcome === 'string' && nativeSummary.outcome
         ? nativeSummary.outcome
         : ownRemaining <= 0 ? 'Defeat' : defenderRemaining <= 0 ? 'Total Victory' : 'Victory',

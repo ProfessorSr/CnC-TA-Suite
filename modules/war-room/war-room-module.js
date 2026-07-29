@@ -48,6 +48,111 @@ export class WarRoomModule extends Module {
     this.highlighter = null;
     this.companionSettings = { ...DEFAULT_WAR_ROOM_COMPANION_SETTINGS };
     this.unsubscribeCompanionSettings = null;
+    this.unsubscribeNativeSimulationRequest = null;
+    this.nativeSimulationPanel = null;
+  }
+
+  findNativeSimulationResultsPanel() {
+    if (this.nativeSimulationPanel && !this.nativeSimulationPanel.isDisposed?.()) {
+      let outer = this.nativeSimulationPanel;
+      for (
+        let candidate = outer.getLayoutParent?.();
+        candidate;
+        candidate = candidate.getLayoutParent?.()
+      ) {
+        const width = Number(candidate.getWidth?.() ?? candidate.getBounds?.()?.width ?? 0);
+        const height = Number(candidate.getHeight?.() ?? candidate.getBounds?.()?.height ?? 0);
+        if (width >= 175 && width <= 240 && height >= 780) outer = candidate;
+      }
+      this.nativeSimulationPanel = outer;
+      return outer;
+    }
+    const qx = globalThis.qx;
+    const Widget = qx?.ui?.core?.Widget;
+    const nativeTops = [...(globalThis.document?.querySelectorAll?.('.qx-pane-sim-top') ?? [])];
+    for (const nativeTop of nativeTops) {
+      if (nativeTop.closest?.('[data-cnc-ta-war-room-history-window]')) continue;
+      let element = nativeTop;
+      let outerWidget = null;
+      for (let depth = 0; element && depth < 12; depth += 1, element = element.parentElement) {
+        const bounds = element.getBoundingClientRect?.();
+        const width = Number(bounds?.width ?? Number.parseInt(element.style?.width ?? '', 10));
+        const height = Number(bounds?.height ?? Number.parseInt(element.style?.height ?? '', 10));
+        if (width < 175 || width > 240 || height < 780) continue;
+        const direct = Widget?.getWidgetByElement?.(element);
+        if (direct) outerWidget = direct;
+      }
+      if (outerWidget) {
+        this.nativeSimulationPanel = outerWidget;
+        return outerWidget;
+      }
+    }
+    const registry = qx?.core?.ObjectRegistry?.getRegistry?.() ?? {};
+    const widgets = Object.values(registry);
+    const tops = widgets.filter((widget) => {
+      if (!widget || widget.isDisposed?.()) return false;
+      const decorator = String(widget.getDecorator?.() ?? '');
+      const element = widget.getContentElement?.().getDomElement?.();
+      if (element?.closest?.('[data-cnc-ta-war-room-history-window]')) return false;
+      return decorator === 'pane-sim-top' || element?.classList?.contains?.('qx-pane-sim-top');
+    });
+    for (const top of tops) {
+      let candidate = top;
+      let outerWidget = null;
+      for (let depth = 0; candidate && depth < 12; depth += 1) {
+        const width = Number(candidate.getWidth?.() ?? candidate.getBounds?.()?.width ?? 0);
+        const height = Number(candidate.getHeight?.() ?? candidate.getBounds?.()?.height ?? 0);
+        if (width >= 175 && width <= 240 && height >= 780) {
+          outerWidget = candidate;
+        }
+        candidate = candidate.getLayoutParent?.() ?? null;
+      }
+      if (outerWidget) {
+        this.nativeSimulationPanel = outerWidget;
+        return outerWidget;
+      }
+    }
+    return null;
+  }
+
+  openNativeSimulationResults() {
+    const reveal = () => {
+      const panel = this.findNativeSimulationResultsPanel();
+      if (!panel) return false;
+      panel.show?.();
+      panel.open?.();
+      panel.setVisibility?.('visible');
+      panel.setZIndex?.(100002);
+      return true;
+    };
+
+    if (reveal()) return true;
+    for (const delay of [0, 100, 300, 750]) globalThis.setTimeout(reveal, delay);
+    return false;
+  }
+
+  async toggleNativeSimulationResults() {
+    const panel = this.findNativeSimulationResultsPanel();
+    if (!panel) {
+      const api = globalThis.ClientLib?.API?.Battleground?.GetInstance?.();
+      if (typeof api?.SimulateBattle !== 'function') {
+        throw new Error('The native game simulator is unavailable.');
+      }
+      // Opening the native panel does not require consuming its report event.
+      // Some builds display the result normally but publish no callback data.
+      api.SimulateBattle();
+      this.openNativeSimulationResults();
+      return true;
+    }
+    if (panel.isVisible?.()) {
+      panel.exclude?.();
+      return false;
+    }
+    panel.show?.();
+    panel.open?.();
+    panel.setVisibility?.('visible');
+    panel.setZIndex?.(100002);
+    return true;
   }
 
   async enable(context) {
@@ -60,6 +165,11 @@ export class WarRoomModule extends Module {
       this.companionSettings = normalizeWarRoomCompanionSettings(settings);
       if (!this.companionSettings.formationControls) this.palette?.setVisible?.(false);
     });
+    this.unsubscribeNativeSimulationRequest?.();
+    this.unsubscribeNativeSimulationRequest = context.eventBus?.on?.(
+      'war-room:show-native-simulation',
+      () => this.openNativeSimulationResults()
+    );
     const sharedHub = new WarRoomHub(context);
     this.highlighter = new FormationTargetHighlighter({ context, hub: sharedHub });
     this.highlighter.install();
@@ -77,7 +187,8 @@ export class WarRoomModule extends Module {
         hub,
         onSimulate: () => {
           this.ensureInitialized(context);
-          return this.window?.playCurrentFormation?.();
+          this.openNativeSimulationResults();
+          return this.window?.captureCurrentFormation?.();
         },
         onOpenPlanner: () => {
           this.ensureInitialized(context);
@@ -86,8 +197,7 @@ export class WarRoomModule extends Module {
         },
         onOpenResults: () => {
           this.ensureInitialized(context);
-          this.window?.initializeCompanions?.();
-          this.window?.toggleCompanion?.('results');
+          return this.toggleNativeSimulationResults();
         }
       });
       this.compactLayout ??= new AttackSetupCompactLayout({ context, hub });
@@ -151,6 +261,8 @@ export class WarRoomModule extends Module {
     this.unsubscribeSelection = null;
     this.unsubscribeCompanionSettings?.();
     this.unsubscribeCompanionSettings = null;
+    this.unsubscribeNativeSimulationRequest?.();
+    this.unsubscribeNativeSimulationRequest = null;
     this.palette?.destroy?.();
     this.palette = null;
     this.compactLayout?.uninstall?.();
@@ -161,6 +273,7 @@ export class WarRoomModule extends Module {
     this.window?.destroy?.();
     this.window = null;
     this.context = null;
+    this.nativeSimulationPanel = null;
     this.attackSetupActive = false;
     this.attackTargetId = null;
     this.companionSettings = { ...DEFAULT_WAR_ROOM_COMPANION_SETTINGS };
