@@ -8,28 +8,43 @@ permissions:
   contents: read
 
 jobs:
-  structure:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Validate required files
         shell: bash
         run: |
           set -euo pipefail
           required=(
-            .editorconfig .gitignore CHANGELOG.md CONTRIBUTING.md LICENSE README.md VERSION
-            docs/architecture/CnC-TA-Suite-Architecture.md
-            docs/audits/script-pack-audit.md
-            docs/development/coding-standards.md
-            docs/development/release-process.md
-            docs/inventory/script-inventory.csv
-            manifest/chrome/manifest.json
+            .editorconfig .gitignore CHANGELOG.md CONTRIBUTING.md LICENSE README.md
+            SECURITY.md VERSION PART DOCUMENTATION_INDEX.md PROJECT_TREE.md
+            "docs/01 - Project/Versioning.md"
+            "docs/02 - Architecture/Architecture.md"
+            "docs/04 - Development/Testing.md"
+            "docs/04 - Development/Releases.md"
+            manifest/chrome/manifest.json scripts/build/build-extension.mjs
           )
           for path in "${required[@]}"; do
             test -f "$path" || { echo "Missing required file: $path"; exit 1; }
           done
-      - name: Validate JSON files
+      - name: Validate JSON and release versions
         run: |
           python3 -m json.tool manifest/chrome/manifest.json >/dev/null
-          python3 -m json.tool docs/inventory/script-inventory.json >/dev/null
-          python3 -m json.tool docs/inventory/script-inventory-full.json >/dev/null
+          find modules -name manifest.json -print0 | xargs -0 -n1 python3 -m json.tool >/dev/null
+          test "$(cat VERSION)" = "$(node -p "require('./manifest/chrome/manifest.json').version")"
+          test "$(cat PART)" = "v$(cat VERSION)-release"
+      - name: Run automated tests
+        run: node --test tests/unit/*.test.js tests/integration/*.test.js
+      - name: Build Chrome extension
+        run: node scripts/build/build-extension.mjs
+      - name: Validate generated release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./dist/chrome/manifest.json').version")" = "$(cat VERSION)"
+          test "$(find dist/chrome/modules -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "23"
+          git diff --check
