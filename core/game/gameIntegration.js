@@ -20,6 +20,8 @@ import { createGameApi } from './public/gameApi.js';
 import { GameStateMonitor } from './events/gameStateMonitor.js';
 import { Events } from '../events/eventTypes.js';
 import { IntegrationWatchdog } from './recovery/integrationWatchdog.js';
+import { ClientApiAdapter } from './compatibility/clientApiAdapter.js';
+import { PerformanceProfiler } from '../performance/performanceProfiler.js';
 
 export class GameIntegration {
   constructor({ eventBus, logger }) {
@@ -43,7 +45,7 @@ export class GameIntegration {
     });
   }
 
-  registerCoreServices({ clientLib, qx, objectDiscovery }) {
+  registerCoreServices({ clientLib, qx, objectDiscovery, adapter, performance }) {
     const cache = new CacheManager({
       logger: this.logger.child('Cache'),
       defaultTtl: 1000
@@ -53,6 +55,8 @@ export class GameIntegration {
     this.services.register('qx', qx);
     this.services.register('objectDiscovery', objectDiscovery);
     this.services.register('cache', cache);
+    this.services.register('clientApiAdapter', adapter);
+    this.services.register('performance', performance);
 
     this.services.register('selection', new SelectionManager({
       clientLib,
@@ -72,7 +76,8 @@ export class GameIntegration {
       clientLib,
       cache,
       objectDiscovery,
-      logger: this.logger.child('City')
+      logger: this.logger.child('City'),
+      performance
     });
 
     const world = new WorldService({
@@ -163,13 +168,21 @@ export class GameIntegration {
 
       this.version = versionManager.detect();
 
+      const adapter = new ClientApiAdapter({
+        environment: this.environment,
+        clientLibManager: clientLib,
+        logger: this.logger.child('ClientAdapter')
+      });
+      const adapterReport = adapter.report();
+
       const compatibilityDetector = new CompatibilityDetector({
         logger: this.logger.child('Compatibility')
       });
 
       this.compatibility = compatibilityDetector.evaluate(
         this.environment,
-        this.version
+        this.version,
+        adapterReport
       );
 
       this.eventBus.emit(Events.GAME_COMPATIBILITY_CHECKED, this.compatibility);
@@ -180,7 +193,20 @@ export class GameIntegration {
 
       this.services.register('versionManager', versionManager);
       this.services.register('compatibilityDetector', compatibilityDetector);
-      this.registerCoreServices({ clientLib, qx, objectDiscovery });
+      const performance = new PerformanceProfiler({
+        logger: this.logger.child('Performance'),
+        limits: {
+          'game-state.capture': 10,
+          'game-state.dispatch': 25,
+          'game-state.tick': 30,
+          'hub.snapshot': 25,
+          'module.enable': 50,
+          'module.open': 50,
+          'city.normalize-all': 25
+        },
+        violationThreshold: 3
+      });
+      this.registerCoreServices({ clientLib, qx, objectDiscovery, adapter, performance });
 
       this.objects.set('mainData', clientLib.getMainData());
       this.objects.set('server', clientLib.getServer());
@@ -193,7 +219,8 @@ export class GameIntegration {
       this.monitor = new GameStateMonitor({
         eventBus: this.eventBus,
         services: this.services,
-        logger: this.logger.child('StateMonitor')
+        logger: this.logger.child('StateMonitor'),
+        performance
       });
 
       this.watchdog = new IntegrationWatchdog({

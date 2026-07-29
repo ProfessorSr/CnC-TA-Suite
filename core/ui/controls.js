@@ -1,10 +1,29 @@
-import { element } from '../utils/dom.js';
+function getQx() {
+  const qx = globalThis.qx;
 
-export function checkbox(label, checked, onChange) {
-  const input = element('input', { attributes: { type: 'checkbox' } });
-  input.checked = Boolean(checked);
-  input.addEventListener('change', () => onChange?.(input.checked));
-  return element('label', {
-    children: [input, document.createTextNode(` ${label}`)]
+  if (!qx?.ui) {
+    throw new Error(
+      '[CnC-TA-Suite] Qooxdoo is not available. The game UI may not be ready.'
+    );
+  }
+
+  return qx;
+}
+
+export function checkbox(label, checked = false, onChange) {
+  const qx = getQx();
+
+  const widget = new qx.ui.form.CheckBox(label);
+
+  widget.set({
+    value: Boolean(checked)
   });
+
+  if (typeof onChange === 'function') {
+    widget.addListener('changeValue', (event) => {
+      onChange(event.getData());
+    });
+  }
+
+  return widget;
 }

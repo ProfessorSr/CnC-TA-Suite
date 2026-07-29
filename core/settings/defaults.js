@@ -2,7 +2,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   general: {
     enabled: true,
     logLevel: 'info',
-    showLauncherOnStartup: true
+    showLauncherOnStartup: false
   },
   theme: {
     name: 'command-dark',

@@ -1,10 +1,12 @@
 import { eventBus } from '../events/eventBus.js';
 import { Events } from '../events/eventTypes.js';
 import { logger } from '../utils/logger.js';
+import { delay } from '../utils/timers.js';
 import { Lifecycle } from './lifecycle.js';
 import { createApplication } from './startup.js';
+import { waitForGameUi } from './gameUiReady.js';
 
-const VERSION = '0.3.0-dev';
+const VERSION = '1.0.0';
 let applicationPromise = null;
 
 export function bootstrap() {
@@ -15,11 +17,15 @@ export function bootstrap() {
     lifecycle.transition('bootstrapping');
     eventBus.emit(Events.SUITE_BOOTSTRAP_STARTED);
 
+    await waitForGameUi();
     const context = await createApplication({ eventBus, logger });
     context.lifecycle = lifecycle;
 
     try {
       await context.game.initialize();
+      // Give the native client a short quiet period after its readiness
+      // probes pass before suite modules begin constructing and attaching UI.
+      await delay(2000);
     } catch (error) {
       logger.warn(
         'Game integration is not ready yet. Core UI will still start.',
@@ -36,7 +42,9 @@ export function bootstrap() {
       game: context.game.api,
       diagnostics: Object.freeze({
         snapshot: () => context.diagnostics.snapshot(),
-        health: () => context.diagnostics.health()
+        health: () => context.diagnostics.health(),
+        supportBundle: () => context.diagnostics.supportBundle(),
+        exportJson: () => context.diagnostics.exportJson()
       })
     });
 
