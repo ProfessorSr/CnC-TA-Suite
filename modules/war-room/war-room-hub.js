@@ -1159,9 +1159,11 @@ export class WarRoomHub {
       throw new Error('The native combat replay viewer is unavailable.');
     }
     playArea.setView(mode, snapshot.target.id, 0, 0);
+    this.ensureReplayReturnControl();
     battleground.Init?.();
     loadCombat.call(battleground, response.d);
     const start = () => {
+      this.ensureReplayReturnControl();
       battleground.RestartReplay?.();
       battleground.set_ReplaySpeed?.(1);
     };

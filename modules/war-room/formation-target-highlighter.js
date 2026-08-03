@@ -1,4 +1,4 @@
-const PRESET_KEY = 'module:war-room:formation-presets:v1';
+import { loadFormationPresets } from './formation-preset-store.js';
 
 function call(target, names, ...args) {
   for (const name of names) {
@@ -38,7 +38,7 @@ export class FormationTargetHighlighter {
   }
 
   async refresh() {
-    const presets = await this.context.storage?.get?.(PRESET_KEY, []) ?? [];
+    const presets = await loadFormationPresets(this.context.storage);
     this.saved = new Set(presets
       .filter((preset) => preset?.attackerId != null && preset?.target?.id != null)
       .map((preset) => `${String(preset.attackerId)}:${String(preset.target.id)}`));

@@ -27,6 +27,8 @@ export class CombatStats {
   constructor(storage = null) {
     this.storage = storage;
     this.history = [];
+    // Retained only for backward-compatible stored data/API consumers. The
+    // Suite no longer exposes favorite controls in any module UI.
     this.favorites = new Map();
     this.loaded = false;
   }

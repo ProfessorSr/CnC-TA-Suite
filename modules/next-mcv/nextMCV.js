@@ -8,7 +8,7 @@ export class NextMCVModule {
     this.id = 'next-mcv';
     this.name = 'Next MCV';
     this.title = 'Next MCV';
-    this.version = '0.2.0';
+    this.version = '0.3.0';
     this.author = 'ProfessorSr';
     this.description = 'Shows credit and research progress toward the next MCV.';
     this.category = 'Economy';

@@ -32,7 +32,7 @@ export class ApiInspectorModule extends Module {
     super({
       id: 'api-inspector',
       name: 'API Inspector',
-      version: '0.1.0',
+      version: '0.2.0',
       apiVersion: '1.0.0',
       author: 'ProfessorSr',
       description: 'Inspect the frozen public Suite API and export redacted diagnostics.',

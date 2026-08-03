@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { StorageService } from '../../core/storage/storage.js';
 
-test('StorageService selects local storage once after the extension bridge fails', async () => {
+test('StorageService selects local storage once after an injected primary adapter fails', async () => {
   let primaryReads = 0;
   let primaryWrites = 0;
   let warnings = 0;

@@ -509,11 +509,11 @@ export class WarRoomCalculator {
     // TABS statistics are derived from GetUnitRepairCosts for every damaged
     // defender entity. The combat report is used by TACS's separate compact
     // game panel, but does not represent the TABS cached-stat columns.
-    const lootByResource = hasNativeReportLoot
-      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(reportLoot[type] ?? 0)]))
-      : hasInterpretedLoot
-        ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
-      : Object.fromEntries(rewardTypes.map((type) => [type, 0]));
+    const lootByResource = hasInterpretedLoot
+      ? Object.fromEntries(rewardTypes.map((type) => [type, Number(interpretedLoot[type] ?? 0)]))
+      : hasNativeReportLoot
+        ? Object.fromEntries(rewardTypes.map((type) => [type, Number(reportLoot[type] ?? 0)]))
+        : Object.fromEntries(rewardTypes.map((type) => [type, 0]));
     const lootTotal = rewardTypes.reduce((sum, type) => sum + Number(lootByResource[type] ?? 0), 0);
     const researchType = resourceName('ResearchPoints');
     const researchTotal = Number(lootByResource[researchType] ?? 0);

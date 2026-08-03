@@ -62,7 +62,53 @@ function section(title, icon, content, accent = '#006c91') {
 }
 
 export class BaseIntelligenceHooks {
-  constructor({ context, hub }) { this.context = context; this.hub = hub; this.ids = []; }
+  constructor({ context, hub }) {
+    this.context = context;
+    this.hub = hub;
+    this.ids = [];
+    this.tunnelMarkers = [];
+  }
+
+  clearTunnelMarkers() {
+    for (const marker of this.tunnelMarkers) {
+      try { marker.destroy?.(); } catch { /* A map refresh may already have removed it. */ }
+    }
+    this.tunnelMarkers = [];
+  }
+
+  renderTunnelMarkers(tunnels) {
+    this.clearTunnelMarkers();
+    const qx = globalThis.qx;
+    const app = qx?.core?.Init?.getApplication?.();
+    const desktop = app?.getDesktop?.() ?? app?.getRoot?.();
+    const background = app?.getBackgroundArea?.();
+    const visMain = this.hub.root()?.Vis?.VisMain?.GetInstance?.();
+    const region = visMain?.get_Region?.();
+    if (!qx || !desktop?.add || !visMain || !region) return;
+    const gridWidth = Number(region.get_GridWidth?.() ?? 0);
+    const gridHeight = Number(region.get_GridHeight?.() ?? gridWidth);
+    const zoom = Number(region.get_ZoomFactor?.() ?? 1);
+    const width = Math.max(8, zoom * gridWidth);
+    const height = Math.max(6, width * 0.59);
+    for (const tunnel of tunnels) {
+      const color = tunnel.usable ? '#06ff00' : '#ff3600';
+      const marker = new qx.ui.core.Widget().set({
+        width, height, opacity: 0.52,
+        backgroundColor: color,
+        decorator: new qx.ui.decoration.Decorator(2, 'solid', color),
+        anonymous: true
+      });
+      const left = Number(visMain.ScreenPosFromWorldPosX?.(Number(tunnel.x) * gridWidth));
+      const top = Number(visMain.ScreenPosFromWorldPosY?.(Number(tunnel.y) * gridHeight));
+      if (!Number.isFinite(left) || !Number.isFinite(top)) {
+        marker.destroy?.();
+        continue;
+      }
+      if (desktop.addAfter && background) desktop.addAfter(marker, background, { left, top });
+      else desktop.add(marker, { left, top });
+      this.tunnelMarkers.push(marker);
+    }
+  }
 
   onlineState(city) {
     try {
@@ -214,8 +260,60 @@ export class BaseIntelligenceHooks {
     return true;
   }
 
+  installMoveInfo() {
+    const prototype = globalThis.webfrontend?.gui?.region?.RegionCityMoveInfo?.prototype;
+    if (!prototype || this.ids.includes('base-intelligence:move-info')) return false;
+    const methodName = Object.getOwnPropertyNames(prototype).find((name) =>
+      typeof prototype[name] === 'function' && /GetCityMoveCooldownTime/.test(String(prototype[name]))
+    );
+    if (!methodName) return false;
+    const original = prototype[methodName];
+    const hooks = this;
+    function updateMoveInfoWithIntelligence(x, y, ...args) {
+      const result = original.call(this, x, y, ...args);
+      try {
+        const intel = hooks.hub.regionTargetIntel({ get_RawX: () => x, get_RawY: () => y });
+        hooks.renderTunnelMarkers(intel.tunnels);
+        if (!this.__suiteMoveIntelligence || this.__suiteMoveIntelligence.isDisposed?.()) {
+          this.__suiteMoveIntelligence = new globalThis.qx.ui.basic.Label('').set({
+            rich: true, wrap: true, paddingTop: 7, textColor: '#ffffff'
+          });
+          this.add(this.__suiteMoveIntelligence);
+        }
+        const levels = Object.entries(intel.levels).sort(([a], [b]) => Number(b) - Number(a))
+          .map(([level, count]) => `${count}× L${level}`).join(', ') || 'None';
+        const tunnelRows = intel.tunnels.map((tunnel) => {
+          const color = tunnel.usable ? '#06ff00' : '#ff3600';
+          return `<span style="color:${color};font-weight:bold">● ${tunnel.x}:${tunnel.y} · Tunnel L${tunnel.level} · requires offense ${tunnel.requiredOffense}</span>`;
+        }).join('<br>') || '<span style="color:#c2c2c2">No tunnel exits in range.</span>';
+        this.__suiteMoveIntelligence.setValue(
+          `<b>Suite move intelligence for ${x}:${y}</b><br>`
+          + `Forgotten bases: <b>${intel.forgotten}</b> (core ${intel.innerForgotten}) · Waves: <b>${intel.waves}</b><br>`
+          + `Levels: ${escapeHtml(levels)}<br>Estimated attacks: <b>${intel.possibleAttacks}</b> · CP attacks: ${intel.cpAttacks}<br>`
+          + `Offense level: <b>${intel.offense.toFixed(2)}</b><br>${tunnelRows}`
+        );
+        this.__suiteMoveIntelligence.show();
+      } catch (error) { hooks.context.logger?.warn?.('Unable to enrich base-move information.', error); }
+      return result;
+    }
+    prototype[methodName] = updateMoveInfoWithIntelligence;
+    const moveInfo = globalThis.webfrontend?.gui?.region?.RegionCityMoveInfo?.getInstance?.();
+    const disappearListener = moveInfo?.addListener?.('disappear', () => hooks.clearTunnelMarkers());
+    const id = 'base-intelligence:move-info';
+    this.context.hooks.register(id, () => {
+      if (prototype[methodName] === updateMoveInfoWithIntelligence) prototype[methodName] = original;
+      if (disappearListener != null && !moveInfo?.isDisposed?.()) {
+        moveInfo.removeListenerById?.(disappearListener);
+      }
+      hooks.clearTunnelMarkers();
+    }, { replace: true });
+    this.ids.push(id);
+    return true;
+  }
+
   install() {
     let count = 0;
+    if (this.installMoveInfo()) count += 1;
     for (const name of ['RegionCityStatusInfoOwn', 'RegionCityStatusInfoAlliance', 'RegionCityStatusInfoEnemy']) {
       if (!this.ids.includes(`base-intelligence:${name}`) && this.installTooltip(name)) count += 1;
     }
@@ -234,5 +332,6 @@ export class BaseIntelligenceHooks {
     // every wrapper can restore the function it originally received.
     for (const id of [...this.ids].reverse()) this.context.hooks.uninstall(id);
     this.ids = [];
+    this.clearTunnelMarkers();
   }
 }

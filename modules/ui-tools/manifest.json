@@ -1,1 +1,1 @@
-{"id":"ui-tools","name":"UI Tools","version":"0.1.0","apiVersion":"1.0.0","author":"ProfessorSr","lastUpdated":"2026-07-20","description":"Make compatible native overlays movable and inspect Suite window behavior.","dependencies":[],"permissions":["events","windows"],"settings":{}}
+{"id":"ui-tools","name":"UI Tools","version":"0.2.0","apiVersion":"1.0.0","author":"ProfessorSr","lastUpdated":"2026-07-20","description":"Make compatible native overlays movable and inspect Suite window behavior.","dependencies":[],"permissions":["events","windows"],"settings":{}}

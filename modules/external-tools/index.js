@@ -29,7 +29,7 @@ export function cncOptLink(data) {
 
 export class ExternalToolsModule extends Module {
   constructor() {
-    super({ id: 'external-tools', name: 'External Analysis', version: '0.1.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Generate, copy, and explicitly open links or payloads for external base-analysis tools.', permissions: ['game', 'settings', 'windows'], settings: {
+    super({ id: 'external-tools', name: 'External Analysis', version: '0.2.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Generate, copy, and explicitly open links or payloads for external base-analysis tools.', permissions: ['game', 'settings', 'windows'], settings: {
       cncMapTemplate: { type: 'string', default: 'https://cnc-map.com/{world}' },
       analyzerTemplate: { type: 'string', default: '' }
     } });

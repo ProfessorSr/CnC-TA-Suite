@@ -1,6 +1,6 @@
 # War Room
 
-War Room v0.8.0 is the Suite's unified combat workspace and the preparation release for its next major update.
+War Room v0.10.0 is the Suite's unified combat workspace and the preparation release for its next major update.
 
 Best Formation search supports explicit runs of 25, 50, 75, 100, 150, or 200 native simulations.
 
@@ -13,8 +13,7 @@ Data flow:
 Sections:
 
 - Search and Target Information
-- Attack Planner
-- Battle Simulator
+- Attack Simulator (planner, native simulation, and results)
 - Report Summary
 - Army Analyzer
 - Combat Statistics
@@ -23,7 +22,7 @@ Search is the first/default tab and reuses the shared Scanner Hub discovery serv
 
 Attack capacity distinguishes fully repairable hits from total attack opportunities. Repair storage divided by the conservative largest offense-group repair requirement gives the fully recoverable count; War Room then includes one final hit whose damage may remain partially unrepaired, with the result still capped by command points.
 
-Select an attacker and target in the game before opening or refreshing War Room. The simulator action opens the native combat-setup view. Native battle results, attack history, and favorite targets persist locally between sessions. Alliance-shared intelligence remains a planned extension.
+Select an attacker and target in the game before opening or refreshing War Room. The simulator action opens the native combat-setup view. Native battle results and attack history persist locally between sessions. Alliance-shared intelligence remains a planned extension.
 
 Attack Planner analyzes the current offensive formation and loaded target defense, then renders a visual 9×4 recommendation for Construction Yard, Defense Facility, Command Center, total defense damage, or maximum Research Points goals. Its initial preview uses unit roles and lane threats. Preview editing remains reversible inside War Room, with movement, mirror, row-swap, undo, reset, and manual-simulation controls shown in the planner. Its scrollable left result card uses the same defender, repair, loot, outcome, and duration presentation as cached Battle Simulator cards; both best-formation searches and **Simulate Preview** publish their complete result there. While native attack setup is open, a movable, native-themed Formation Controls palette appears beside the lower-right edge of the play area. Its 31-pixel icon buttons use a narrow 3×6 arrangement inspired by the established formation pad: simulation/open controls, directional movement, mirrors, visibility groups, reset/save, and three row swaps are grouped by function. It can toggle all or selected troop groups, enter a persistent single-troop hide/show mode, open War Room, restore the attack-screen starting layout, or save the current formation. Its position is retained. Clicking Simulate Best Formation submits non-destructive candidates to the game's native `SimulateBattle` command and ranks the returned combat results by the selected objective. The candidate search does not move live units and observes the game's simulation cooldown.
 

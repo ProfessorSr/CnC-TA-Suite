@@ -1,10 +1,12 @@
-import { ChromeStorageAdapter } from './chromeStorage.js';
 import { LocalStorageAdapter } from './localStorage.js';
 
 export class StorageService {
   constructor(logger, { primary = null, fallback = null } = {}) {
     this.logger = logger;
-    this.primary = primary ?? new ChromeStorageAdapter();
+    // Suite state belongs to the game-page origin and does not require the
+    // extension message bridge. Using localStorage directly avoids bridge
+    // startup timeouts while retaining injectable adapters for integrations.
+    this.primary = primary ?? new LocalStorageAdapter();
     this.fallback = fallback ?? new LocalStorageAdapter();
     this.primaryUnavailable = false;
     this.fallbackWarningLogged = false;
@@ -14,7 +16,7 @@ export class StorageService {
     this.primaryUnavailable = true;
     if (!this.fallbackWarningLogged) {
       this.fallbackWarningLogged = true;
-      this.logger.warn('Chrome storage unavailable; using localStorage for this session.', error);
+      this.logger.warn('Primary storage unavailable; using localStorage for this session.', error);
     }
   }
 

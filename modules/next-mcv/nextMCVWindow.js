@@ -110,7 +110,7 @@ function makeProgressSection(qx, title) {
   };
 
   const amount = makeLabel(qx, '—');
-  const detail = makeLabel(qx, '—', { textColor: 'text-disabled' });
+  const detail = makeLabel(qx, '—', { textColor: '#17262d', font: 'bold' });
 
   box.add(header);
   box.add(progressTrack);

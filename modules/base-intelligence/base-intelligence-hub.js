@@ -216,6 +216,48 @@ export class BaseIntelligenceHub {
         : innerForgotten <= 31 ? 2
           : innerForgotten <= 41 ? 3
             : innerForgotten <= 51 ? 4 : 5;
+    const tunnelRangeText = String(call(this.main()?.get_Alliance?.(), ['get_Announcement']) ?? '');
+    const tunnelRange = Number(tunnelRangeText.match(/\[tir\](\d+)\[\/tir\]/i)?.[1] ?? 6);
+    const activationDifference = Number(call(server, ['get_POIActivationLevelDifference']) ?? 5);
+    const offense = Number(call(ownCity, ['get_LvlOffense', 'get_OffenseLevel']) ?? own?.offenseLevel ?? 0);
+    const poiType = this.root()?.Data?.WorldSector?.ObjectType?.PointOfInterest;
+    const region = this.root()?.Vis?.VisMain?.GetInstance?.()?.get_Region?.();
+    const regionPoiType = this.root()?.Vis?.VisObject?.EObjectType?.RegionPointOfInterest;
+    const gridWidth = Number(region?.get_GridWidth?.() ?? 0);
+    const gridHeight = Number(region?.get_GridHeight?.() ?? gridWidth);
+    const tunnels = [];
+    for (let scanY = y - tunnelRange; scanY <= y + tunnelRange; scanY += 1) {
+      for (let scanX = x - tunnelRange; scanX <= x + tunnelRange; scanX += 1) {
+        const distance = Math.hypot(x - scanX, y - scanY);
+        if (distance > tunnelRange) continue;
+        const object = call(world, ['GetObjectFromPosition'], scanX, scanY);
+        if (!object) continue;
+        const visObject = region && gridWidth > 0 && gridHeight > 0
+          ? call(region, ['GetObjectFromPosition'], scanX * gridWidth, scanY * gridHeight)
+          : null;
+        const visObjectType = Number(call(visObject, ['get_VisObjectType']) ?? -1);
+        const visSubtype = Number(call(visObject, ['get_Type']) ?? -1);
+        const isVisiblePoi = visObjectType === Number(regionPoiType);
+        if (isVisiblePoi && visSubtype !== 0) continue;
+        const publicType = Number(call(object, ['get_Type', 'get_ObjectType']) ?? -1);
+        const storedType = Number(object.Type ?? -1);
+        const className = String(object.constructor?.name ?? '').toLowerCase();
+        const isWorldPoi = storedType === Number(poiType) || className.includes('pointofinterest');
+        if (!isVisiblePoi && !isWorldPoi) continue;
+        // Visible region objects expose the reliable tunnel subtype used by
+        // the old scripts. World-cache objects vary by game build: some return
+        // subtype 0, while others return the outer PointOfInterest enum value.
+        if (!isVisiblePoi && publicType !== -1 && publicType !== 0 && publicType !== Number(poiType)) continue;
+        const tunnelObject = isVisiblePoi ? visObject : object;
+        const tunnelX = Number(call(tunnelObject, ['get_RawX', 'get_X']) ?? scanX);
+        const tunnelY = Number(call(tunnelObject, ['get_RawY', 'get_Y']) ?? scanY);
+        const tunnelDistance = Math.hypot(x - tunnelX, y - tunnelY);
+        if (tunnelDistance > tunnelRange) continue;
+        const level = Number(call(tunnelObject, ['get_Level', 'get_BaseLevel']) ?? 0);
+        const requiredOffense = Math.max(0, level - activationDifference);
+        tunnels.push(Object.freeze({ x: tunnelX, y: tunnelY, level, distance: tunnelDistance, requiredOffense, usable: offense >= requiredOffense }));
+      }
+    }
     return Object.freeze({
       x, y, attacker: own?.name ?? 'Current base', cpAvailable, cpCost, cpAttacks,
       maxRepairCostSeconds: maxRepairCost, repairAvailableSeconds: repairAvailable,
@@ -223,7 +265,7 @@ export class BaseIntelligenceHub {
       fullyRepairableAttacks, repairAttacks, possibleAttacks, loot: Object.freeze(loot), surrounding,
       attackRadius: radius, innerAttackRadius: Math.floor(radius),
       forgotten, innerForgotten, waves, levels: Object.freeze(levels),
-      targetLoaded: Boolean(targetCity)
+      targetLoaded: Boolean(targetCity), offense, tunnelRange, tunnels: Object.freeze(tunnels)
     });
   }
 }

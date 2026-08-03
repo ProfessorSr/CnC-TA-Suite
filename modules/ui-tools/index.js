@@ -1,7 +1,7 @@
 import { Module } from '../../core/interfaces/module.js';
 
 export class UiToolsModule extends Module {
-  constructor() { super({ id: 'ui-tools', name: 'UI Tools', version: '0.1.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Make compatible native overlays movable and manage Suite window modes.', permissions: ['events', 'windows'], settings: {} }); this.adjusted = new Set(); }
+  constructor() { super({ id: 'ui-tools', name: 'UI Tools', version: '0.2.0', apiVersion: '1.0.0', author: 'ProfessorSr', description: 'Make compatible native overlays movable and manage Suite window modes.', permissions: ['events', 'windows'], settings: {} }); this.adjusted = new Set(); }
   async enable(context) { this.context = context; const apply = () => this.apply(); context.events.on('game:tick', apply); apply(); }
   apply() { const registry = globalThis.qx?.core?.ObjectRegistry?.getRegistry?.() ?? {}; for (const widget of Object.values(registry)) { const name = String(widget?.classname ?? widget?.constructor?.classname ?? ''); if (!/(Mail|Forum|Message).*Overlay|Overlay.*(Mail|Forum|Message)/i.test(name)) continue; try { widget.setMovable?.(true); widget.setUseMoveFrame?.(true); this.adjusted.add(widget); } catch {} } }
   records() { return [...(this.context?.windows?.windows?.values?.() ?? [])].filter((record) => record.id !== 'ui-tools' && !record.window?.isDisposed?.()); }

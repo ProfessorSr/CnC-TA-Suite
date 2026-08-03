@@ -18,7 +18,7 @@ const settings = Object.freeze(Object.fromEntries(BINDS.map(([key, label, , defa
 
 export const hotkeysDefinition = Object.freeze({
   manifest: {
-    id: 'hotkeys', name: 'Hotkeys', version: '0.1.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
+    id: 'hotkeys', name: 'Hotkeys', version: '0.2.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
     author: 'ProfessorSr', description: 'Configurable keyboard shortcuts for Suite navigation and tools.',
     permissions: ['modules', 'settings', 'windows'], settings
   },

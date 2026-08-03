@@ -5,7 +5,7 @@ import { AllianceTabs } from './alliance-tabs.js';
 export const allianceManifest = Object.freeze({
   id: 'alliance',
   name: 'Alliance Intelligence',
-  version: '0.1.0',
+  version: '0.2.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Alliance member, score, POI, and tier intelligence in a Suite window.',

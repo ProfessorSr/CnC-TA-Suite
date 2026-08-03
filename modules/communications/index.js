@@ -39,7 +39,7 @@ export function allianceRecipients(members, group = 'all') {
 export class CommunicationsModule extends Module {
   constructor() {
     super({
-      id: 'communications', name: 'Communications', version: '0.1.0', apiVersion: '1.0.0',
+      id: 'communications', name: 'Communications', version: '0.2.0', apiVersion: '1.0.0',
       author: 'ProfessorSr',
       description: 'BBCode composition, whisper contacts, and user-confirmed in-game mail with alliance role recipients.',
       permissions: ['game', 'storage', 'settings', 'windows'],
