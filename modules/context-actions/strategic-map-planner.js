@@ -44,6 +44,7 @@ export class StrategicMapPlanner {
     this.dirtySectors = new Map();
     this.discovery = null;
     this.activeMove = null;
+    this.refreshTimer = null;
   }
 
   root() {
@@ -134,6 +135,21 @@ export class StrategicMapPlanner {
   }
 
   refresh() {
+    // Region redraw is expensive and several planning operations update both
+    // object and territory caches. Coalesce bursts into one redraw instead of
+    // blocking the UI once per low-level mutation.
+    if (this.refreshTimer != null) clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.refreshNow();
+    }, 40);
+  }
+
+  refreshNow() {
+    if (this.refreshTimer != null) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
     this.region()?.[this.discover().regionRefresh]?.();
   }
 
@@ -226,21 +242,23 @@ export class StrategicMapPlanner {
   isDirty() { return this.dirtySectors.size > 0 || this.history.length > 0; }
   undoLabel() { return this.canUndo() ? `Undo ${this.history.at(-1).label.toLowerCase()}` : 'Undo'; }
 
-  undo() {
+  undo({ refresh = true } = {}) {
     const entry = this.history.pop();
     if (!entry) return false;
     entry.undo();
-    this.refresh();
+    if (refresh) this.refresh();
     return true;
   }
 
   async reset() {
     this.cancelMove();
-    while (this.history.length) this.undo();
+    // Restore every operation first, then redraw once. Previously a reset of
+    // N plans forced N full region rebuilds on the UI thread.
+    while (this.history.length) this.undo({ refresh: false });
     const { version } = this.discover();
     for (const sector of this.dirtySectors.values()) sector[version] = 0;
     this.dirtySectors.clear();
-    this.refresh();
+    this.refreshNow();
     this.context.notifications?.show?.('Strategic map plans reset; affected sectors will refresh from the live world.');
   }
 
@@ -542,5 +560,7 @@ export class StrategicMapPlanner {
   async destroy() {
     if (this.isDirty()) await this.reset();
     this.cancelMove();
+    if (this.refreshTimer != null) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
   }
 }

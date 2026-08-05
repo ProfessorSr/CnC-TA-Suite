@@ -6,6 +6,7 @@ import {
   normalizeWarRoomCompanionSettings
 } from './companion-settings.js';
 import {
+  formationTargetMatches,
   loadFormationPresets as readFormationPresets,
   saveFormationPresets
 } from './formation-preset-store.js';
@@ -73,6 +74,63 @@ function duration(seconds) {
   const minutes = Math.floor((value % 3600) / 60);
   const remainder = value % 60;
   return `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+}
+
+function compactNumber(value) {
+  const number = Number(value) || 0;
+  if (Math.abs(number) >= 1_000_000_000) return `${(number / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(number) >= 1_000_000) return `${(number / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(number) >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
+  return Math.round(number).toLocaleString();
+}
+
+function intelSection(title, content, accent) {
+  return `<div style="margin-top:7px;border-top:1px solid ${accent};padding-top:5px">`
+    + `<div style="color:${accent};font-size:12px;font-weight:bold;text-transform:uppercase">${escapeHtml(title)}</div>`
+    + content + '</div>';
+}
+
+function targetIntelCard(intel) {
+  const estimate = intel.attackEstimate ?? {};
+  const repairLimit = Number.isFinite(estimate.fullyRepairableAttacks)
+    ? `${estimate.fullyRepairableAttacks} fully repairable + 1 final hit`
+    : 'Repair storage is not limiting';
+  const loot = (intel.loot ?? []).filter((resource) =>
+    Number(resource.amount) > 0
+    && !/^RepairChargeBase$/i.test(String(resource.name ?? '').replace(/\s/g, ''))
+  );
+  const lootContent = loot.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:3px">${loot.map((resource) =>
+      `<span style="padding:3px 6px;background:#edf5f7;border:1px solid #91a5ad;border-radius:3px">`
+      + `<b>${escapeHtml(/^ResearchPoints$/i.test(String(resource.name ?? '').replace(/\s/g, '')) ? 'RP' : resource.name)}</b> ${compactNumber(resource.amount)}</span>`).join('')}</div>`
+    : '<div style="color:#53656d">Rewards are unavailable until the target finishes loading.</div>';
+  const composition = Object.entries(intel.composition ?? {}).map(([category, summary]) =>
+    `${escapeHtml(category)} <b>${Number(summary.count ?? 0)}</b>`).join(' · ');
+  const level = Number(intel.level);
+  const levelText = Number.isFinite(level) ? level.toFixed(1).replace(/\.0$/, '') : '—';
+  const hasBaseCondition = intel.baseCondition != null && Number.isFinite(Number(intel.baseCondition));
+  const hasDefenseCondition = intel.defenseCondition != null && Number.isFinite(Number(intel.defenseCondition));
+  const conditionParts = [
+    hasBaseCondition ? `Base <b>${Math.round(Number(intel.baseCondition))}%</b>` : null,
+    hasDefenseCondition ? `Defense <b>${Math.round(Number(intel.defenseCondition))}%</b>` : null,
+    intel.support
+      ? `${escapeHtml(intel.support.name)} Lvl ${intel.support.level} (${intel.support.condition}%)`
+      : null
+  ].filter(Boolean);
+  return '<div style="padding:7px 10px;background:#c8d3d7;color:#17262d;border:1px solid #91a5ad;'
+    + 'border-top:3px solid #edf5f7;border-bottom:4px solid #667a83;border-radius:7px">'
+    + `<div style="font-size:15px;font-weight:bold">${escapeHtml(intel.name ?? 'Target')} <span style="color:#53656d">Lvl ${escapeHtml(levelText)}</span></div>`
+    + `<div style="color:#334850">${escapeHtml(intel.type ?? 'Target')} at <b>${escapeHtml(intel.x)}:${escapeHtml(intel.y)}</b>`
+    + ` · ${escapeHtml(intel.owner ?? 'Forgotten')}${intel.alliance ? ` · ${escapeHtml(intel.alliance)}` : ''}</div>`
+    + intelSection('Attack capacity',
+      `<div><b style="color:#176f35;font-size:16px">${estimate.possibleAttacks ?? 0}</b> estimated attacks from <b>${escapeHtml(intel.attacker ?? 'Current base')}</b></div>`
+      + `<div>CP: <b>${estimate.commandPointAttacks ?? 0}</b> attacks · ${compactNumber(estimate.cpAvailable)} available · <b>${compactNumber(intel.cp)}</b> per attack</div>`
+      + `<div>Repair: ${escapeHtml(repairLimit)} · ${duration(estimate.repairAvailableSeconds)} stored · ${duration(estimate.maxRepairSeconds)} max/run</div>`, '#176f35')
+    + intelSection('Resources & rewards', lootContent, '#006b91')
+    + (conditionParts.length || composition ? intelSection('Target condition',
+      `${conditionParts.length ? `<div>${conditionParts.join(' · ')}</div>` : ''}`
+      + `${composition ? `<div style="color:#53656d">${composition}</div>` : ''}`, '#53656d') : '')
+    + '</div>';
 }
 
 function repairCostText(analysis) {
@@ -211,10 +269,10 @@ export class WarRoomWindow {
     ]) plannerGoal.add(new qx.ui.form.ListItem(name, null, id));
     const recommend = new qx.ui.form.Button('Simulate Best Formation');
     const searchDetail = new qx.ui.form.SelectBox().set({ width: 90 });
-    for (const count of [25, 50, 75, 100, 150, 200]) {
+    for (const count of [10, 25, 50, 75, 100]) {
       searchDetail.add(new qx.ui.form.ListItem(String(count), null, count));
     }
-    searchDetail.setSelection([searchDetail.getChildren()[1]]);
+    searchDetail.setSelection([searchDetail.getChildren()[2]]);
     plannerControls.add(label(qx, 'Attack goal'));
     plannerControls.add(plannerGoal);
     plannerControls.add(label(qx, 'Search'));
@@ -297,10 +355,10 @@ export class WarRoomWindow {
       ['Maximize Research Points (RP)', 'rp']
     ]) compactGoal.add(new qx.ui.form.ListItem(name, null, id));
     const compactSearchDetail = new qx.ui.form.SelectBox().set({ width: 72 });
-    for (const count of [25, 50, 75, 100, 150, 200]) {
+    for (const count of [10, 25, 50, 75, 100]) {
       compactSearchDetail.add(new qx.ui.form.ListItem(String(count), null, count));
     }
-    compactSearchDetail.setSelection([compactSearchDetail.getChildren()[1]]);
+    compactSearchDetail.setSelection([compactSearchDetail.getChildren()[2]]);
     const compactRecommend = new qx.ui.form.Button('Simulate');
     const compactTop = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
     compactTop.add(label(qx, 'Goal'));
@@ -338,6 +396,12 @@ export class WarRoomWindow {
     });
     compactResultScroll.add(compactPlannerResult);
     compactPlannerWindow.add(compactResultScroll, { flex: 1 });
+    const compactLiveActions = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
+    const compactReplayLive = new qx.ui.form.Button('▶ Sim').set({ enabled: false });
+    const compactUseLive = new qx.ui.form.Button('Use').set({ enabled: false });
+    compactLiveActions.add(compactReplayLive);
+    compactLiveActions.add(compactUseLive);
+    compactPlannerWindow.add(compactLiveActions);
     const compactApplyFormation = new qx.ui.form.Button('Apply Formation').set({
       enabled: false,
       toolTipText: 'Move the active attack formation to the displayed optimized layout'
@@ -657,11 +721,8 @@ export class WarRoomWindow {
     if (EXPERIMENTAL_ONE_CLICK_FORMATION_ENABLED) planner.page.add(experimentalBox);
 
     let formationPresets = [];
-    const presetMatchesTarget = (preset, snapshot = this.hub.snapshot()) => Boolean(
-      preset?.target?.id != null
-      && snapshot.target?.id != null
-      && String(preset.target.id) === String(snapshot.target.id)
-    );
+    const presetMatchesTarget = (preset, snapshot = this.hub.snapshot()) =>
+      formationTargetMatches(preset?.target, snapshot.target);
     const selectedPreset = () => {
       const id = presetSelect.getSelection?.()?.[0]?.getModel?.();
       return formationPresets.find((preset) => String(preset.id) === String(id)) ?? null;
@@ -783,9 +844,12 @@ export class WarRoomWindow {
     search.page.addAt(searchExportControls, 1);
     const targetStatus = label(qx, 'Search from the current attacker base, or open War Room from an attack screen.');
     search.page.add(targetStatus);
-    const targetIntel = table(qx, ['Target Information', 'Value']);
-    targetIntel.widget.set({ height: 245, minHeight: 180 });
-    search.page.add(targetIntel.widget);
+    const targetIntel = label(qx, targetIntelCard({ name: 'No target selected', x: '—', y: '—' }), {
+      rich: true, textColor: '#17262d', padding: 2
+    });
+    const targetIntelScroll = new qx.ui.container.Scroll().set({ height: 245, minHeight: 180 });
+    targetIntelScroll.add(targetIntel);
+    search.page.add(targetIntelScroll);
     const stats = keyValuePage(qx, [
       'Metric', 'Attack players', 'Attack Forgotten', 'Defend Forgotten',
       'Defend players', 'All attacks', 'All defense'
@@ -952,11 +1016,15 @@ export class WarRoomWindow {
     const cachedResultsTitle = label(qx, 'Live formation and simulation history', { font: 'bold' });
     const cachedResultsLayout = new qx.ui.layout.Grid(6, 0);
     cachedResultsLayout.setColumnWidth(0, 158);
-    cachedResultsLayout.setColumnFlex(1, 1);
+    cachedResultsLayout.setColumnWidth(1, 158);
+    cachedResultsLayout.setColumnFlex(2, 1);
     const cachedResults = new qx.ui.container.Composite(cachedResultsLayout);
     const cachedHistoryCards = new qx.ui.container.Composite(new qx.ui.layout.HBox(5));
     const cachedHistoryColumn = new qx.ui.container.Composite(new qx.ui.layout.VBox(5));
     const liveFormationCard = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({
+      width: 158, minWidth: 158, maxWidth: 158
+    });
+    const bestSoFarCard = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({
       width: 158, minWidth: 158, maxWidth: 158
     });
     const cachedHistoryScroll = new qx.ui.container.Scroll().set({
@@ -967,7 +1035,8 @@ export class WarRoomWindow {
     cachedHistoryColumn.add(label(qx, 'History', { font: 'bold' }));
     cachedHistoryColumn.add(cachedHistoryScroll, { flex: 1 });
     cachedResults.add(liveFormationCard, { row: 0, column: 0 });
-    cachedResults.add(cachedHistoryColumn, { row: 0, column: 1 });
+    cachedResults.add(bestSoFarCard, { row: 0, column: 1 });
+    cachedResults.add(cachedHistoryColumn, { row: 0, column: 2 });
     const miniMove = new qx.ui.container.Composite(new qx.ui.layout.HBox(4)).set({
       padding: 5, backgroundColor: '#27333a'
     });
@@ -1220,13 +1289,28 @@ export class WarRoomWindow {
           && String(snapshot.target.id) !== String(this.intelTargetId ?? '')
         ) {
           targetStatus.setValue(`Selected from game: ${snapshot.target.name}. Loading target intelligence…`);
-          targetIntel.model.setData([
-            ['Target', snapshot.target.name],
-            ['Level / coordinates', `${snapshot.target.level} / ${snapshot.target.x}:${snapshot.target.y}`],
-            ['Owner', snapshot.target.owner],
-            ['Alliance', snapshot.target.alliance || '—'],
-            ['Attack cost', `${snapshot.cpCost} CP`]
-          ]);
+          const resourceNames = Object.fromEntries(Object.entries(snapshot.resourceTypes ?? {})
+            .filter(([, type]) => typeof type === 'number')
+            .map(([name, type]) => [String(type), name === 'Gold' ? 'Credits' : name]));
+          const loadedLoot = Object.entries(snapshot.loot ?? {})
+            .filter(([, amount]) => Number(amount) > 0)
+            .map(([type, amount]) => ({
+              type: Number(type),
+              name: resourceNames[String(type)] ?? `Resource ${type}`,
+              amount: Number(amount)
+            }));
+          const averageCondition = (entities) => entities.length
+            ? entities.reduce((sum, entity) => sum + Number(entity.health ?? 0), 0) / entities.length
+            : null;
+          targetIntel.setValue(targetIntelCard({
+            ...snapshot.target,
+            cp: snapshot.cpCost,
+            attacker: snapshot.attacker?.name,
+            attackEstimate: snapshot.attackEstimate,
+            loot: loadedLoot,
+            baseCondition: averageCondition(snapshot.buildings ?? []),
+            defenseCondition: averageCondition(snapshot.defenseUnits ?? [])
+          }));
         }
       } catch (error) {
         footer.setValue(`War Room data unavailable: ${error?.message ?? error}`);
@@ -1247,31 +1331,8 @@ export class WarRoomWindow {
     let observedTargetId = null;
     let observedFormation = null;
     const simulationCache = new Map();
-    const pruneSimulationCache = () => {
-      if (simulationCache.size <= 25) return;
-      const ranked = [...simulationCache.entries()].map(([key, entry]) => {
-        try {
-          const objectiveScore = WarRoomCalculator.scoreSimulation(
-            entry.response, entry.snapshot, entry.goal ?? 'cy'
-          ).score;
-          const research = WarRoomCalculator.analyzeNativeSimulation(
-            entry.response, entry.snapshot, entry.name ?? 'Cached'
-          ).research;
-          return { key, objectiveScore, research: Number(research || 0), at: Number(entry.at || 0) };
-        } catch {
-          return { key, objectiveScore: Number.POSITIVE_INFINITY, research: 0, at: Number(entry.at || 0) };
-        }
-      }).sort((left, right) =>
-        left.objectiveScore - right.objectiveScore
-        || right.research - left.research
-        || right.at - left.at
-      );
-      const keep = new Set(ranked.slice(0, 25).map((entry) => entry.key));
-      for (const key of simulationCache.keys()) if (!keep.has(key)) simulationCache.delete(key);
-    };
     const cacheSimulation = (key, entry) => {
       simulationCache.set(key, { goal: entry.goal ?? selectedGoal(), ...entry });
-      pruneSimulationCache();
     };
     let displayedRecommendation = null;
     let previewOriginal = null;
@@ -1599,18 +1660,33 @@ export class WarRoomWindow {
         const goal = selectedGoal();
         const detail = searchDetail.getSelection?.()?.[0]?.getModel?.() ?? 50;
         const candidates = WarRoomCalculator.candidateFormations(snapshot, goal, detail);
+        // A best-formation search is one self-contained comparison session.
+        // Discard earlier/manual results, then retain every distinct candidate
+        // from this run regardless of the requested simulation count.
+        simulationCache.clear();
+        this.displayedSimulationEntries = [];
+        this.nativeSimulation = null;
+        this.nativeSimulationReplay = null;
+        liveFormationSequence = 0;
+        renderSimulations();
+        const updateSimulationCounter = (completed) => {
+          const done = Math.max(0, Math.min(candidates.length, Number(completed) || 0));
+          const remaining = candidates.length - done;
+          recommend.setLabel?.(`Stop · ${remaining} left`);
+          compactRecommend.setLabel?.(`Stop · ${remaining} left`);
+          safeSetValue(plannerStatus,
+            `${done}/${candidates.length} simulations complete · ${remaining} remaining`);
+        };
+        updateSimulationCounter(0);
         setPlannerResult(
           '<b>Best Formation Result</b><br>'
-          + `<span style="color:#005f86">Comparing ${candidates.length} candidate formations…</span>`
-        );
-        setCompactProcess(
-          '<b>Formation Optimizer</b><br>'
           + `<span style="color:#005f86">Comparing ${candidates.length} candidate formations…</span>`
         );
         let best = null;
         for (let index = 0; index < candidates.length; index += 1) {
           const candidate = candidates[index];
           if (buildDisposed || runId !== recommendationSequence) return;
+          updateSimulationCounter(index);
           setPlannerResult(
             '<b>Best Formation Result</b><br>'
             + '<span style="color:#005f86"><b>Simulation in progress</b></span><br><br>'
@@ -1623,16 +1699,14 @@ export class WarRoomWindow {
                 + '</span>'
               : '')
           );
-          setCompactProcess(
-            '<b>Simulation in progress</b><br><br>'
-            + `<b>Candidate:</b> ${index + 1} of ${candidates.length}<br>`
-            + candidateTestingHtml(candidate)
-            + (best
-              ? `<br><br><b>Best so far:</b><br>${escapeHtml(best.candidate.name)}`
-              : '')
-          );
-          safeSetValue(plannerStatus, `Simulation in progress (${index + 1}/${candidates.length})…`);
           this.hub.applyRecommendedFormation(candidate.units);
+          compactLiveEntry = null;
+          compactReplayLive.setEnabled(false);
+          compactUseLive.setEnabled(false);
+          setCompactProcess(
+            '<b>Current live formation</b><br>'
+            + `<span style="color:#52636b">Simulating candidate ${index + 1} of ${candidates.length}…</span>`
+          );
           await new Promise((resolve) => setTimeout(resolve, 250));
           if (buildDisposed || runId !== recommendationSequence) return;
           const refreshedSnapshot = this.hub.snapshot();
@@ -1686,6 +1760,7 @@ export class WarRoomWindow {
           if (!best || result.score < best.result.score) {
             best = { candidate, result, response, snapshot: liveSnapshot };
           }
+          updateSimulationCounter(index + 1);
           const candidateResult = simulationDetailsHtml(nativeAnalysis);
           setPlannerResult(
             '<b>Best Formation Result</b><br>'
@@ -1698,13 +1773,6 @@ export class WarRoomWindow {
                 + `<b>Best so far:</b><br>${escapeHtml(best.candidate.name)}`
                 + '</span>'
               : '')
-          );
-          setCompactProcess(
-            '<b>Simulation in progress</b><br><br>'
-            + `<b>Candidate:</b> ${index + 1} of ${candidates.length}<br>`
-            + `${candidateTestingHtml(candidate)}<br><br>`
-            + `<b>Candidate result</b><br>${candidateResult}`
-            + (best ? `<br><br><b>Best so far:</b><br>${escapeHtml(best.candidate.name)}` : '')
           );
           if (index < candidates.length - 1) {
             await new Promise((resolve) => setTimeout(resolve, 3100));
@@ -1733,11 +1801,6 @@ export class WarRoomWindow {
         observedFormation = formationSignature(this.hub.snapshot());
         this.context.eventBus?.emit?.('war-room:show-native-simulation');
         globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
-        setCompactProcess(
-          '<b>Optimization complete</b><br>'
-          + `<span style="color:#237a38"><b>${escapeHtml(best.candidate.name)}</b></span><br><br>`
-          + 'The best formation is now active in the game formation grid.'
-        );
         safeSetValue(plannerStatus, `Best formation found: ${best.candidate.name}.`);
       } catch (error) {
         safeSetValue(plannerStatus, `Formation simulation failed: ${error?.message ?? error}`);
@@ -1746,10 +1809,6 @@ export class WarRoomWindow {
           + `<span style="color:#a32626">Simulation failed: ${escapeHtml(error?.message ?? error)}</span>`
         );
         this.context.logger?.warn?.('War Room formation simulation failed.', error);
-        setCompactProcess(
-          '<b>Formation simulation failed</b><br>'
-          + `<span style="color:#a32626">${escapeHtml(error?.message ?? error)}</span>`
-        );
       } finally {
         if (runId === recommendationSequence) {
           optimizationRunning = false;
@@ -1776,9 +1835,7 @@ export class WarRoomWindow {
         + '<span style="color:#8b4f00"><b>Simulation stopped by user.</b></span><br><br>'
         + '<span style="color:#52636b">Completed cached results remain available in Battle Simulator.</span>'
       );
-      setCompactProcess(
-        '<b>Simulation stopped</b><br><span style="color:#52636b">Completed results remain available in Simulation Results.</span>'
-      );
+      renderSimulations();
       return true;
     };
 
@@ -1843,6 +1900,23 @@ export class WarRoomWindow {
       if (entry) loadCachedPreview(entry);
     });
 
+    let compactLiveEntry = null;
+    compactReplayLive.addListener('execute', () => {
+      if (!compactLiveEntry?.response) return;
+      try { this.hub.playSimulation(compactLiveEntry.response); }
+      catch (error) { this.context.notifications?.show?.(`Unable to play simulation: ${error?.message ?? error}`, { level: 'error' }); }
+    });
+    compactUseLive.addListener('execute', () => {
+      if (!Array.isArray(compactLiveEntry?.units) || !compactLiveEntry.units.length) return;
+      try {
+        this.hub.applyRecommendedFormation(compactLiveEntry.units);
+        observedFormation = formationSignature(this.hub.snapshot());
+        queueLiveSimulation();
+      } catch (error) {
+        this.context.notifications?.show?.(`Unable to use formation: ${error?.message ?? error}`, { level: 'error' });
+      }
+    });
+
     const renderSimulations = () => {
       if (!widgetAlive(simulator.grid.widget) || !widgetAlive(cachedResults)) return;
       const snapshot = this.hub.snapshot();
@@ -1875,7 +1949,9 @@ export class WarRoomWindow {
       simulator.grid.model.setData(rows);
       cachedHistoryCards.removeAll();
       liveFormationCard.removeAll();
+      bestSoFarCard.removeAll();
       liveFormationCard.add(label(qx, 'Live Formation', { font: 'bold' }));
+      bestSoFarCard.add(label(qx, 'Best So Far', { font: 'bold' }));
       const createCachedResultCard = (entry, rankIndex) => {
         const result = entry.analysis;
         const card = new qx.ui.container.Composite(new qx.ui.layout.VBox(3)).set({
@@ -1925,8 +2001,39 @@ export class WarRoomWindow {
         return card;
       };
       const liveCacheEntry = simulationCache.get(simulationKey(snapshot));
-      const currentEntry = alternatives.find((entry) => entry.response === liveCacheEntry?.response)
-        ?? alternatives.at(-1) ?? null;
+      const exactCurrentEntry = alternatives.find((entry) => entry.response === liveCacheEntry?.response) ?? null;
+      const currentEntry = exactCurrentEntry ?? alternatives.at(-1) ?? null;
+      if (exactCurrentEntry) {
+        compactLiveEntry = exactCurrentEntry;
+        setCompactProcess(
+          '<b>1. Live formation</b><br>'
+          + simulationDetailsHtml(exactCurrentEntry.analysis)
+        );
+        compactReplayLive.setEnabled(Boolean(exactCurrentEntry.response));
+        compactUseLive.setEnabled(Boolean(
+          EXPERIMENTAL_ONE_CLICK_FORMATION_ENABLED
+          && Array.isArray(exactCurrentEntry.units) && exactCurrentEntry.units.length
+        ));
+      } else {
+        compactLiveEntry = null;
+        compactReplayLive.setEnabled(false);
+        compactUseLive.setEnabled(false);
+        setCompactProcess(
+          '<b>Current live formation</b><br>'
+          + '<span style="color:#52636b">Running a native simulation for the active formation…</span>'
+        );
+      }
+      const bestSoFarEntry = [...alternatives].sort((left, right) => {
+        const leftScore = WarRoomCalculator.scoreSimulation(
+          left.response, left.snapshot, left.goal ?? selectedGoal()
+        ).score;
+        const rightScore = WarRoomCalculator.scoreSimulation(
+          right.response, right.snapshot, right.goal ?? selectedGoal()
+        ).score;
+        return leftScore - rightScore
+          || Number(right.analysis?.research || 0) - Number(left.analysis?.research || 0)
+          || Number(right.at || 0) - Number(left.at || 0);
+      })[0] ?? null;
       const historicalEntries = rankedAlternatives
         .filter((entry) => entry !== currentEntry)
         .sort((left, right) => Number(left.at || 0) - Number(right.at || 0));
@@ -1934,6 +2041,11 @@ export class WarRoomWindow {
         liveFormationCard.add(createCachedResultCard(currentEntry, rankedAlternatives.indexOf(currentEntry)));
       } else {
         liveFormationCard.add(label(qx, 'Waiting for the live formation result.', { textColor: '#344448' }));
+      }
+      if (bestSoFarEntry) {
+        bestSoFarCard.add(createCachedResultCard(bestSoFarEntry, rankedAlternatives.indexOf(bestSoFarEntry)));
+      } else {
+        bestSoFarCard.add(label(qx, 'Waiting for completed simulations.', { textColor: '#344448' }));
       }
       if (historicalEntries.length) {
         for (const entry of historicalEntries) {
@@ -2144,44 +2256,7 @@ export class WarRoomWindow {
         // the user explicitly chooses Open Attack.
         if (selectedSearchTarget && String(selectedSearchTarget.id) !== String(target.id)) return;
         this.intelTargetId = intel.id;
-        const levels = Object.entries(intel.forgottenLevels)
-          .sort(([left], [right]) => Number(right) - Number(left))
-          .map(([level, count]) => `${count} × ${level}`)
-          .join(', ') || 'None';
-        const lootRows = intel.loot.length
-          ? intel.loot.map((resource) => [`Projected loot: ${resource.name}`, resource.amount])
-          : [['Projected loot', 'Unavailable until combat data loads']];
-        const compositionRows = Object.entries(intel.composition ?? {}).flatMap(([category, summary]) => {
-          const detail = (summary.composition ?? []).map((item) => `${item.count} × ${item.name}`).join(', ') || 'None';
-          return [[
-            `${category[0].toUpperCase()}${category.slice(1)}`,
-            `${summary.count} · avg lvl ${Number(summary.averageLevel || 0).toFixed(1)} · ${summary.damaged} damaged · ${detail}`
-          ]];
-        });
-        targetIntel.model.setData([
-          ['Target', `${intel.name} · ${intel.type} Lvl ${intel.level ?? target.level ?? '—'}`],
-          ['Coordinates', `${intel.x}:${intel.y}`],
-          ['Owner', intel.owner],
-          ['Alliance', intel.alliance || ''],
-          ['Attack cost', `${intel.cp} CP`],
-          ['Attack from', intel.attacker],
-          ['Attack possible', intel.attackPossible ? 'Yes' : 'No'],
-          ['Estimated attacks', `${intel.attackEstimate?.possibleAttacks ?? 0} possible (${intel.attackEstimate?.commandPointAttacks ?? 0} by CP; ${Number.isFinite(intel.attackEstimate?.fullyRepairableAttacks) ? `${intel.attackEstimate.fullyRepairableAttacks} fully repairable + 1 final hit` : 'repair time not limiting'})`],
-          ['Available command points', Math.round(intel.attackEstimate?.cpAvailable ?? 0)],
-          ['Available repair time', duration(intel.attackEstimate?.repairAvailableSeconds ?? 0)],
-          ['Conservative repair per attack', duration(intel.attackEstimate?.maxRepairSeconds ?? 0)],
-          ['Base condition', `${Math.round(intel.baseCondition)}%`],
-          ['Defense condition', `${Math.round(intel.defenseCondition)}%`],
-          ['Repair time', `Inf ${Math.round(intel.repair?.infantry ?? 0)}s · Veh ${Math.round(intel.repair?.vehicle ?? 0)}s · Air ${Math.round(intel.repair?.aircraft ?? 0)}s`],
-          ['Surrounding bases', intel.surroundingBases],
-          ['Support', intel.support
-            ? `${intel.support.name} lvl ${intel.support.level} (${intel.support.condition}%)`
-            : 'None'],
-          ['Forgotten bases in range', `${intel.forgottenInRange} (${intel.waves} waves)`],
-          ['Forgotten levels', levels],
-          ...compositionRows,
-          ...lootRows
-        ]);
+        targetIntel.setValue(targetIntelCard(intel));
         targetStatus.setValue(
           `${intel.name} selected. All War Room tabs now use this target.`
         );
@@ -2228,7 +2303,8 @@ export class WarRoomWindow {
 
     const syncFromGameTarget = () => {
       render();
-      syncLiveFormationPreview(this.currentSnapshot ?? this.hub.snapshot());
+      const snapshot = this.currentSnapshot ?? this.hub.snapshot();
+      syncLiveFormationPreview(snapshot);
       renderSimulations();
       if (
         this.currentSnapshot?.target?.id
@@ -3027,7 +3103,7 @@ export class WarRoomWindow {
     }
     this.record = await this.context.windows.open({
       id: 'war-room',
-      title: 'War Room v0.10',
+      title: 'War Room v0.12',
       content: this.build(),
       x: 120,
       y: 70,

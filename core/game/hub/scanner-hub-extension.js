@@ -482,16 +482,26 @@
           return id >= 200 && id <= 205;
         }) ?? null;
         const supportData = safeCall(supportBuilding, ['get_UnitGameData_Obj', 'get_UnitGameData']);
-        const lootEntries = ClientLib?.API?.Battleground?.GetInstance?.()?.GetLootFromCurrentCity?.() ?? [];
         const resourceNames = {};
         for (const [name, value] of Object.entries(ClientLib?.Base?.EResourceType ?? {})) {
           if (typeof value === 'number') resourceNames[value] = name;
         }
-        const loot = Array.from(lootEntries).map((entry) => ({
-          type: entry.Type,
-          name: resourceNames[entry.Type] ?? `Resource ${entry.Type}`,
-          amount: Number(entry.Count ?? 0)
-        }));
+        // City data becomes ready before Battleground publishes its loot list.
+        // The map context card retries this value; do the same here so War Room
+        // does not permanently cache the initial empty response.
+        const battleground = ClientLib?.API?.Battleground?.GetInstance?.();
+        let lootEntries = Array.from(battleground?.GetLootFromCurrentCity?.() ?? []);
+        const expectsLoot = !['PVP', 'Player'].includes(String(target.type));
+        for (let attempt = 0; expectsLoot && !lootEntries.length && attempt < 30; attempt += 1) {
+          if (signal?.aborted) throw new DOMException('Scan stopped', 'AbortError');
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          lootEntries = Array.from(battleground?.GetLootFromCurrentCity?.() ?? []);
+        }
+        const loot = lootEntries.map((entry) => ({
+          type: entry.Type ?? entry.type ?? entry.t,
+          name: resourceNames[entry.Type ?? entry.type ?? entry.t] ?? `Resource ${entry.Type ?? entry.type ?? entry.t}`,
+          amount: Number(entry.Count ?? entry.count ?? entry.c ?? 0)
+        })).filter((entry) => entry.amount > 0);
         const groups = ClientLib?.Data?.EUnitGroup ?? {};
         const repair = {
           infantry: Number(safeCall(cityUnits, ['GetRepairTimeFromEUnitGroup'], groups.Infantry, false) || 0),
@@ -502,18 +512,28 @@
         const range = Number(server.get_MaxAttackDistance?.() || 0);
         const surrounding = [];
         const forgotten = [];
+        let innerForgotten = 0;
         for (let y = target.y - Math.ceil(range); y <= target.y + Math.ceil(range); y += 1) {
           for (let x = target.x - Math.ceil(range); x <= target.x + Math.ceil(range); x += 1) {
-            if (Math.hypot(target.x - x, target.y - y) > range) continue;
+            const distance = Math.hypot(target.x - x, target.y - y);
+            if (distance > range) continue;
             const object = world.GetObjectFromPosition(x, y);
             if (!object || (x === target.x && y === target.y)) continue;
             const type = resolveObjectType(object);
             if ([TYPE.PLAYER, TYPE.BASE, TYPE.CAMP].includes(type)) surrounding.push(object);
-            if (type === TYPE.BASE) forgotten.push(resolveObjectLevel(object));
+            if (type === TYPE.BASE) {
+              forgotten.push(resolveObjectLevel(object));
+              if (distance <= Math.floor(range)) innerForgotten += 1;
+            }
           }
         }
         const levelCounts = {};
         for (const level of forgotten) levelCounts[level] = (levelCounts[level] ?? 0) + 1;
+        const waves = innerForgotten <= 0 ? 0
+          : innerForgotten <= 21 ? 1
+            : innerForgotten <= 31 ? 2
+              : innerForgotten <= 41 ? 3
+                : innerForgotten <= 51 ? 4 : 5;
 
         return {
           id: target.id,
@@ -531,7 +551,8 @@
           attacker: attacker?.name ?? 'Current base',
           surroundingBases: surrounding.length,
           forgottenInRange: forgotten.length,
-          waves: Math.ceil(forgotten.length / 4),
+          innerForgotten,
+          waves,
           forgottenLevels: levelCounts,
           support: supportBuilding ? {
             name: safeCall(supportData, ['get_Name', 'get_DisplayName']) || 'Support weapon',

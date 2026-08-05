@@ -2,6 +2,16 @@ export const FORMATION_PRESET_KEY = 'module:war-room:formation-presets:v1';
 
 const LOCAL_MIRROR_KEY = `cnc-ta-suite:${FORMATION_PRESET_KEY}`;
 
+export function formationTargetMatches(saved, current) {
+  if (!saved || !current) return false;
+  if (saved.id != null && current.id != null && String(saved.id) === String(current.id)) return true;
+  const savedX = Number(saved.x), savedY = Number(saved.y);
+  const currentX = Number(current.x), currentY = Number(current.y);
+  return Number.isFinite(savedX) && Number.isFinite(savedY)
+    && Number.isFinite(currentX) && Number.isFinite(currentY)
+    && savedX === currentX && savedY === currentY;
+}
+
 function normalizePreset(preset) {
   if (!preset?.id || preset?.attackerId == null || preset?.target?.id == null) return null;
   return {

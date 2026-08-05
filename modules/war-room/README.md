@@ -1,8 +1,8 @@
 # War Room
 
-War Room v0.10.0 is the Suite's unified combat workspace and the preparation release for its next major update.
+War Room v0.12.0 is the Suite's unified combat workspace and the preparation release for its next major update.
 
-Best Formation search supports explicit runs of 25, 50, 75, 100, 150, or 200 native simulations.
+Best Formation search supports explicit runs of 10, 25, 50, 75, or 100 native simulations. Starting a new search clears the previous simulation session, then retains every distinct candidate produced by the new run without a result cap.
 
 War Room follows the Suite 1.0 module contract through `manifest.json`, the standard `index.js` entry point, the `Module` base class, the `enable/disable/destroy` lifecycle, explicit capability permissions, and the versioned custom-renderer bridge. Its module version remains independent from the framework and Hub API versions.
 

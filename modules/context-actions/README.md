@@ -1,6 +1,6 @@
 # Context Actions
 
-Context Actions v1.0.0 adds a configurable native Qooxdoo action group to the game menu shown when a base, camp, or outpost is selected.
+Context Actions v0.3.0 adds a configurable native Qooxdoo action group to the game menu shown when a base, camp, or outpost is selected.
 
 Target menus can open Base Intelligence, War Room, target information, Scanner, layout viewing, or copy coordinates. Own-base menus can open Base Intelligence, Scanner, Repair & Collection Manager, Upgrade Manager, Base Layout Optimizer, Resource Transfer Manager, or copy coordinates. **Suite Options** opens the visibility settings directly from the contextual panel.
 

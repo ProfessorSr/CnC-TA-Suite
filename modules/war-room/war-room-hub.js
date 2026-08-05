@@ -1,3 +1,5 @@
+import { formationTargetMatches } from './formation-preset-store.js';
+
 function call(target, names, ...args) {
   for (const name of names) {
     try {
@@ -1238,11 +1240,11 @@ export class WarRoomHub {
     if (String(preset?.attackerId) !== String(snapshot.attacker.id)) {
       throw new Error(`This formation belongs to ${preset?.attackerName || 'another attacking base'}.`);
     }
-    if (preset?.target?.id == null || String(preset.target.id) !== String(snapshot.target.id)) {
+    if (!formationTargetMatches(preset?.target, snapshot.target)) {
       throw new Error(`This formation belongs to ${preset?.target?.name || 'another target'}.`);
     }
     const signature = (units, idKey) => units
-      .map((unit) => `${unit[idKey]}:${Number(unit.level || 0)}`)
+      .map((unit) => String(unit[idKey]))
       .sort()
       .join('|');
     if (signature(preset.units ?? [], 'mdbId') !== signature(snapshot.units, 'id')) {
@@ -1265,7 +1267,6 @@ export class WarRoomHub {
         unit = rawUnits.find((candidate) =>
           !used.has(candidate)
           && Number(call(candidate, ['get_MdbUnitId', 'get_MdbId'])) === Number(saved.mdbId)
-          && Number(call(candidate, ['get_CurrentLevel', 'get_Level'])) === Number(saved.level)
         );
       }
       if (!unit) throw new Error(`Could not match saved unit ${saved.name || saved.mdbId}.`);
@@ -1968,7 +1969,71 @@ export class WarRoomHub {
     if (!this.hub?.scanner?.getTargetIntel) {
       throw new Error('The shared target-intelligence service is unavailable.');
     }
+    // Loading target intelligence changes CurrentCity to the target. Preserve
+    // the attacking-base state first so none of the capacity figures can be
+    // taken from a stale combat target or from the target city itself.
+    const attackerSnapshot = this.snapshot();
+    const attackerRaw = attackerSnapshot.attacker?.raw;
+    const cpCost = attackerRaw
+      ? Number(call(attackerRaw, ['CalculateAttackCommandPointCostToCoord'], Number(target.x), Number(target.y)) ?? target.cp ?? 0)
+      : Number(target.cp ?? 0);
+    const attackEstimate = estimatePossibleAttacks({
+      cpAvailable: attackerSnapshot.cpAvailable,
+      cpCost,
+      repair: attackerSnapshot.repair,
+      repairStorage: attackerSnapshot.repairStorage
+    });
     const intel = await this.hub.scanner.getTargetIntel(target);
-    return Object.freeze({ ...intel, attackEstimate: this.snapshot().attackEstimate });
+    const resourceNames = Object.fromEntries(Object.entries(attackerSnapshot.resourceTypes ?? {})
+      .filter(([, type]) => typeof type === 'number')
+      .map(([name, type]) => [String(type), name === 'Gold' ? 'Credits' : name]));
+    const rewardNames = /^(?:Tiberium|Crystal|Chrystal|Gold|Credits|ResearchPoints)$/i;
+    let combatLoot = [];
+    // A manually opened attack screen already contains authoritative combat
+    // data, but opening it can clear the map-context Battleground loot feed.
+    // Use that captured snapshot only when it belongs to this exact target.
+    if (formationTargetMatches(target, attackerSnapshot.target)) {
+      combatLoot = Object.entries(attackerSnapshot.loot ?? {})
+        .filter(([type, amount]) => Number(amount) > 0 && rewardNames.test(resourceNames[String(type)] ?? ''))
+        .map(([type, amount]) => ({
+          type: Number(type),
+          name: resourceNames[String(type)] ?? `Resource ${type}`,
+          amount: Number(amount)
+        }));
+      // Some client builds expose the loaded target's reward values on its
+      // combat entities while leaving GetLootFromCurrentCity empty.
+      if (!combatLoot.length) {
+        const totals = {};
+        for (const entity of [...(attackerSnapshot.buildings ?? []), ...(attackerSnapshot.defenseUnits ?? [])]) {
+          const decay = Math.pow(0.7, Math.max(0, Number(entity.attackCounter ?? 0)));
+          for (const [type, amount] of Object.entries(entity.resourceValue ?? {})) {
+            if (!rewardNames.test(resourceNames[String(type)] ?? '')) continue;
+            totals[type] = (totals[type] ?? 0) + Math.max(0, Number(amount) || 0) * decay;
+          }
+        }
+        combatLoot = Object.entries(totals).filter(([, amount]) => amount > 0).map(([type, amount]) => ({
+          type: Number(type),
+          name: resourceNames[String(type)] ?? `Resource ${type}`,
+          amount
+        }));
+      }
+    }
+    const averageCondition = (entities) => entities.length
+      ? entities.reduce((sum, entity) => sum + Number(entity.health ?? 0), 0) / entities.length
+      : null;
+    const snapshotMatchesTarget = formationTargetMatches(target, attackerSnapshot.target);
+    const snapshotBaseCondition = snapshotMatchesTarget
+      ? averageCondition(attackerSnapshot.buildings ?? []) : null;
+    const snapshotDefenseCondition = snapshotMatchesTarget
+      ? averageCondition(attackerSnapshot.defenseUnits ?? []) : null;
+    return Object.freeze({
+      ...intel,
+      cp: cpCost,
+      attacker: attackerSnapshot.attacker?.name ?? intel.attacker,
+      loot: intel.loot?.length ? intel.loot : combatLoot,
+      baseCondition: snapshotBaseCondition ?? intel.baseCondition,
+      defenseCondition: snapshotDefenseCondition ?? intel.defenseCondition,
+      attackEstimate
+    });
   }
 }

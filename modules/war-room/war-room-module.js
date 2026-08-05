@@ -15,7 +15,7 @@ import {
 export const warRoomManifest = Object.freeze({
   id: 'war-room',
   name: 'War Room',
-  version: '0.10.0',
+  version: '0.12.0',
   apiVersion: '1.0.0',
   hubApiVersion: '1.0.0',
   author: 'ProfessorSr',
