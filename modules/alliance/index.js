@@ -5,7 +5,7 @@ import { AllianceTabs } from './alliance-tabs.js';
 export const allianceManifest = Object.freeze({
   id: 'alliance',
   name: 'Alliance Intelligence',
-  version: '0.2.0',
+  version: '0.3.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Alliance member, score, POI, and tier intelligence in a Suite window.',
@@ -21,13 +21,25 @@ export class AllianceModule extends Module {
     super(allianceManifest);
     this.context = null;
     this.tabs = null;
+    this.lastAlertCheckAt = 0;
+    this.lastChatRoleScanAt = 0;
   }
 
   async enable(context) {
     this.context = context;
     this.tabs = new AllianceTabs({ context, hub: new AllianceHub(context) });
     this.alertedCities = new Set();
-    context.events.on('game:tick', () => { this.checkPvpAlerts(); this.colorChatRoles(); });
+    context.events.on('game:tick', () => {
+      const now = Date.now();
+      if (now - this.lastAlertCheckAt >= 1000) {
+        this.lastAlertCheckAt = now;
+        this.checkPvpAlerts();
+      }
+      if (now - this.lastChatRoleScanAt >= 10000) {
+        this.lastChatRoleScanAt = now;
+        this.colorChatRoles();
+      }
+    });
   }
 
   checkPvpAlerts() {

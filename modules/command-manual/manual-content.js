@@ -112,6 +112,11 @@ export const MANUAL_SECTIONS = Object.freeze([
     ['Open Next MCV from its clock icon or Module Manager.', 'Read current, required, and remaining values.', 'Use Refresh after research or credit changes.', 'Use standalone compact/expanded controls as needed.'],
     [['Clock icon', 'Opens or closes the right-side MCV panel.'], ['Refresh/Base Data', 'Reads the current Research_BaseFound requirement from the Hub.'], ['–', 'Reduces the standalone window.'], ['X', 'Closes the standalone window.']]),
 
+  section('research-eta', 'Research ETA',
+    'Provides a standalone Research Center with native research information plus live Credit accumulation time.',
+    ['Open Research Center from the Suite dock or Module Manager.', 'Choose Offense, Defense, or Special.', 'Use Previous and Next to browse native research pages.', 'Review Credits, RP, remaining Credits, ETA, descriptions, and prerequisites.', 'Click Research to invoke the corresponding native game action.'],
+    [['Credits', 'Shows required, current, remaining, production per hour, and ETA.'], ['RP', 'Shows required and current Research Points.'], ['Research', 'Delegates to the matching enabled native Research button.'], ['Refresh', 'Reloads the current category and page from native game state.']]),
+
   section('context-actions', 'Context Actions and Strategic Planning',
     'Adds configurable actions to native map-object menus and supports non-committing strategic-map plans.',
     ['Click a base, camp, outpost, ruin, or supported map object.', 'Use added actions such as War Room, Scan Nearby, Base Information, or planning actions.', 'For planning, choose move, ruin, ruin-for, level, or remove and preview territory/tunnel effects.', 'Undo or reset planned changes when finished.'],

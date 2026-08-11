@@ -14,7 +14,7 @@ const settings = Object.freeze({
 });
 
 export const baseIntelligenceManifest = Object.freeze({
-  id: 'base-intelligence', name: 'Base Intelligence', version: '0.3.0', apiVersion: '1.0.0', author: 'ProfessorSr',
+  id: 'base-intelligence', name: 'Base Intelligence', version: '0.4.0', apiVersion: '1.0.0', author: 'ProfessorSr',
   description: 'Owned-base overview, statistics, resources, repairs, composition, stickers, and region intelligence.',
   dependencies: Object.freeze([]), permissions: Object.freeze(['events', 'game', 'hooks', 'settings', 'windows']), settings
 });
@@ -28,14 +28,25 @@ export class BaseIntelligenceModule extends Module {
     this.window = new BaseIntelligenceWindow({ context, hub: this.hub, sticker: this.sticker });
     this.hooks = new BaseIntelligenceHooks({ context, hub: this.hub });
     this.hooks.install();
+    let lastWindowRenderAt = 0;
+    let lastStickerRenderAt = 0;
     context.events.on('game:tick', () => {
+      const now = Date.now();
       this.hooks?.install?.();
-      if (this.window?.record?.window?.isVisible?.()) this.window.render();
+      if (now - lastWindowRenderAt >= 2000 && this.window?.record?.window?.isVisible?.()) {
+        lastWindowRenderAt = now;
+        this.window.render();
+      }
       if (
+        now - lastStickerRenderAt >= 1000
+        &&
         this.sticker?.record?.window?.isVisible?.()
         && this.sticker?.label
         && !this.sticker.label.isDisposed?.()
-      ) this.sticker.render();
+      ) {
+        lastStickerRenderAt = now;
+        this.sticker.render();
+      }
     });
   }
   async open(context) { if (!this.window) await this.enable(context); return this.window.open(); }

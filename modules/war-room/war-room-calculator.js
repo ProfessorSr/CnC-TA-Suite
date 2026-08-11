@@ -304,6 +304,22 @@ export class WarRoomCalculator {
     const defenderEnd = allTargets.reduce((sum, record) => sum + remaining(record), 0);
     const defenderPercent = defenderStart > 0 ? defenderEnd / defenderStart * 100 : 0;
     const oneShot = defenderPercent <= 0.05;
+    if (goal === 'rp') {
+      const analysis = this.analyzeNativeSimulation(response, snapshot, 'Maximum RP candidate');
+      const research = Math.max(0, Number(analysis.research) || 0);
+      return Object.freeze({
+        // Match Super Simulator: actual native RP is authoritative, with
+        // damage and survival used only to break equal-RP results.
+        score: -research * 1_000_000
+          - Math.max(0, Number(analysis.defenderDamage) || 0) * 1_000
+          - Math.max(0, Number(analysis.ownRemaining) || 0),
+        research,
+        objectivePercent,
+        blockerPercent,
+        defenderPercent,
+        oneShot
+      });
+    }
     return Object.freeze({
       score: (oneShot ? -1_000_000_000_000 : 0)
         + objectivePercent * 1_000_000

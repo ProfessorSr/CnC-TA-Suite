@@ -469,13 +469,17 @@ export class StrategicMapPlanner {
     const previousOwnCityId = cities.get_CurrentOwnCityId?.();
     const selectedId = call(regionCity, ['get_Id']);
     let restoreTerritoryIdentity = null;
-    if (selectedId != null && call(regionCity, ['get_Type']) !== root.Vis.Region.RegionCity.ERegionCityType.Own) {
+    const isOwned = call(regionCity, ['get_Type']) === root.Vis.Region.RegionCity.ERegionCityType.Own;
+    if (selectedId != null && !isOwned) {
       const city = cities.GetCity?.(selectedId);
       if (city && city.get_Version?.() < 0) {
         city.SetPosition?.(selection.x, selection.y);
         city.set_BaseLevel?.(selection.level);
       }
-      cities.set_CurrentOwnCityId?.(selectedId);
+      // Never advertise another player's city as CurrentOwnCity. Native game
+      // listeners treat that setter as an authoritative ownership change and
+      // can enter an expensive refresh loop. Territory checks are projected
+      // locally below, so non-owned bases remain fully movable in the planner.
       restoreTerritoryIdentity = this.activateTerritoryIdentity(selection);
     }
     const deactivate = () => this.cancelMove();
@@ -530,7 +534,11 @@ export class StrategicMapPlanner {
     utilities.detachNetEvent(mouseTool, 'OnMouseUp', tools.OnMouseUp, info, info[originalHandler]);
     utilities.attachNetEvent(mouseTool, 'OnMouseUp', tools.OnMouseUp, this, mouseUp);
     info.setCity(regionCity);
-    vis.SetMouseTool(tools.EMouseTool.MoveBase, cities.get_CurrentOwnCityId());
+    // Select the clicked base in the move tool without publishing it through
+    // CurrentOwnCityId. This keeps non-owned planning attached to the intended
+    // base while avoiding the global ownership refresh loop caused by the
+    // CurrentOwnCity setter.
+    vis.SetMouseTool(tools.EMouseTool.MoveBase, selectedId ?? previousOwnCityId);
   }
 
   cancelMove() {

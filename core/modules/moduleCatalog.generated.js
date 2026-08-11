@@ -17,9 +17,11 @@ import { LayoutOptimizerModule } from '../../modules/layout-optimizer/index.js';
 import { ModuleManagerModule } from '../../modules/module-manager/index.js';
 import { NextMCVModule } from '../../modules/next-mcv/nextMCV.js';
 import { RepairManagerModule } from '../../modules/repair-manager/index.js';
+import { ResearchEtaModule } from '../../modules/research-eta/index.js';
 import { ResourceTransferModule } from '../../modules/resource-transfer/index.js';
 import { ScannerModule } from '../../modules/scanner/scanner-module.js';
 import { SuiteStatusModule } from '../../modules/suite-status/suiteStatus.js';
+import { SuperSimulatorModule } from '../../modules/super-simulator/index.js';
 import { SupportManagerModule } from '../../modules/support-manager/index.js';
 import { TacticalMapModule } from '../../modules/tactical-map/index.js';
 import { UiToolsModule } from '../../modules/ui-tools/index.js';
@@ -42,9 +44,11 @@ export const registeredModules = Object.freeze([
   ModuleManagerModule,
   NextMCVModule,
   RepairManagerModule,
+  ResearchEtaModule,
   ResourceTransferModule,
   ScannerModule,
   SuiteStatusModule,
+  SuperSimulatorModule,
   SupportManagerModule,
   TacticalMapModule,
   UiToolsModule,

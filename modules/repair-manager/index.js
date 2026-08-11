@@ -6,7 +6,7 @@ import { RepairQuickDock } from './repair-quick-dock.js';
 export const repairManagerManifest = Object.freeze({
   id: 'repair-manager',
   name: 'Repair & Collection Manager',
-  version: '0.2.0',
+  version: '0.3.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Automatic and manual repair and resource collection controls for owned bases.',
@@ -34,6 +34,7 @@ export class RepairManagerModule extends Module {
     this.window = null;
     this.quickDock = null;
     this.lastRunAt = 0;
+    this.lastDockRefreshAt = 0;
     this.running = false;
   }
 
@@ -58,9 +59,13 @@ export class RepairManagerModule extends Module {
   async tick() {
     if (this.running || !this.context || !this.hub) return;
     const interval = Math.max(5, Number(this.context.moduleSettings.get('intervalSeconds', 15))) * 1000;
-    this.quickDock?.refresh?.();
-    if (Date.now() - this.lastRunAt < interval) return;
-    this.lastRunAt = Date.now();
+    const now = Date.now();
+    if (now - this.lastDockRefreshAt >= 2000) {
+      this.lastDockRefreshAt = now;
+      this.quickDock?.refresh?.();
+    }
+    if (now - this.lastRunAt < interval) return;
+    this.lastRunAt = now;
     this.running = true;
     try {
       const actions = [];

@@ -1,0 +1,13 @@
+{
+  "id": "research-eta",
+  "name": "Research ETA",
+  "version": "0.2.0",
+  "apiVersion": "1.0.0",
+  "hubApiVersion": "1.0.0",
+  "author": "ProfessorSr",
+  "lastUpdated": "2026-08-10",
+  "description": "Adds current resource progress and credit accumulation time to native Research items.",
+  "dependencies": [],
+  "permissions": ["game", "notifications", "windows"],
+  "settings": {}
+}

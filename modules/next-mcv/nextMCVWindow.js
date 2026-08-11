@@ -204,7 +204,7 @@ export function buildNextMCVWindow(context, options = {}) {
       summary.setValue(
         data.ready
           ? 'Next MCV requirements are complete.'
-          : `Overall progress: ${displayPercent(data.overallPercent)}%`
+          : `Next MCV: ${displayPercent(data.overallPercent)}%`
       );
 
       credits.percent.setValue(

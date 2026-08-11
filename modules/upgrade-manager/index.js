@@ -22,7 +22,7 @@ const settings = Object.freeze({
 export const upgradeManagerManifest = Object.freeze({
   id: 'upgrade-manager',
   name: 'Upgrade Manager',
-  version: '0.2.0',
+  version: '0.3.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Plan, filter, rank, and manually apply upgrades across owned bases.',
@@ -56,7 +56,13 @@ export class UpgradeManagerModule extends Module {
       upgradeToLevel: (candidates, targetLevel) => this.upgradeManyToLevel(candidates, targetLevel)
     });
     this.quickWindow = new QuickUpgradeWindow({ context, hub: this.hub });
-    context.events?.on?.('game:tick', () => this.hub?.captureSelection?.());
+    let lastSelectionCaptureAt = 0;
+    context.events?.on?.('game:tick', () => {
+      const now = Date.now();
+      if (now - lastSelectionCaptureAt < 2000) return;
+      lastSelectionCaptureAt = now;
+      this.hub?.captureSelection?.();
+    });
     context.events?.on?.('game:selection-changed', () => this.hub?.captureSelection?.());
     this.refresh();
   }

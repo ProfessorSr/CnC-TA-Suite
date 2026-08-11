@@ -109,6 +109,19 @@ test('WarRoomCalculator ranks native simulations by objective destruction', () =
   assert.ok(Number.isFinite(result.score));
 });
 
+test('WarRoomCalculator ranks Maximum RP candidates by actual native RP first', () => {
+  const snapshot = fixture();
+  const response = (health, research) => ({
+    d: { s: [{ i: 112, x: 6, y: 4, h: 100, ci: 1 }], d: [], a: [] },
+    e: [{ Key: 1, Value: { h: health } }],
+    nativeEntityLoot: { 3: research }
+  });
+  const moreDamage = WarRoomCalculator.scoreSimulation(response(0, 999), snapshot, 'rp');
+  const moreResearch = WarRoomCalculator.scoreSimulation(response(1200, 1000), snapshot, 'rp');
+  assert.ok(moreResearch.score < moreDamage.score);
+  assert.equal(moreResearch.research, 1000);
+});
+
 test('WarRoomCalculator summarizes live native battle results', () => {
   const snapshot = fixture();
   snapshot.resourceTypes = { ResearchPointsProduction: 99, ...snapshot.resourceTypes };

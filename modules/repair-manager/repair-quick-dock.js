@@ -55,6 +55,7 @@ const RIGHT_MODULE_GROUPS = Object.freeze([
   ]) }),
   Object.freeze({ title: 'Analysis', modules: Object.freeze([
     Object.freeze({ moduleId: 'combat-reports', label: 'Combat Reports', icon: 'FactionUI/icons/icon_reports_total_victory.png' }),
+    Object.freeze({ moduleId: 'research-eta', label: 'Research Center', icon: suiteIcon('research-eta') }),
     Object.freeze({ moduleId: 'tactical-map', label: 'Tactical Map', icon: suiteIcon('map') }),
     Object.freeze({ moduleId: 'world-tools', label: 'World Map Tools', icon: suiteIcon('world') }),
     Object.freeze({ moduleId: 'support-manager', label: 'Support Manager', icon: suiteIcon('support') }),
@@ -81,6 +82,20 @@ const NEXT_MCV_MODULE = Object.freeze({
 const HEADER_DOCK_GAP = 0;
 const BUTTON_SIZE = 31;
 const BUTTON_GAP = 4;
+const SUITE_COLLAPSED_KEY = 'cnc-ta-suite:quick-dock:suite-collapsed';
+const NEXT_MCV_OPEN_KEY = 'cnc-ta-suite:quick-dock:next-mcv-open';
+
+function savedBoolean(key, fallback) {
+  try {
+    const value = globalThis.localStorage?.getItem(key);
+    return value == null ? fallback : value === 'true';
+  } catch { return fallback; }
+}
+
+function saveBoolean(key, value) {
+  try { globalThis.localStorage?.setItem(key, String(Boolean(value))); }
+  catch { /* Dock visibility preferences are non-critical. */ }
+}
 
 export function rightDockDefinitions() {
   return Object.freeze([
@@ -108,7 +123,8 @@ export class RepairQuickDock {
     this.navigationGroupTitles = new Map();
     this.navigationHost = null;
     this.nextMCVPanel = null;
-    this.shortcutsCollapsed = false;
+    this.shortcutsCollapsed = savedBoolean(SUITE_COLLAPSED_KEY, true);
+    this.nextMCVOpen = savedBoolean(NEXT_MCV_OPEN_KEY, true);
   }
 
   build() {
@@ -412,11 +428,13 @@ export class RepairQuickDock {
         ...QUICK_REPAIRS.filter((item) => item.action !== 'collect')
       ]);
       for (const group of RIGHT_MODULE_GROUPS) addIconGroup(group.title, group.modules);
+      this.shortcutContent.setVisibility?.(this.shortcutsCollapsed ? 'excluded' : 'visible');
 
       const nextMCVSection = makeSection(null);
       nextMCVSection.section.exclude();
       this.nextMCVBody = nextMCVSection.body;
       this.nextMCVSection = nextMCVSection.section;
+      if (this.nextMCVOpen) this.setNextMCVPanelVisible(true, false);
       if (!this.embedNavigationPanel(anchor)) {
         this.root.add(this.navigationPanel, { left: 0, top: 0 });
       }
@@ -438,6 +456,7 @@ export class RepairQuickDock {
 
   toggleShortcutContent() {
     this.shortcutsCollapsed = !this.shortcutsCollapsed;
+    saveBoolean(SUITE_COLLAPSED_KEY, this.shortcutsCollapsed);
     this.shortcutContent?.setVisibility?.(this.shortcutsCollapsed ? 'excluded' : 'visible');
     globalThis.qx?.ui?.core?.queue?.Manager?.flush?.();
     this.syncNavigationEmbedHeight();
@@ -583,7 +602,16 @@ export class RepairQuickDock {
   }
 
   toggleNextMCVPanel() {
-    if (!this.nextMCVPanel || this.nextMCVPanel.isDisposed?.()) {
+    const visible = !this.nextMCVPanel
+      || this.nextMCVPanel.isDisposed?.()
+      || this.nextMCVPanel.getVisibility?.() === 'excluded';
+    this.setNextMCVPanelVisible(visible, true);
+  }
+
+  setNextMCVPanelVisible(visible, persist = true) {
+    this.nextMCVOpen = Boolean(visible);
+    if (persist) saveBoolean(NEXT_MCV_OPEN_KEY, this.nextMCVOpen);
+    if (this.nextMCVOpen && (!this.nextMCVPanel || this.nextMCVPanel.isDisposed?.())) {
       const module = this.context.modules?.get?.('next-mcv');
       if (typeof module?.buildEmbedded !== 'function') {
         throw new Error('The Next MCV embedded view is unavailable.');
@@ -592,7 +620,7 @@ export class RepairQuickDock {
       this.nextMCVPanel.set?.({ width: 122, maxWidth: 122, allowGrowX: false });
       this.nextMCVBody.add(this.nextMCVPanel);
       this.nextMCVSection.show?.();
-    } else if (this.nextMCVPanel.getVisibility?.() === 'excluded') {
+    } else if (this.nextMCVOpen) {
       this.nextMCVPanel.show?.();
       this.nextMCVSection.show?.();
     } else {
@@ -650,6 +678,8 @@ export class RepairQuickDock {
       if (modules[NEXT_MCV_MODULE.moduleId]?.state !== 'enabled') {
         this.nextMCVPanel?.exclude?.();
         this.nextMCVSection?.exclude?.();
+      } else if (this.nextMCVOpen) {
+        this.setNextMCVPanelVisible(true, false);
       }
       const managerButton = this.buttons.get('manager');
       managerButton?.show?.();
@@ -706,7 +736,8 @@ export class RepairQuickDock {
     this.nextMCVBody = null;
     this.nextMCVSection = null;
     this.shortcutContent = null;
-    this.shortcutsCollapsed = false;
+    this.shortcutsCollapsed = savedBoolean(SUITE_COLLAPSED_KEY, true);
+    this.nextMCVOpen = savedBoolean(NEXT_MCV_OPEN_KEY, true);
     if (this.container && !this.container.isDisposed?.()) this.container.destroy();
     this.container = null;
     this.root = null;
