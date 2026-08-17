@@ -32,8 +32,7 @@ Notable changes to CnC-TA-Suite are recorded here. The project follows semantic 
 
 ## [1.1.0] - 2026-08-11
 
-- Advanced Research ETA to v0.3.0 as a fully independent Suite-owned window that never opens or modifies the game's original Research pane.
-- Added the backward-compatible module-owned `manual` contract to Suite Core and advanced the Framework and Suite Module API to v1.1.0.
+- Advanced Research ETA to v0.3.0 as a lightweight native Research-pane enhancement that injects compact live credit ETAs without changing research actions.
 - Changed Command Manual to discover documentation from the live module registry and show only installed, enabled modules in its table of contents, search, related links, and module inventory.
 - Advanced the independently versioned Command Manual module to v0.5.0 with a Suite API v1.1.0 requirement.
 - Added a manifest-derived documentation fallback so existing Suite API v1.0.0 modules remain compatible without immediately defining detailed manual content.
