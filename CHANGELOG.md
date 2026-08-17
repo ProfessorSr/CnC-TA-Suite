@@ -29,6 +29,7 @@ Notable changes to CnC-TA-Suite are recorded here. The project follows semantic 
 - Corrected alliance-shared marker creation across minified native API argument orders and verify that the server-side marker exists before reporting success.
 - Corrected Player Intelligence rank, score, command-point, faction, and header-version presentation.
 - Standardized every Suite module window header on the owning module's current version, including legacy Scanner windows and War Room companion palettes.
+- Updated repository validation to the Node 24-based `actions/checkout@v6` and `actions/setup-node@v6` runtimes.
 - Hardened dock startup, module teardown, marker decoding, scanner persistence, and attack-workspace synchronization.
 
 ## [1.1.0] - 2026-08-11
