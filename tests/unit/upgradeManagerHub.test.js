@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UpgradeManagerHub } from '../../modules/upgrade-manager/upgrade-manager-hub.js';
+import { resourceIdsForScope, resourceWait } from '../../modules/upgrade-manager/quick-upgrade-window.js';
+
+test('Quick Upgrade formats resource wait time', () => {
+  assert.equal(resourceWait(0), 'Ready');
+  assert.equal(resourceWait(3661), '1h 2m');
+  assert.equal(resourceWait(Infinity), 'No production');
+});
+
+test('Quick Upgrade shows only resources used by each upgrade scope', () => {
+  assert.deepEqual(resourceIdsForScope('buildings'), ['tiberium', 'power']);
+  assert.deepEqual(resourceIdsForScope('offense'), ['crystal', 'power']);
+  assert.deepEqual(resourceIdsForScope('defense'), ['tiberium', 'crystal', 'power']);
+});
 
 test('Quick Upgrade suggests one level above the lowest healthy eligible item', () => {
   const hub = new UpgradeManagerHub({});
@@ -28,4 +41,21 @@ test('Target-level building upgrades use the native target-level API once', () =
   }, 16);
   assert.equal(result.success, true);
   assert.deepEqual(calls, [{ details, level: 16 }]);
+});
+
+test('Overview building upgrade uses the native API for the current base', () => {
+  const calls = [];
+  const details = { id: 9 };
+  const hub = new UpgradeManagerHub({});
+  hub.currentCity = () => ({ id: 'home' });
+  hub.cityId = (city) => city.id;
+  hub.root = () => ({
+    API: { City: { GetInstance: () => ({ UpgradeBuildingToLevel: (target, level) => calls.push({ target, level }) }) } }
+  });
+  const result = hub.upgrade({
+    cityId: 'home', category: 'buildings', nextLevel: 8, affordable: true,
+    damaged: false, locked: false, entity: { get_BuildingDetails: () => details }
+  });
+  assert.equal(result.success, true);
+  assert.deepEqual(calls, [{ target: details, level: 8 }]);
 });

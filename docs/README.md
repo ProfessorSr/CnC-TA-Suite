@@ -1,4 +1,4 @@
-# CnC-TA Suite Framework v1.0.0
+# CnC-TA Suite Framework v1.1.0
 
 ## Start here
 
@@ -9,7 +9,7 @@ The Framework is not one large gameplay script. It is the system underneath the 
 The Framework is versioned independently from every module.
 
 ```text
-Framework version: 1.0.0
+Framework version: 1.1.0
 Module A version:   0.3.0
 Module B version:   2.1.4
 Module C version:   0.1.0
@@ -27,7 +27,7 @@ The Framework release includes three required control modules:
 
 These three modules are part of the basic Framework experience. They prove that the Framework is running and give the user a way to view and manage it. They are not gameplay feature modules such as an attack planner, scanner, upgrade tool, or resource tool.
 
-Gameplay feature modules are added separately. Each feature module contains its own version, documentation, changelog, and compatibility information.
+The complete CnC-TA-Suite distribution currently bundles 26 independently versioned modules. Current highlights include Player Intelligence, Alliance Intelligence and markers, Scanner saved-layout and silo filtering, War Room native simulation, Research ETA, and manual economy/repair tools. Each feature module remains independently versioned and documented even when distributed with the Framework.
 
 ## Who are these documents for?
 
@@ -74,9 +74,9 @@ When the code changes, the documents should be updated to match the code. Module
 
 ## Current release information
 
-- Framework version: **1.0.0**
-- Framework release label: **v1.0.0-release**
-- Chrome extension manifest version: **1.0.0**
-- Suite API version: **1.0.0**
+- Framework version: **1.1.0**
+- Framework release label: **v1.1.0-release**
+- Chrome extension manifest version: **1.1.0**
+- Suite API version: **1.1.0**
 - Game Data Hub API version: **1.0.0**
 - Browser extension standard: **Chrome Manifest V3**

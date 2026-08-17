@@ -276,6 +276,19 @@ export class WarRoomCalculator {
     return Object.freeze(candidates.slice(0, requestedCount).map((candidate) => Object.freeze(candidate)));
   }
 
+  static minimumForceFormations(snapshot, goal = 'cy') {
+    const candidates = this.candidateFormations(snapshot, goal, 25);
+    const wanted = [
+      /^Current formation$/,
+      /^Objective-focused formation$/,
+      /^Objective nudge \(1 troop\)$/,
+      /^Objective nudge \(2 troops\)$/,
+      /^Objective nudge \(3 troops\)$/
+    ];
+    return Object.freeze(wanted.map((pattern) => candidates.find((candidate) => pattern.test(candidate.name)))
+      .filter(Boolean));
+  }
+
   static scoreSimulation(response, snapshot, goal = 'cy') {
     const objective = this.objective(snapshot, goal);
     if (!objective) return Object.freeze({ score: Number.POSITIVE_INFINITY, objectivePercent: 100 });
@@ -308,7 +321,7 @@ export class WarRoomCalculator {
       const analysis = this.analyzeNativeSimulation(response, snapshot, 'Maximum RP candidate');
       const research = Math.max(0, Number(analysis.research) || 0);
       return Object.freeze({
-        // Match Super Simulator: actual native RP is authoritative, with
+        // Actual native RP is authoritative, with
         // damage and survival used only to break equal-RP results.
         score: -research * 1_000_000
           - Math.max(0, Number(analysis.defenderDamage) || 0) * 1_000

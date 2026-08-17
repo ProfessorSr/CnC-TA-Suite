@@ -1,11 +1,11 @@
 {
   "id": "base-intelligence",
-  "name": "Base Intelligence",
-  "version": "0.3.0",
+  "name": "Player Intelligence",
+  "version": "0.6.0",
   "apiVersion": "1.0.0",
   "author": "ProfessorSr",
-  "lastUpdated": "2026-07-20",
-  "description": "Owned-base overview, statistics, resources, repairs, composition, stickers, and region intelligence.",
+  "lastUpdated": "2026-08-14",
+  "description": "Player overview, achievements, and intelligence for every owned base.",
   "dependencies": [],
   "permissions": ["events", "game", "hooks", "settings", "windows"],
   "settings": {

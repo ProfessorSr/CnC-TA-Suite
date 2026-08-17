@@ -54,9 +54,16 @@ export class ExampleModule extends Module {
       id: "example-module",
       name: "Example Module",
       version: "0.1.0",
-      apiVersion: "1.0.0",
+      apiVersion: "1.1.0",
       author: "Your Name",
       description: "Explains what the module does.",
+      manual: {
+        title: "Example Module",
+        summary: "Explains how to operate Example Module.",
+        steps: ["Open the module.", "Review the displayed information."],
+        controls: [["Refresh", "Reads current data again."]],
+        notes: []
+      },
       permissions: ["windows"],
       settingsKey: "exampleModule"
     });
@@ -89,6 +96,8 @@ export class ExampleModule extends Module {
 ```
 
 The module's manifest and class identity should agree.
+
+The `manual` object belongs to the module, not to Command Manual. Command Manual reads it from enabled module instances and automatically adds or removes the corresponding chapter as lifecycle state changes. If `manual` is omitted, the Framework uses the module's name and description as a baseline chapter.
 
 ## Step 4: Use the scoped context
 

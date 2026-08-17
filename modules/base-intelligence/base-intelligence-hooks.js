@@ -261,6 +261,11 @@ export class BaseIntelligenceHooks {
   }
 
   installMoveInfo() {
+    // RegionCityMoveInfo.getInstance() constructs native move-preview state
+    // and dereferences VisMain.GetMouseTool internally. Do not instantiate it
+    // until the world visual system is actually available.
+    const visMain = this.hub.root()?.Vis?.VisMain?.GetInstance?.();
+    if (!visMain || typeof visMain.GetMouseTool !== 'function') return false;
     const prototype = globalThis.webfrontend?.gui?.region?.RegionCityMoveInfo?.prototype;
     if (!prototype || this.ids.includes('base-intelligence:move-info')) return false;
     const methodName = Object.getOwnPropertyNames(prototype).find((name) =>
@@ -299,11 +304,22 @@ export class BaseIntelligenceHooks {
     prototype[methodName] = updateMoveInfoWithIntelligence;
     const moveInfo = globalThis.webfrontend?.gui?.region?.RegionCityMoveInfo?.getInstance?.();
     const disappearListener = moveInfo?.addListener?.('disappear', () => hooks.clearTunnelMarkers());
+    const root = this.hub.root();
+    const moveTool = visMain.GetMouseTool?.(root?.Vis?.MouseTool?.EMouseTool?.MoveBase);
+    const netUtil = globalThis.webfrontend?.phe?.cnc?.Util;
+    const onMoveDeactivate = () => hooks.clearTunnelMarkers();
+    if (moveTool && netUtil?.attachNetEvent && root?.Vis?.MouseTool?.OnDeactivate != null) {
+      netUtil.attachNetEvent(moveTool, 'OnDeactivate', root.Vis.MouseTool.OnDeactivate, hooks, onMoveDeactivate);
+    }
     const id = 'base-intelligence:move-info';
     this.context.hooks.register(id, () => {
       if (prototype[methodName] === updateMoveInfoWithIntelligence) prototype[methodName] = original;
       if (disappearListener != null && !moveInfo?.isDisposed?.()) {
         moveInfo.removeListenerById?.(disappearListener);
+      }
+      if (moveTool && netUtil?.detachNetEvent && root?.Vis?.MouseTool?.OnDeactivate != null) {
+        try { netUtil.detachNetEvent(moveTool, 'OnDeactivate', root.Vis.MouseTool.OnDeactivate, hooks, onMoveDeactivate); }
+        catch { /* The native move tool may already have been replaced. */ }
       }
       hooks.clearTunnelMarkers();
     }, { replace: true });
@@ -313,16 +329,27 @@ export class BaseIntelligenceHooks {
 
   install() {
     let count = 0;
-    if (this.installMoveInfo()) count += 1;
+    const attempt = (name, operation) => {
+      try {
+        if (operation()) count += 1;
+      } catch (error) {
+        this.context.logger?.debug?.(`Base Intelligence hook is not ready: ${name}`, {
+          error: error?.message ?? String(error)
+        });
+      }
+    };
+    attempt('move-info', () => this.installMoveInfo());
     for (const name of ['RegionCityStatusInfoOwn', 'RegionCityStatusInfoAlliance', 'RegionCityStatusInfoEnemy']) {
-      if (!this.ids.includes(`base-intelligence:${name}`) && this.installTooltip(name)) count += 1;
+      if (!this.ids.includes(`base-intelligence:${name}`)) {
+        attempt(name, () => this.installTooltip(name));
+      }
     }
     for (const name of [
       'RegionCityStatusInfoAlliance', 'RegionCityStatusInfoEnemy',
       'RegionNPCBaseStatusInfo', 'RegionNPCCampStatusInfo', 'RegionRuinStatusInfo'
     ]) {
       const id = `base-intelligence:${name}:appear`;
-      if (!this.ids.includes(id) && this.installTargetTooltip(name)) count += 1;
+      if (!this.ids.includes(id)) attempt(`${name}:appear`, () => this.installTargetTooltip(name));
     }
     return count;
   }

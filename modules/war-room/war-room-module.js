@@ -15,11 +15,11 @@ import {
 export const warRoomManifest = Object.freeze({
   id: 'war-room',
   name: 'War Room',
-  version: '0.12.0',
+  version: '0.17.2',
   apiVersion: '1.0.0',
   hubApiVersion: '1.0.0',
   author: 'ProfessorSr',
-  lastUpdated: '2026-07-22',
+  lastUpdated: '2026-08-12',
   description: 'Unified attack planning, native simulation, reports, army, target, and combat analysis.',
   dependencies: Object.freeze([]),
   permissions: Object.freeze([
@@ -50,6 +50,7 @@ export class WarRoomModule extends Module {
     this.unsubscribeCompanionSettings = null;
     this.unsubscribeNativeSimulationRequest = null;
     this.nativeSimulationPanel = null;
+    this.attackWorkspacePromise = null;
   }
 
   findNativeSimulationResultsPanel() {
@@ -177,7 +178,14 @@ export class WarRoomModule extends Module {
       context.logger?.warn?.('Saved-formation map highlights could not be loaded.', error);
     });
     this.unsubscribeTick?.();
+    let lastUiTickAt = 0;
     this.unsubscribeTick = context.eventBus?.on?.('game:tick', () => {
+      const now = Date.now();
+      // While combat setup is closed, polling the large native formation
+      // object graph twice a second only adds pressure to game-state dispatch.
+      const minimumInterval = this.attackSetupActive ? 500 : 2000;
+      if (now - lastUiTickAt < minimumInterval) return;
+      lastUiTickAt = now;
       const hub = this.window?.hub ?? this.palette?.hub ?? new WarRoomHub(context);
       const snapshot = hub.snapshot();
       this.highlighter?.setAttackerId?.(snapshot.attacker?.id);
@@ -213,6 +221,7 @@ export class WarRoomModule extends Module {
         this.ensureInitialized(context);
         this.window?.initializeCompanions?.();
         this.window?.setAttackCompanionsVisible?.(true);
+        void this.openAttackWorkspace(context);
       } else if (!ready && this.attackSetupActive) {
         this.window?.setAttackCompanionsVisible?.(false);
       }
@@ -247,6 +256,20 @@ export class WarRoomModule extends Module {
     this.window.initializeCompanions?.();
   }
 
+  async openAttackWorkspace(context = this.context) {
+    if (this.attackWorkspacePromise) return this.attackWorkspacePromise;
+    this.attackWorkspacePromise = (async () => {
+      this.ensureInitialized(context);
+      await this.window.open();
+      this.window.dockLeftOfAttackView?.();
+      this.palette?.setVisible?.(true);
+      this.palette?.dockRightOfAttackView?.();
+    })().catch((error) => {
+      context?.logger?.warn?.('War Room attack workspace could not be opened.', error);
+    }).finally(() => { this.attackWorkspacePromise = null; });
+    return this.attackWorkspacePromise;
+  }
+
   async open(context, page = null) {
     this.ensureInitialized(context);
     const record = await this.window.open();
@@ -263,6 +286,7 @@ export class WarRoomModule extends Module {
     this.unsubscribeCompanionSettings = null;
     this.unsubscribeNativeSimulationRequest?.();
     this.unsubscribeNativeSimulationRequest = null;
+    this.attackWorkspacePromise = null;
     this.palette?.destroy?.();
     this.palette = null;
     this.compactLayout?.uninstall?.();

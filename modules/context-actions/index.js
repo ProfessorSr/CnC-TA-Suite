@@ -18,13 +18,15 @@ const actionSettings = Object.freeze({
   showPlanRuin: Object.freeze({ type: 'boolean', default: true }),
   showPlanRuinFor: Object.freeze({ type: 'boolean', default: true }),
   showPlanLevel: Object.freeze({ type: 'boolean', default: true }),
-  showPlanRemove: Object.freeze({ type: 'boolean', default: true })
+  showPlanRemove: Object.freeze({ type: 'boolean', default: true }),
+  showAddCustomMarker: Object.freeze({ type: 'boolean', default: true }),
+  showRemoveCustomMarker: Object.freeze({ type: 'boolean', default: true })
 });
 
 export const contextActionsManifest = Object.freeze({
   id: 'context-actions',
   name: 'Context Actions',
-  version: '0.3.0',
+  version: '0.5.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Adds configurable Suite actions to native map-object menus.',

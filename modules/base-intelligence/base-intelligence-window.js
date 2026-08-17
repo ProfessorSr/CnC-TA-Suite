@@ -12,7 +12,13 @@ function table(qx, columns, widths = []) {
   return { model, widget };
 }
 function page(qx, title) { return new qx.ui.tabview.Page(title).set({ layout: new qx.ui.layout.VBox(7), padding: 8 }); }
-function compositionText(items) { return items.map((item) => `${item.name} ×${item.count}`).join(', ') || 'None'; }
+function statCard(qx, title, accent = '#9fe8ff') {
+  const card = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({ padding: 12, backgroundColor: '#1d2d38', decorator: 'main', minHeight: 82 });
+  card.add(white(qx, title.toUpperCase(), { textColor: '#8da2ad', font: 'bold' }));
+  const value = white(qx, '—', { textColor: accent, font: 'bold' });
+  card.add(value);
+  return { card, value };
+}
 
 export class BaseIntelligenceWindow {
   constructor({ context, hub, sticker }) { this.context = context; this.hub = hub; this.sticker = sticker; this.record = null; this.rows = []; }
@@ -25,31 +31,53 @@ export class BaseIntelligenceWindow {
     const access = new qx.ui.form.Button('Access Selected Base'); access.addListener('execute', () => this.accessSelected());
     const sticker = new qx.ui.form.Button('Open Status Sticker'); sticker.addListener('execute', () => { void this.sticker.open(); });
     toolbar.add(refresh); toolbar.add(access); toolbar.add(sticker); toolbar.add(new qx.ui.core.Spacer(), { flex: 1 });
-    this.header = white(qx, 'Loading player and world information…', { alignY: 'middle' }); toolbar.add(this.header);
+    this.header = white(qx, 'Loading player information…', { alignY: 'middle' }); toolbar.add(this.header);
     root.add(toolbar);
     const tabs = new qx.ui.tabview.TabView();
 
     const overview = page(qx, 'Overview');
-    this.overview = table(qx, ['Information', 'Value'], [230, 600]); overview.add(this.overview.widget, { flex: 1 });
+    this.playerCard = new qx.ui.container.Composite(new qx.ui.layout.VBox(12)).set({ padding: 18, decorator: 'main', backgroundColor: '#111c23' });
+    this.playerName = white(qx, 'Player', { font: 'bold', textColor: '#9fe8ff' });
+    this.playerIdentity = white(qx, 'Loading…', { textColor: '#cbd8de' });
+    const stats = new qx.ui.container.Composite(new qx.ui.layout.HBox(10));
+    this.rankCard = statCard(qx, 'World rank', '#ffd36a');
+    this.scoreCard = statCard(qx, 'Score / next level', '#9fe8ff');
+    this.cpCard = statCard(qx, 'Command points', '#8dff9f');
+    stats.add(this.rankCard.card, { flex: 1 }); stats.add(this.scoreCard.card, { flex: 1 }); stats.add(this.cpCard.card, { flex: 1 });
+    const details = new qx.ui.container.Composite(new qx.ui.layout.HBox(10));
+    const worldPanel = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({ padding: 12, backgroundColor: '#17262f', decorator: 'main' });
+    const basePanel = new qx.ui.container.Composite(new qx.ui.layout.VBox(5)).set({ padding: 12, backgroundColor: '#17262f', decorator: 'main' });
+    worldPanel.add(white(qx, 'WORLD & ACCOUNT', { font: 'bold', textColor: '#8da2ad' }));
+    basePanel.add(white(qx, 'BASE NETWORK', { font: 'bold', textColor: '#8da2ad' }));
+    this.playerWorld = white(qx, ''); this.playerSummary = white(qx, '');
+    worldPanel.add(this.playerWorld); basePanel.add(this.playerSummary);
+    details.add(worldPanel, { flex: 1 }); details.add(basePanel, { flex: 1 });
+    this.playerCard.add(this.playerName); this.playerCard.add(this.playerIdentity); this.playerCard.add(stats); this.playerCard.add(details);
+    overview.add(this.playerCard);
     tabs.add(overview);
+
+    const achievements = page(qx, 'Achievements');
+    this.achievements = table(qx, ['Achievement', 'Description', 'Progress', 'Status'], [210, 480, 120, 100]);
+    achievements.add(this.achievements.widget, { flex: 1 }); tabs.add(achievements);
 
     const bases = page(qx, 'Owned Bases');
     this.bases = table(qx, ['Base', 'Coordinates', 'Faction', 'Base', 'Offense', 'Defense', 'Support', 'Condition', 'Status'], [150, 90, 75, 60, 65, 65, 65, 85, 95]);
-    this.bases.widget.addListener('cellDbltap', () => this.accessSelected()); bases.add(this.bases.widget, { flex: 1 });
-    bases.add(white(qx, 'Double-click a base to access it directly.'));
+    this.bases.widget.addListener('cellTap', () => this.accessSelected()); bases.add(this.bases.widget, { flex: 1 });
+    bases.add(white(qx, 'Click a base row to focus that player base.'));
     tabs.add(bases);
 
-    const composition = page(qx, 'Composition');
-    this.composition = table(qx, ['Base', 'Buildings', 'Offense', 'Defense', 'Support', 'Support assignment'], [120, 240, 205, 205, 135, 155]); composition.add(this.composition.widget, { flex: 1 }); tabs.add(composition);
+    const support = page(qx, 'Support');
+    this.support = table(qx, ['Base', 'Support structure', 'Level', 'Set on'], [190, 280, 100, 260]); support.add(this.support.widget, { flex: 1 }); tabs.add(support);
 
     const resources = page(qx, 'Resources');
-    this.resources = table(qx, ['Base', 'Resource', 'Stock', 'Capacity', 'Production/hr', 'Time to cap', 'Packages'], [135, 90, 115, 115, 115, 100, 90]); resources.add(this.resources.widget, { flex: 1 }); tabs.add(resources);
+    const collect = new qx.ui.form.Button('Collect Packages'); collect.addListener('execute', () => this.runAction('collect'));
+    resources.add(collect);
+    this.resources = table(qx, ['Base', 'Resource', 'Stock', 'Capacity', 'Continuous/hr', 'Package production', 'Alliance bonus/hr', 'Total/hr', 'Time to cap'], [125, 80, 95, 95, 105, 120, 115, 95, 95]); resources.add(this.resources.widget, { flex: 1 }); tabs.add(resources);
 
     const repairs = page(qx, 'Repairs');
+    const repairAll = new qx.ui.form.Button('Repair All'); repairAll.addListener('execute', () => this.runAction('repair'));
+    repairs.add(repairAll);
     this.repairs = table(qx, ['Base', 'Category', 'Repair time', 'Stored charge', 'Capacity', 'Condition'], [150, 100, 110, 125, 125, 100]); repairs.add(this.repairs.widget, { flex: 1 }); tabs.add(repairs);
-
-    const combat = page(qx, 'Combat & Loot');
-    this.combat = table(qx, ['Base', 'Lootable Tiberium', 'Lootable Crystal', 'Lootable Power', 'Offense units', 'Defense units', 'Attack summary'], [145, 130, 130, 120, 105, 105, 180]); combat.add(this.combat.widget, { flex: 1 }); tabs.add(combat);
 
     const display = page(qx, 'Display & Tooltips');
     const modeRow = new qx.ui.container.Composite(new qx.ui.layout.HBox(8));
@@ -89,34 +117,43 @@ export class BaseIntelligenceWindow {
     try { const city = this.selectedBase(); if (!city) throw new Error('Select a base first.'); this.hub.focus(city.id); this.header.setValue(`Accessing ${city.name}.`); }
     catch (error) { this.header.setValue(error?.message ?? String(error)); }
   }
+  runAction(action) {
+    try {
+      const affected = action === 'collect' ? this.hub.collectPackages() : this.hub.repairAll();
+      this.header.setValue(`${action === 'collect' ? 'Collected packages from' : 'Repaired'} ${affected} base${affected === 1 ? '' : 's'}.`);
+      this.render();
+    } catch (error) { this.header.setValue(error?.message ?? String(error)); }
+  }
 
   render() {
     try {
       const data = this.hub.snapshot(); this.rows = data.cities;
       this.header?.setValue?.(`${data.player?.name ?? 'Player'} · ${data.cities.length} bases · ${data.world?.name ?? data.world?.id ?? 'World'}`);
-      this.overview?.model?.setData?.([
-        ['Player', data.player?.name ?? 'Unknown'], ['Player ID', data.player?.id ?? '—'], ['Faction', data.player?.faction ?? '—'],
-        ['Rank / score', `${data.player?.rank ?? '—'} / ${number(data.player?.score)}`], ['Command points', data.player?.commandPoints ?? '—'],
-        ['Alliance', data.alliance?.name ?? data.player?.allianceName ?? 'None'], ['Alliance rank / members', `${data.alliance?.rank ?? '—'} / ${data.alliance?.memberCount ?? '—'}`],
-        ['World', data.world?.name ?? data.world?.id ?? 'Unknown'], ['Server', data.account.host], ['Language', data.account.language],
-        ['Owned bases', data.cities.length], ['Damaged / collectable', `${data.cities.filter((city) => city.status === 'Damaged').length} / ${data.cities.filter((city) => city.collectable).length}`]
-      ]);
+      this.playerName?.setValue?.(`<span style="font-size:22px">${data.player?.name ?? 'Unknown player'}</span>`);
+      this.playerIdentity?.setValue?.(`<span style="color:#8da2ad">${data.player?.faction ?? '—'} COMMANDER</span><br><b>${data.alliance?.name ?? data.player?.allianceName ?? 'No alliance'}</b>`);
+      this.rankCard?.value?.setValue?.(`<span style="font-size:20px">#${data.player?.rank ?? '—'}</span>`);
+      this.scoreCard?.value?.setValue?.(`<span style="font-size:20px">${data.player?.score == null ? '—' : number(data.player.score)} / ${data.player?.nextScore == null ? '—' : number(data.player.nextScore)}</span>`);
+      const cpCurrent = data.player?.commandPoints == null ? '—' : number(data.player.commandPoints);
+      const cpMax = data.player?.commandPointsMax == null ? '—' : number(data.player.commandPointsMax);
+      this.cpCard?.value?.setValue?.(`<span style="font-size:20px">${cpCurrent} / ${cpMax}</span>`);
+      this.playerWorld?.setValue?.(`<b>${data.world?.name ?? data.world?.id ?? 'Unknown world'}</b><br>${data.account.host}<br>${data.account.language}`);
+      this.playerSummary?.setValue?.(`<b>${data.cities.length}</b> owned bases<br><span style="color:#ff9d8d">${data.cities.filter((city) => city.status === 'Damaged').length} damaged</span><br><span style="color:#8dff9f">${data.cities.filter((city) => city.collectable).length} ready to collect</span>`);
+      this.achievements?.model?.setData?.(this.hub.achievements().map((item) => [item.name, item.description, item.target > 0 ? `${number(item.current)} / ${number(item.target)}` : number(item.current), item.complete ? 'Completed' : 'In progress']));
       this.bases?.model?.setData?.(data.cities.map((city) => [city.name, `${city.x}:${city.y}`, city.faction, city.baseLevel.toFixed(1), city.offenseLevel.toFixed(1), city.defenseLevel.toFixed(1), city.supportLevel.toFixed(1), `${city.condition.toFixed(0)}%`, city.status]));
-      this.composition?.model?.setData?.(data.cities.map((city) => [city.name, compositionText(city.composition.buildings), compositionText(city.composition.offense), compositionText(city.composition.defense), `${city.supportName} L${city.supportLevel}`, city.supportTarget]));
-      this.resources?.model?.setData?.(data.cities.flatMap((city) => Object.entries(city.resources).map(([name, value]) => [city.name, name, number(value.current), number(value.capacity), number(value.perHour), duration(value.timeToCapSeconds), city.packageIncome[name] ? number(city.packageIncome[name]) : city.collectable ? 'Ready' : 'None'])));
+      this.support?.model?.setData?.(data.cities.map((city) => [city.name, city.supportName, city.supportLevel.toFixed(1), city.supportTarget]));
+      this.resources?.model?.setData?.(data.cities.flatMap((city) => Object.entries(city.resources).map(([name, value]) => [city.name, name, number(value.current), number(value.capacity), number(value.continuousPerHour), number(value.packagePerHour), number(value.allianceBonusPerHour), number(value.totalPerHour), duration(value.timeToCapSeconds)])));
       this.repairs?.model?.setData?.(data.cities.flatMap((city) => Object.entries(city.repair).map(([name, value]) => [city.name, name, duration(value.timeSeconds), number(value.stored), number(value.capacity), `${(name === 'base' ? city.baseCondition : city.offenseCondition).toFixed(0)}%`])));
-      this.combat?.model?.setData?.(data.cities.map((city) => [city.name, number(city.loot.tiberium), number(city.loot.crystal), number(city.loot.power), city.counts.offense, city.counts.defense, `Base ${city.baseLevel.toFixed(1)} · Off ${city.offenseLevel.toFixed(1)} · Def ${city.defenseLevel.toFixed(1)}`]));
       if (this.sticker?.record?.window?.isVisible?.()) this.sticker.render();
     } catch (error) {
       if (this.header && !this.header.isDisposed?.()) {
-        this.header.setValue?.(`Base information unavailable: ${error?.message ?? error}`);
+        this.header.setValue?.(`Player information unavailable: ${error?.message ?? error}`);
       }
-      this.context.logger?.warn?.('Base Intelligence refresh failed.', error);
+      this.context.logger?.warn?.('Player Intelligence refresh failed.', error);
     }
   }
 
   async open() {
     if (this.record?.window && !this.record.window.isDisposed?.()) { this.render(); this.record.window.open(); this.record.window.setActive?.(true); return this.record; }
-    this.record = await this.context.windows.open({ id: 'base-intelligence', title: 'Base Intelligence', content: this.build(), x: 65, y: 45, width: 1180, height: 720, resizable: true, singleton: true }); return this.record;
+    this.record = await this.context.windows.open({ id: 'base-intelligence', title: 'Player Intelligence v0.6.0', content: this.build(), x: 65, y: 45, width: 1180, height: 720, resizable: true, singleton: true }); return this.record;
   }
 }

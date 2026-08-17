@@ -8,9 +8,14 @@ export class NextMCVModule {
     this.id = 'next-mcv';
     this.name = 'Next MCV';
     this.title = 'Next MCV';
-    this.version = '0.4.0';
+    this.version = '0.5.0';
     this.author = 'ProfessorSr';
     this.description = 'Shows credit and research progress toward the next MCV.';
+    this.manual = Object.freeze({
+      id: this.id, title: this.name, summary: this.description,
+      steps: ['Open Next MCV.', 'Review current, required, remaining, and ETA values.', 'Refresh after resource changes.'],
+      controls: [['Refresh', 'Reads the current BaseFound requirement.'], ['Compact', 'Reduces the standalone view.']], notes: []
+    });
     this.category = 'Economy';
     this.settingsKey = 'nextMCV';
   }

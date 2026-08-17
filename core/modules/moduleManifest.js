@@ -22,12 +22,13 @@ export class ModuleManifest {
     const id = source.id ?? module.id;
     const name = source.name ?? module.name ?? id;
     const version = source.version ?? module.version ?? '0.0.0';
-    const apiVersion = source.apiVersion ?? module.apiVersion ?? '1.0.0';
+    const apiVersion = source.apiVersion ?? module.apiVersion ?? '1.1.0';
     const hubApiVersion = source.hubApiVersion ?? module.hubApiVersion ?? '1.0.0';
     const dependencies = asStringArray(source.dependencies ?? module.dependencies, 'dependencies');
     const permissions = asStringArray(source.permissions ?? module.permissions, 'permissions');
     const settings = source.settings ?? module.settingsSchema ?? {};
     const lastUpdated = source.lastUpdated ?? module.lastUpdated ?? '2026-07-20';
+    const manual = source.manual ?? module.manual ?? null;
 
     if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
       throw new TypeError('Module manifest "id" must be a lowercase identifier using letters, numbers, dots, underscores, or hyphens.');
@@ -72,7 +73,8 @@ export class ModuleManifest {
       description: typeof source.description === 'string' ? source.description.trim() : '',
       dependencies: Object.freeze(dependencies),
       permissions: Object.freeze(permissions),
-      settings: Object.freeze({ ...settings })
+      settings: Object.freeze({ ...settings }),
+      manual: manual ? Object.freeze({ ...manual, id }) : null
     });
   }
 

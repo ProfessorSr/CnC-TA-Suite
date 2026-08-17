@@ -18,6 +18,11 @@ CnC-TA-Suite/
 │       ├── communications.svg
 │       ├── context.svg
 │       ├── external.svg
+│       ├── formation-mirror-horizontal.svg
+│       ├── formation-mirror-vertical.svg
+│       ├── formation-swap-12.svg
+│       ├── formation-swap-23.svg
+│       ├── formation-swap-34.svg
 │       ├── hotkeys.svg
 │       ├── inspect-data.svg
 │       ├── intelligence.svg
@@ -25,6 +30,7 @@ CnC-TA-Suite/
 │       ├── map.svg
 │       ├── mcv-clock.svg
 │       ├── modules.svg
+│       ├── research-eta.svg
 │       ├── support.svg
 │       ├── transfer.svg
 │       ├── ui-tools.svg
@@ -166,83 +172,45 @@ CnC-TA-Suite/
 │       ├── resizable.js
 │       └── windowManager.js
 ├── docs/
-│   ├── 01 - Project/
-│   │   ├── Goals.md
-│   │   ├── Mission.md
-│   │   ├── Principles.md
-│   │   ├── Repository Structure.md
-│   │   ├── Roadmap.md
-│   │   ├── Versioning.md
-│   │   └── Vision.md
+│   ├── 01 - Introduction/
+│   │   ├── Framework Goals and Boundaries.md
+│   │   ├── Included Control Modules.md
+│   │   └── What Is the Framework.md
 │   ├── 02 - Architecture/
-│   │   ├── Architecture.md
-│   │   ├── Bootstrap.md
-│   │   ├── Core.md
-│   │   ├── Declarative Modules.md
-│   │   ├── Events.md
-│   │   ├── Logging.md
-│   │   ├── Modules.md
-│   │   ├── Performance.md
-│   │   ├── Security.md
-│   │   ├── Settings.md
-│   │   ├── Storage.md
-│   │   ├── Themes.md
-│   │   └── Windows.md
-│   ├── 03 - UI/
-│   │   ├── Accessibility.md
-│   │   ├── Color System.md
-│   │   ├── Components.md
-│   │   ├── Design System.md
-│   │   ├── Icons.md
-│   │   ├── Layout.md
-│   │   ├── Typography.md
-│   │   └── UI Standards.md
+│   │   └── Declarative Modules.md
+│   ├── 02 - Installing and Running/
+│   │   ├── Installation and First Run.md
+│   │   └── Project and Build Layout.md
+│   ├── 03 - How the Framework Works/
+│   │   ├── Architecture and Data Flow.md
+│   │   ├── Lifecycle and Failure Handling.md
+│   │   └── Startup Process.md
 │   ├── 04 - Development/
-│   │   ├── Branching.md
-│   │   ├── Coding Standards.md
-│   │   ├── CSS.md
-│   │   ├── Debugging.md
 │   │   ├── EA Client Update Workflow.md
-│   │   ├── Git.md
-│   │   ├── HTML.md
-│   │   ├── JavaScript.md
-│   │   ├── Releases.md
-│   │   ├── Reviews.md
 │   │   ├── Stability and Performance.md
-│   │   ├── Testing.md
-│   │   ├── v0.3.0 Integration Audit.md
-│   │   ├── v0.3.0 Part 5 Validation.md
 │   │   ├── v0.4.0 Release Review.md
 │   │   └── v1.0.0 Release Review.md
-│   ├── 05 - Modules/
-│   │   ├── Game Integration/
-│   │   │   ├── Part 1 - Core Discovery.md
-│   │   │   ├── Part 2 - Services.md
-│   │   │   ├── Part 3 - Battle and Selection.md
-│   │   │   └── Part 4 - Events and Hooks.md
-│   │   ├── API.md
-│   │   ├── Battle Simulator.md
-│   │   ├── Defense.md
-│   │   ├── Formation.md
-│   │   ├── Launcher.md
-│   │   ├── Optimizer.md
-│   │   ├── Plugins.md
-│   │   ├── Settings.md
-│   │   └── Statistics.md
-│   ├── 06 - Reference/
-│   │   ├── API Reference.md
-│   │   ├── Event Reference.md
-│   │   ├── Game Integration.md
+│   ├── 04 - Framework Services/
+│   │   ├── Events Storage and Settings.md
+│   │   ├── Game Integration Hub and Compatibility.md
+│   │   ├── Shared Services.md
+│   │   └── Windows UI and Theme.md
+│   ├── 05 - Modules and Compatibility/
+│   │   ├── Manifest Permissions and Settings.md
+│   │   ├── Module System.md
+│   │   └── Versioning and Compatibility.md
+│   ├── 06 - Development/
+│   │   ├── Building a Module.md
+│   │   ├── Development Rules and Best Practices.md
+│   │   └── Testing and Release Process.md
+│   ├── 07 - Support and Reference/
+│   │   ├── FAQ.md
 │   │   ├── Glossary.md
-│   │   ├── Keyboard Shortcuts.md
-│   │   ├── Object Reference.md
-│   │   └── Terminology.md
-│   ├── 07 - Decisions/
-│   │   ├── ADR-0001.md
-│   │   ├── ADR-0002.md
-│   │   ├── ADR-0003.md
-│   │   └── ADR-Template.md
-│   └── modules.md
+│   │   └── Troubleshooting.md
+│   ├── DOCS_VERSION.md
+│   ├── DOCUMENTATION_INDEX.md
+│   ├── modules.md
+│   └── README.md
 ├── manifest/
 │   └── chrome/
 │       ├── bridge.js
@@ -276,6 +244,7 @@ CnC-TA-Suite/
 │   ├── command-manual/
 │   │   ├── command-manual-window.js
 │   │   ├── index.js
+│   │   ├── manifest.json
 │   │   ├── manual-content.js
 │   │   └── README.md
 │   ├── communications/
@@ -302,7 +271,8 @@ CnC-TA-Suite/
 │   ├── launcher/
 │   │   ├── launcher.css
 │   │   ├── launcher.js
-│   │   └── launcherWindow.js
+│   │   ├── launcherWindow.js
+│   │   └── manifest.json
 │   ├── layout-optimizer/
 │   │   ├── index.js
 │   │   ├── layout-optimizer-hub.js
@@ -316,6 +286,7 @@ CnC-TA-Suite/
 │   │   ├── moduleManagerWindow.js
 │   │   └── README.md
 │   ├── next-mcv/
+│   │   ├── manifest.json
 │   │   ├── nextMCV.css
 │   │   ├── nextMCV.js
 │   │   ├── nextMCVCalculator.js
@@ -328,6 +299,43 @@ CnC-TA-Suite/
 │   │   ├── repair-manager-hub.js
 │   │   ├── repair-manager-window.js
 │   │   └── repair-quick-dock.js
+│   ├── research-eta/
+│   │   ├── assets/
+│   │   │   ├── anti_tank_barrier.png
+│   │   │   ├── barbwire.png
+│   │   │   ├── commando.png
+│   │   │   ├── defense_guardian.png
+│   │   │   ├── defense_missile_squad.png
+│   │   │   ├── defense_pitbull.png
+│   │   │   ├── defense_predator.png
+│   │   │   ├── defense_sniper.png
+│   │   │   ├── defense_zone.png
+│   │   │   ├── falcon_support.png
+│   │   │   ├── firehawk.png
+│   │   │   ├── flak.png
+│   │   │   ├── guardian_cannon.png
+│   │   │   ├── guardian.png
+│   │   │   ├── ion_cannon_support.png
+│   │   │   ├── juggernaut.png
+│   │   │   ├── kodiak.png
+│   │   │   ├── mammoth.png
+│   │   │   ├── mcv.png
+│   │   │   ├── missile_squad.png
+│   │   │   ├── orca.png
+│   │   │   ├── paladin.png
+│   │   │   ├── pitbull.png
+│   │   │   ├── predator.png
+│   │   │   ├── rifleman.png
+│   │   │   ├── sam_site.png
+│   │   │   ├── sniper_team.png
+│   │   │   ├── titan_artillery.png
+│   │   │   ├── watchtower.png
+│   │   │   └── zone_troopers.png
+│   │   ├── index.js
+│   │   ├── manifest.json
+│   │   ├── README.md
+│   │   ├── research-catalog.js
+│   │   └── research-eta-window.js
 │   ├── resource-transfer/
 │   │   ├── index.js
 │   │   ├── manifest.json
@@ -336,12 +344,15 @@ CnC-TA-Suite/
 │   │   ├── resource-transfer-window.js
 │   │   └── supplies-integration.js
 │   ├── scanner/
+│   │   ├── manifest.json
+│   │   ├── README.md
 │   │   ├── scanner-calculator.js
 │   │   ├── scanner-controller.js
 │   │   ├── scanner-layout-window.js
 │   │   ├── scanner-module.js
 │   │   └── scanner-window.js
 │   ├── suite-status/
+│   │   ├── manifest.json
 │   │   ├── suiteStatus.css
 │   │   ├── suiteStatus.js
 │   │   └── suiteStatusWindow.js
@@ -367,8 +378,15 @@ CnC-TA-Suite/
 │   ├── war-room/
 │   │   ├── army-analyzer.js
 │   │   ├── attack-controls-palette.js
+│   │   ├── attack-setup-compact-layout.js
 │   │   ├── battle-simulator.js
 │   │   ├── combat-stats.js
+│   │   ├── companion-settings.js
+│   │   ├── exhaustive-formation-optimizer.js
+│   │   ├── formation-preset-store.js
+│   │   ├── formation-target-highlighter.js
+│   │   ├── index.js
+│   │   ├── manifest.json
 │   │   ├── README.md
 │   │   ├── target-analyzer.js
 │   │   ├── war-room-calculator.js
@@ -379,6 +397,76 @@ CnC-TA-Suite/
 │       ├── index.js
 │       ├── manifest.json
 │       └── README.md
+├── oldscripts/
+│   ├── LICENSE
+│   ├── TA_ADDON_City_Online_Status_Colorer_SC.user.js
+│   ├── TA_AlliancesMemberOnline.user.js
+│   ├── TA_Attack_Range.user.js
+│   ├── TA_Auto_Repair.user.js
+│   ├── TA_Autopilot.user.js
+│   ├── TA_BaseInfo.user.js
+│   ├── TA_BaseShare.user.js
+│   ├── TA_Battle_Simulator_V2_OLD.user.js
+│   ├── TA_CD_Compass.user.js
+│   ├── TA_CD_Player_Base_Info.user.js
+│   ├── TA_CD_PvP_Alert_Status.user.js
+│   ├── TA_CD_PvP_Quick_Map.user.js
+│   ├── TA_Chat_Colorize.user.js
+│   ├── TA_Chat_Helper_Enhanced_Mod.user.js
+│   ├── TA_CityMoveInfoExtend.user.js
+│   ├── TA_CNCOpt_Link_Button_SC.user.js
+│   ├── TA_CNCOpt_Link_Button.user.js
+│   ├── TA_CNCOptPLUS_Link_Button.user.js
+│   ├── TA_CnCTAOpt_Link_Button.user.js
+│   ├── TA_Compass_ALT.user.js
+│   ├── TA_Coord_Box_Shortcut.user.js
+│   ├── TA_Coords_Button_All.user.js
+│   ├── TA_Count_Forgotten_Bases_Range.user.js
+│   ├── TA_Crucial_CNC_Map_Link.user.js
+│   ├── TA_Flunik_Tools_reloaded.user.js
+│   ├── TA_Formation_Saver.user.js
+│   ├── TA_Hotkeys.user.js
+│   ├── TA_infernal_wrapper.user.js
+│   ├── TA_Info_Sticker_SUPERCOMPACT.user.js
+│   ├── TA_Info_Sticker.user.js
+│   ├── TA_leoStats.user.js
+│   ├── TA_Maelstrom_ADDON_Basescanner_AIO.user.js
+│   ├── TA_Maelstrom_ADDON_Basescanner_Basic.user.js
+│   ├── TA_Maelstrom_ADDON_Basescanner_CNCOPTplus.user.js
+│   ├── TA_Maelstrom_ADDON_Basescanner_Infected_Camps.user.js
+│   ├── TA_MaelstromTools_Dev_Mod_MCV.user.js
+│   ├── TA_Map.user.js
+│   ├── TA_MHTools_Available_Loot_Summary_Info.user.js
+│   ├── TA_MovableMenuOverlay.user.js
+│   ├── TA_Multissesion_MOD.user.js
+│   ├── TA_New_Custom_Flunik_Tools.user.js
+│   ├── TA_New_Resource_Trade_Window.user.js
+│   ├── TA_PluginsLib_mhLoot.user.js
+│   ├── TA_PluginsLib_mhNavigator.user.js
+│   ├── TA_POI_ExporterTools.user.js
+│   ├── TA_POIs_Analyser.user.js
+│   ├── TA_PTE_CheatScript.user.js
+│   ├── TA_PvP_PvE_Player_Info_Mod.user.js
+│   ├── TA_PvP_PvE_Ranking_POI_Holding_Split_Base_Kill_Score.user.js
+│   ├── TA_Real_POI_Bonus.user.js
+│   ├── TA_Repair_Time_Of_Death.user.js
+│   ├── TA_Report_Stats.user.js
+│   ├── TA_Report_Summary.user.js
+│   ├── TA_Shockr_Tools_Basescanner_Mailversion_reMod.user.js
+│   ├── TA_Supplies_Mod.user.js
+│   ├── TA_TACS.user.js
+│   ├── TA_The_Green_Cross_Tools.user.js
+│   ├── TA_TheMovement.user.js
+│   ├── TA_Tiberium_Alliances_Battle_Simulator_V2.user.js
+│   ├── TA_Transfer_All_resources.user.js
+│   ├── TA_Tunnel_Info.user.js
+│   ├── TA_Upgrade_Top_ModButtonPos.user.js
+│   ├── TA_View_Player_Base.user.js
+│   ├── TA_Warchief_Sector_HUD.user.js
+│   ├── TA_Warchief_Upgrade_Base_Defense_Army.user.js
+│   ├── TA_Wavy.user.js
+│   ├── TA_xTrim_Base_Overlay_DR_4_3.user.js
+│   └── TA_Zoom.user.js
 ├── scripts/
 │   └── build/
 │       ├── build-extension.mjs
@@ -413,6 +501,7 @@ CnC-TA-Suite/
 │       ├── eventBus.test.js
 │       ├── eventBusDiagnostics.test.js
 │       ├── formationModel.test.js
+│       ├── formationPresetStore.test.js
 │       ├── gameDataHub.test.js
 │       ├── gameObjectRegistry.test.js
 │       ├── gameUiReady.test.js
@@ -433,11 +522,15 @@ CnC-TA-Suite/
 │       ├── playerService.test.js
 │       ├── repairQuickDock.test.js
 │       ├── reportAnalytics.test.js
+│       ├── researchEta.test.js
 │       ├── resourceTransferHub.test.js
 │       ├── serviceRegistry.test.js
+│       ├── storageService.test.js
+│       ├── superSimulator.test.js
 │       ├── suppliesIntegration.test.js
 │       ├── topBar.test.js
 │       ├── unitModel.test.js
+│       ├── upgradeManagerHub.test.js
 │       ├── versionManager.test.js
 │       ├── warRoomCalculator.test.js
 │       └── warRoomPresentation.test.js

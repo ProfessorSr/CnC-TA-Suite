@@ -3,11 +3,13 @@
 
   const HOST = globalThis.window ?? globalThis;
   const ROOT = (HOST.CnCTA = HOST.CnCTA || {});
+  const SAVED_LAYOUTS_KEY = 'module:scanner:saved-layouts:v1';
 
   class ScannerController {
-    constructor(hub, logger = null) {
+    constructor(hub, logger = null, storage = null) {
       this.hub = hub;
       this.logger = logger;
+      this.storage = storage;
       this.abortController = null;
       this.layoutCache = new Map();
       this.lastOptions = null;
@@ -15,12 +17,46 @@
       this.paused = false;
       this.rawResults = [];
       this.filterId = 'all';
+      this.siloFilterId = 'none';
       this.listeners = new Set();
+      this.savedLayouts = [];
+      this.savedReady = this.loadSavedLayouts();
       this.state = {
         running: false,
         progress: { phase: 'idle', current: 0, total: 0 },
         error: null
       };
+    }
+
+    async loadSavedLayouts() {
+      const saved = await this.storage?.get?.(SAVED_LAYOUTS_KEY, []) ?? [];
+      this.savedLayouts = Array.isArray(saved) ? saved.map(ROOT.ScannerCalculator.normalizeResult) : [];
+      return this.savedLayouts;
+    }
+
+    async getSavedLayouts() {
+      await this.savedReady;
+      return [...this.savedLayouts];
+    }
+
+    async saveLayouts(results) {
+      await this.savedReady;
+      const saved = new Map(this.savedLayouts.map(result => [`${result.x}:${result.y}`, result]));
+      for (const result of results || []) {
+        const normalized = ROOT.ScannerCalculator.normalizeResult(result);
+        saved.set(`${normalized.x}:${normalized.y}`, normalized);
+      }
+      this.savedLayouts = [...saved.values()];
+      await this.storage?.set?.(SAVED_LAYOUTS_KEY, this.savedLayouts);
+      return this.getSavedLayouts();
+    }
+
+    async removeSavedLayouts(results) {
+      await this.savedReady;
+      const removed = new Set((results || []).map(result => `${result.x}:${result.y}`));
+      this.savedLayouts = this.savedLayouts.filter(result => !removed.has(`${result.x}:${result.y}`));
+      await this.storage?.set?.(SAVED_LAYOUTS_KEY, this.savedLayouts);
+      return this.getSavedLayouts();
     }
 
     subscribe(listener) {
@@ -38,7 +74,8 @@
       return {
         ...this.state,
         filterId: this.filterId,
-        results: ROOT.ScannerCalculator.filterResults(this.rawResults, this.filterId)
+        siloFilterId: this.siloFilterId,
+        results: ROOT.ScannerCalculator.filterResults(this.rawResults, this.filterId, this.siloFilterId)
       };
     }
 
@@ -48,6 +85,11 @@
 
     setFilter(filterId) {
       this.filterId = filterId || 'all';
+      this.emit();
+    }
+
+    setSiloFilter(filterId) {
+      this.siloFilterId = filterId || 'none';
       this.emit();
     }
 

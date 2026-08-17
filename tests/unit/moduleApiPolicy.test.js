@@ -5,11 +5,12 @@ import { ModuleManifest } from '../../core/modules/moduleManifest.js';
 
 test('module API policy accepts current major and reports older minor as deprecated', () => {
   assert.equal(moduleApiCompatibility('1.0.0').compatible, true);
-  assert.equal(moduleApiCompatibility('1.1.0').deprecated, true);
+  assert.equal(moduleApiCompatibility('1.0.0').deprecated, true);
+  assert.equal(moduleApiCompatibility('1.1.0').deprecated, false);
 });
 
 test('module manifests reject incompatible Suite API major versions', () => {
-  assert.throws(() => ModuleManifest.normalize({ id: 'future', name: 'Future', version: '1.0.0', apiVersion: '2.0.0' }), /supports 1\.0\.0/);
+  assert.throws(() => ModuleManifest.normalize({ id: 'future', name: 'Future', version: '1.0.0', apiVersion: '2.0.0' }), /supports 1\.1\.0/);
 });
 
 test('module manifests reject incompatible Hub API major versions', () => {

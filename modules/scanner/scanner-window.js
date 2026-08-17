@@ -109,6 +109,13 @@
         this.controller.setFilter(selected?.getModel() || 'all');
       });
       controls.add(this.layoutSelect);
+      this.siloSelect = new qx.ui.form.SelectBox().set({ width: 180, height: 25 });
+      for (const filter of ROOT.ScannerCalculator.SILO_FILTERS) this.siloSelect.add(new qx.ui.form.ListItem(filter.label, null, filter.id));
+      this.siloSelect.addListener('changeSelection', event => {
+        const selected = event.getData()?.[0];
+        this.controller.setSiloFilter(selected?.getModel() || 'none');
+      });
+      controls.add(this.siloSelect);
       this.layoutsButton = new qx.ui.form.Button('Get Layouts').set({ width: 120, height: 25, enabled: false });
       this.layoutsButton.addListener('execute', () => this.layoutWindow.open(this.controller.getState().results));
       controls.add(this.layoutsButton);

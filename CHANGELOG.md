@@ -2,6 +2,46 @@
 
 Notable changes to CnC-TA-Suite are recorded here. The project follows semantic versioning.
 
+## [Unreleased] - 2026-08-17
+
+### Added
+
+- Added private, refresh-persistent map markers to Alliance Intelligence and optional alliance sharing through the game's native alliance-marker channel. Base, camp, and outpost context menus can add or remove Suite markers.
+- Added Alliance Attack Alert and Alliance Proximity Monitor modules.
+- Added Scanner layout-card selection, coordinate/CNCOpt mini-link export, persistent saved layouts, and combined resource/silo filters for 7T/5C, 6T/6C, 5T/7C and two four- or five-touch Tiberium silo positions.
+- Added Player Intelligence achievements and support pages, per-base production breakdowns, package collection, Repair All, and click-to-focus owned-base rows.
+
+### Changed
+
+- Renamed Base Intelligence to Player Intelligence and rebuilt its overview as a player card covering the complete player and every owned base. Faction names, integer command points, score progress, rank, and alliance data now use player-facing formats.
+- War Room now opens to the left of native attack setup while the Formation Controls palette opens on the right. Best Formation hides troops only after a simulation reaches CY 0, then reveals troops in place beginning with the CY lane and strongest structure attackers.
+- Quick Upgrade now shows live resource-ready ETAs for aggregate and selected upgrades and displays only the resources applicable to buildings, offense, or defense.
+- Next MCV retains its open/closed state across refreshes and reopens on startup unless closed; the large Suite shortcut palette starts collapsed.
+- Research ETA now uses faction-specific GDI/NOD research catalogs and Suite-owned artwork while retaining compact resource progress and ETA information.
+- Advanced Alliance Intelligence and War Room to v0.17.2, Player Intelligence and Scanner to v0.6.0, Research ETA to v0.5.0, and Quick Upgrade/Upgrade Manager to v0.4.1.
+
+### Removed
+
+- Removed obsolete War Room Composition and Combat/Loot presentation where the newer focused views replace it.
+
+### Fixed
+
+- Corrected alliance-shared marker creation across minified native API argument orders and verify that the server-side marker exists before reporting success.
+- Corrected Player Intelligence rank, score, command-point, faction, and header-version presentation.
+- Hardened dock startup, module teardown, marker decoding, scanner persistence, and attack-workspace synchronization.
+
+## [1.1.0] - 2026-08-11
+
+- Advanced Research ETA to v0.3.0 as a fully independent Suite-owned window that never opens or modifies the game's original Research pane.
+- Added the backward-compatible module-owned `manual` contract to Suite Core and advanced the Framework and Suite Module API to v1.1.0.
+- Changed Command Manual to discover documentation from the live module registry and show only installed, enabled modules in its table of contents, search, related links, and module inventory.
+- Advanced the independently versioned Command Manual module to v0.5.0 with a Suite API v1.1.0 requirement.
+- Added a manifest-derived documentation fallback so existing Suite API v1.0.0 modules remain compatible without immediately defining detailed manual content.
+- Removed the standalone Super Simulator module after moving its exhaustive formation optimizer into War Room.
+- Hardened native move planning, repair-dock refreshes, War Room preset synchronization, battle-simulation timing, and central tick performance.
+
+The Hub schema and declarative UI schema remain at v1.0.0; neither contract changed in this release.
+
 ## [1.0.0] - 2026-07-20
 
 - Added optional War Room companion windows for formation optimization and native-styled simulation results, including a collapsible view of four previous cached results.

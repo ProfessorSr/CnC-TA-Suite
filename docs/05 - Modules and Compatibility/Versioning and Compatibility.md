@@ -9,7 +9,7 @@ Every module has its own version.
 They are not expected to match.
 
 ```text
-Framework:       1.0.0
+Framework:       1.1.0
 Suite Dashboard: 0.2.0
 Module Manager:  0.1.0
 Suite Status:    0.2.0
@@ -83,7 +83,7 @@ A module that reads Hub snapshots declares:
 hubApiVersion
 ```
 
-The current Framework publishes Hub API `1.0.0`.
+Framework v1.1.0 publishes Suite Module API `1.1.0` and Hub API `1.0.0`. Suite API v1.0.0 modules remain compatible because the v1.1.0 additions are backward-compatible.
 
 ## Compatibility policy
 
@@ -110,7 +110,7 @@ Compatibility depends on the declared API requirement and actual use of the cont
 
 Game-build compatibility is separate from module API compatibility.
 
-A module may be compatible with Framework API 1.0.0 while the current live game build has changed an internal object the Framework cannot yet interpret.
+A module may be compatible with Framework API 1.1.0 while the current live game build has changed an internal object the Framework cannot yet interpret.
 
 Suite Status should display both kinds of information.
 
@@ -155,7 +155,7 @@ Examples:
 Framework remains stable:
 
 ```text
-Framework 1.0.0
+Framework 1.1.0
 ```
 
 War Room receives several updates:
@@ -169,8 +169,8 @@ War Room 0.9.0
 Scanner receives one update:
 
 ```text
-Scanner 0.2.0
-Scanner 0.3.0
+Scanner 0.5.0  saved layouts and CNCOpt export
+Scanner 0.6.0  combined resource and silo-touch filters
 ```
 
 No Framework release is required unless those modules need a changed Framework contract or the Framework itself is modified.

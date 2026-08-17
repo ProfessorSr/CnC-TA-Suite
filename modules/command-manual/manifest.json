@@ -1,13 +1,20 @@
 {
   "id": "command-manual",
   "name": "Command Manual",
-  "version": "0.4.0",
-  "apiVersion": "1.0.0",
+  "version": "0.6.0",
+  "apiVersion": "1.1.0",
   "hubApiVersion": "1.0.0",
   "author": "ProfessorSr",
-  "lastUpdated": "2026-07-21",
+  "lastUpdated": "2026-08-12",
   "description": "Interactive searchable command center with contextual module help, workflows, FAQ, troubleshooting, release notes, and glossary.",
   "dependencies": [],
   "permissions": ["modules", "windows"],
-  "settings": {}
+  "settings": {},
+  "manual": {
+    "title": "Command Manual",
+    "summary": "Searchable framework help plus documentation contributed by currently enabled modules.",
+    "steps": ["Open Command Manual.", "Search or select a chapter.", "Enable or disable modules to update their chapters automatically."],
+    "controls": [["Search", "Filters framework and enabled-module help."], ["Enabled Modules", "Shows the live enabled-module inventory."], ["Previous / Next", "Moves through visible chapters."]],
+    "notes": ["Disabled and uninstalled modules do not appear in the manual."]
+  }
 }

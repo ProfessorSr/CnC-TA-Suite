@@ -1,12 +1,15 @@
 import { ArmyAnalyzer } from './army-analyzer.js';
 import { WarRoomCalculator } from './war-room-calculator.js';
 import {
+  allowsTroopHiding,
   greedyCandidate,
+  manualFormationEdits,
+  orderForCyReveal,
   orderWeakestFirst,
   scoreMaximumResearch,
   stageCells,
   totalGreedySimulations
-} from '../super-simulator/super-simulator-optimizer.js';
+} from './exhaustive-formation-optimizer.js';
 import {
   DEFAULT_WAR_ROOM_COMPANION_SETTINGS,
   WAR_ROOM_COMPANION_SETTINGS_KEY,
@@ -234,12 +237,11 @@ export class WarRoomWindow {
     });
     const stack = new qx.ui.container.Stack();
     const pages = new Map();
-    let activeSectionId = 'search';
+    let activeSectionId = 'simulator';
     let selectSectionControls = () => {};
     const sections = [
       ['search', '🔍 Search'],
       ['simulator', '🎯 Attack Simulator'],
-      ['reports', '📋 Report Summary'],
       ['army', '👥 Army Analyzer'],
       ['stats', '📈 Combat Statistics'],
       ['settings', '⚙ Settings']
@@ -389,7 +391,7 @@ export class WarRoomWindow {
     ]) compactGoal.add(new qx.ui.form.ListItem(name, null, id));
     const compactSearchMode = new qx.ui.form.SelectBox().set({ width: 145 });
     compactSearchMode.add(new qx.ui.form.ListItem('Formation', null, 'formation'));
-    compactSearchMode.add(new qx.ui.form.ListItem('Greedy RP', null, 'greedy'));
+    compactSearchMode.add(new qx.ui.form.ListItem('Greedy Sim', null, 'greedy'));
     const compactSearchTime = new qx.ui.form.Spinner(1, 30, 600).set({
       singleStep: 1, pageStep: 10, width: 78,
       toolTipText: 'Number of simulations; each simulation represents about 3 seconds'
@@ -648,8 +650,8 @@ export class WarRoomWindow {
     compactGoal.addListener('changeSelection', () => syncSelection(compactGoal, plannerGoal));
     const updateSearchModeLabel = () => {
       const greedy = searchMode.getSelection?.()?.[0]?.getModel?.() === 'greedy';
-      recommend.setLabel(greedy ? 'Simulate Greedy RP' : 'Simulate Best Formation');
-      compactRecommend.setLabel(greedy ? 'Greedy RP' : 'Simulate');
+      recommend.setLabel(greedy ? 'Start Greedy Sim' : 'Simulate Best Formation');
+      compactRecommend.setLabel(greedy ? 'Greedy Sim' : 'Simulate');
       plannerGoal.setEnabled(!greedy);
       compactGoal.setEnabled(!greedy);
       searchTime.setEnabled(!greedy);
@@ -699,7 +701,7 @@ export class WarRoomWindow {
       try {
         const units = displayedRecommendation?.grid?.flat().filter(Boolean) ?? [];
         if (!units.length) throw new Error('Simulate or load a formation first.');
-        const snapshot = this.hub.snapshot();
+        let snapshot = this.hub.snapshot();
         if (!snapshot.attacker?.id || !snapshot.target?.id) {
           throw new Error('Open a target attack screen first.');
         }
@@ -801,8 +803,9 @@ export class WarRoomWindow {
       return formationPresets.find((preset) => String(preset.id) === String(id)) ?? null;
     };
     const renderPresets = (selectedId = null) => {
-      presetSelect.removeAll();
-      compactPresetSelect.removeAll();
+      if (!widgetAlive(presetSelect) || !widgetAlive(compactPresetSelect)) return;
+      presetSelect.removeAll?.();
+      compactPresetSelect.removeAll?.();
       let selectedItem = null;
       let compactSelectedItem = null;
       const snapshot = this.hub.snapshot();
@@ -813,8 +816,9 @@ export class WarRoomWindow {
       )) {
         const item = new qx.ui.form.ListItem(preset.name, null, preset.id);
         const compactItem = new qx.ui.form.ListItem(preset.name, null, preset.id);
-        presetSelect.add(item);
-        compactPresetSelect.add(compactItem);
+        if (!widgetAlive(presetSelect) || !widgetAlive(compactPresetSelect)) return;
+        presetSelect.add?.(item);
+        compactPresetSelect.add?.(compactItem);
         if (String(preset.id) === String(selectedId)) {
           selectedItem = item;
           compactSelectedItem = compactItem;
@@ -823,13 +827,15 @@ export class WarRoomWindow {
       if (selectedItem) presetSelect.setSelection([selectedItem]);
       if (compactSelectedItem) compactPresetSelect.setSelection([compactSelectedItem]);
       const available = Boolean(presetSelect.getSelection?.()?.length);
-      loadPreset.setEnabled(available);
-      deletePreset.setEnabled(available);
-      compactLoadPreset.setEnabled(available);
-      compactDeletePreset.setEnabled(available);
+      safeSetEnabled(loadPreset, available);
+      safeSetEnabled(deletePreset, available);
+      safeSetEnabled(compactLoadPreset, available);
+      safeSetEnabled(compactDeletePreset, available);
     };
     const loadFormationPresets = async (selectedId = null) => {
-      formationPresets = await readFormationPresets(this.context.storage);
+      const loaded = await readFormationPresets(this.context.storage);
+      if (buildDisposed) return;
+      formationPresets = loaded;
       renderPresets(selectedId);
     };
     unsubscribePresetChanges = this.context.events?.on?.('war-room:formation-presets-changed', (event = {}) => {
@@ -893,11 +899,7 @@ export class WarRoomWindow {
     )));
     const minLevel = new qx.ui.form.Spinner(1, initialOffenseLevel, 100).set({ width: 65 });
     const maxLevel = new qx.ui.form.Spinner(1, Math.min(100, initialOffenseLevel + 5), 100).set({ width: 65 });
-    const maxCp = new qx.ui.form.Spinner(1, 41, 41).set({ width: 65 });
-    // CP is the user-facing reach constraint. A 40-field discovery radius is
-    // already broader than a legal 40-CP attack and avoids scanning millions
-    // of empty world coordinates on the UI event thread.
-    const searchRadius = 41;
+    const maxCp = new qx.ui.form.Spinner(1, 41, 999).set({ width: 70 });
     const targetTypes = {};
     targetControls.add(label(qx, 'Level'));
     targetControls.add(minLevel);
@@ -1140,6 +1142,10 @@ export class WarRoomWindow {
     });
     const showHistory = new qx.ui.form.Button('History ▸').set({
       width: 92,
+      height: 24,
+      minHeight: 24,
+      maxHeight: 24,
+      allowGrowY: false,
       alignY: 'top',
       toolTipText: 'Open recent cached simulation results'
     });
@@ -1225,7 +1231,7 @@ export class WarRoomWindow {
     const render = () => {
       if (buildDisposed || !widgetAlive(planner.grid.widget)) return;
       try {
-        const snapshot = this.hub.snapshot();
+        let snapshot = this.hub.snapshot();
         const summary = WarRoomCalculator.summarize(snapshot);
         planner.grid.model.setData([
           ['Attacker', snapshot.attacker?.name ?? 'No base'],
@@ -1457,10 +1463,34 @@ export class WarRoomWindow {
     let recommendationSequence = 0;
     let liveFormationSequence = 0;
     let observedTargetId = null;
+    let observedAttackerId = null;
     let observedFormation = null;
     const simulationCache = new Map();
     const cacheSimulation = (key, entry) => {
       simulationCache.set(key, { goal: entry.goal ?? selectedGoal(), ...entry });
+    };
+    const hasCachedSimulationFor = (snapshot) => {
+      const targetId = String(snapshot?.target?.id ?? '');
+      if (!targetId) return false;
+      const attackerId = String(snapshot?.attacker?.id ?? '');
+      const matchesTarget = (entry) => {
+        if (String(entry?.target?.id ?? entry?.snapshot?.target?.id ?? '') !== targetId) return false;
+        const cachedAttackerId = String(entry?.attacker?.id ?? entry?.snapshot?.attacker?.id ?? '');
+        return !attackerId || !cachedAttackerId || cachedAttackerId === attackerId;
+      };
+      return [...simulationCache.values()].some(matchesTarget)
+        || (this.stats?.history ?? []).some(matchesTarget);
+    };
+    this.selectOpeningSearchMode = () => {
+      const snapshot = this.hub.snapshot();
+      const model = hasCachedSimulationFor(snapshot) ? 'formation' : 'greedy';
+      const selectModel = (control) => {
+        const item = control.getChildren?.().find((candidate) => candidate.getModel?.() === model);
+        if (item) control.setSelection([item]);
+      };
+      selectModel(searchMode);
+      selectModel(compactSearchMode);
+      updateSearchModeLabel();
     };
     let displayedRecommendation = null;
     let previewOriginal = null;
@@ -1920,6 +1950,86 @@ export class WarRoomWindow {
           }
         }
         if (!best) throw new Error('No formation could be simulated.');
+        const originalActiveCount = best.candidate.units.length;
+        let minimalUnits = best.candidate.units.map((unit) => ({ ...unit }));
+        let minimalResult = best.result;
+        let minimalResponse = best.response;
+        let minimalSnapshot = best.snapshot;
+        // Hiding troops is useful only after the selected formation has fully
+        // destroyed the Construction Yard. If CY survives at all, retain the
+        // complete formation and do not spend simulations minimizing force.
+        const bestAnalysis = WarRoomCalculator.analyzeNativeSimulation(
+          best.response, best.snapshot, best.candidate.name
+        );
+        const canHideTroops = allowsTroopHiding(bestAnalysis);
+        const cyColumn = WarRoomCalculator.objective(best.snapshot, 'cy')?.x ?? 4;
+        const revealOrder = canHideTroops
+          ? orderForCyReveal(minimalUnits, cyColumn)
+          : [];
+        let activeCount = canHideTroops ? 0 : originalActiveCount;
+        let revealSucceeded = false;
+        if (canHideTroops) minimalUnits = minimalUnits.map((unit) => ({ ...unit, enabled: false }));
+        for (let index = 0; index < revealOrder.length; index += 1) {
+          if (buildDisposed || runId !== recommendationSequence) return;
+          await waitForRecommendationResume(runId);
+          const reveal = revealOrder[index];
+          const revealId = String(reveal.entityId ?? reveal.id ?? reveal.mdbId);
+          const trialUnits = minimalUnits.map((unit) => ({
+            ...unit,
+            enabled: String(unit.entityId ?? unit.id ?? unit.mdbId) === revealId ? true : unit.enabled === true
+          }));
+          activeCount = trialUnits.filter((unit) => unit.enabled !== false).length;
+          safeSetValue(plannerStatus,
+            `Minimum force · revealing ${reveal.name ?? 'troop'} · ${activeCount}/${originalActiveCount} active`);
+          setPlannerResult(
+            '<b>Minimum-force pass</b><br>'
+            + `<span style="color:#005f86">Revealing ${escapeHtml(reveal.name ?? 'troop')} in its current position</span><br>`
+            + `${activeCount} of ${originalActiveCount} troops active`
+          );
+          // Keep the reveal cumulative even if one native simulation request
+          // fails; the next troop is added to every troop already revealed.
+          minimalUnits = trialUnits;
+          this.hub.applyRecommendedFormation(trialUnits);
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          let response;
+          try {
+            response = await this.hub.simulateFormation(trialUnits);
+          } catch {
+            if (index < revealOrder.length - 1) await new Promise((resolve) => setTimeout(resolve, 3100));
+            continue;
+          }
+          const trialSnapshot = { ...this.hub.snapshot(), units: trialUnits.map((unit) => ({ ...unit })) };
+          const trialResult = WarRoomCalculator.scoreSimulation(response, trialSnapshot, goal);
+          const trialAnalysis = WarRoomCalculator.analyzeNativeSimulation(
+            response, trialSnapshot, `Reveal ${reveal.name ?? 'troop'}`
+          );
+          if (allowsTroopHiding(trialAnalysis)) {
+            minimalResult = trialResult;
+            minimalResponse = response;
+            minimalSnapshot = trialSnapshot;
+            revealSucceeded = true;
+            break;
+          }
+          if (index < revealOrder.length - 1) await new Promise((resolve) => setTimeout(resolve, 3100));
+        }
+        if (canHideTroops && !revealSucceeded) {
+          minimalUnits = best.candidate.units.map((unit) => ({ ...unit, enabled: true }));
+          minimalResult = best.result;
+          minimalResponse = best.response;
+          minimalSnapshot = best.snapshot;
+          activeCount = originalActiveCount;
+        }
+        const removed = Math.max(0, originalActiveCount - activeCount);
+        best = {
+          candidate: {
+            ...best.candidate,
+            name: removed > 0 ? `${best.candidate.name} · minimum force` : best.candidate.name,
+            units: minimalUnits
+          },
+          result: { ...minimalResult, oneShot: minimalResult.oneShot || minimalResult.objectivePercent <= 0.05 },
+          response: minimalResponse,
+          snapshot: minimalSnapshot
+        };
         const grid = Array.from({ length: 4 }, () => Array(9).fill(null));
         for (const unit of best.candidate.units) grid[unit.y][unit.x] = unit;
         showRecommendation({
@@ -1935,13 +2045,17 @@ export class WarRoomWindow {
         showSimulationResult(analysis, {
           name: best.candidate.name,
           oneShot: best.result.oneShot,
-          note: 'Ranked by native battle simulation. Troops were not moved.'
+          note: canHideTroops
+            ? `Ranked by native battle simulation. Minimum-force pass hid ${removed} unnecessary troop${removed === 1 ? '' : 's'}; ${originalActiveCount - removed} remain active.`
+            : 'Ranked by native battle simulation. CY remained above 0%, so no troops were hidden.'
         });
         this.hub.applyRecommendedFormation(best.candidate.units);
         observedFormation = formationSignature(this.hub.snapshot());
         this.context.eventBus?.emit?.('war-room:show-native-simulation');
         globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
-        safeSetValue(plannerStatus, `Best formation found: ${best.candidate.name}.`);
+        safeSetValue(plannerStatus, canHideTroops
+          ? `Best formation found with minimum force: ${originalActiveCount - removed} of ${originalActiveCount} troops active.`
+          : `Best formation found with all ${originalActiveCount} troops active; CY remained above 0%.`);
       } catch (error) {
         safeSetValue(plannerStatus, `Formation simulation failed: ${error?.message ?? error}`);
         setPlannerResult(
@@ -1973,19 +2087,41 @@ export class WarRoomWindow {
       safeSetEnabled(compactRecommend, true);
       safeSetEnabled(pauseRecommendation, true);
       safeSetEnabled(compactPauseRecommendation, true);
-      recommend.setLabel?.('Stop Greedy Simulation');
+      recommend.setLabel?.('Stop Greedy Sim');
       compactRecommend.setLabel?.('Stop');
       pauseRecommendation.setLabel?.('Pause');
       compactPauseRecommendation.setLabel?.('Pause');
       const identity = (unit) => String(unit.entityId ?? unit.id ?? unit.mdbId);
       try {
-        const snapshot = this.hub.snapshot();
+        let snapshot = this.hub.snapshot();
         if (!snapshot.target?.id || !snapshot.attacker?.id || !snapshot.units?.length) {
           throw new Error('Open a target attack screen with an offensive formation first.');
         }
         const ordered = orderWeakestFirst(snapshot.units);
         const total = totalGreedySimulations(ordered.length);
         const locked = new Map();
+        const manuallyLocked = new Set();
+        let appliedUnits = snapshot.units.map((unit) => ({ ...unit }));
+        const reconcilePausedFormation = () => {
+          const live = this.hub.snapshot();
+          const edits = manualFormationEdits(appliedUnits, live.units);
+          for (const [unitId, edit] of edits) {
+            locked.set(unitId, edit);
+            manuallyLocked.add(unitId);
+          }
+          if (!edits.size) return;
+          const liveById = new Map((live.units ?? []).map((unit) => [identity(unit), unit]));
+          snapshot = {
+            ...snapshot,
+            units: snapshot.units.map((unit) => ({
+              ...unit,
+              ...(liveById.get(identity(unit)) ?? {})
+            }))
+          };
+          appliedUnits = snapshot.units.map((unit) => ({ ...unit }));
+          safeSetValue(plannerStatus,
+            `Greedy Sim retained ${edits.size} manually edited troop${edits.size === 1 ? '' : 's'} and resumed.`);
+        };
         let completed = 0;
         let finalBest = null;
         simulationCache.clear();
@@ -1996,13 +2132,15 @@ export class WarRoomWindow {
         renderSimulations();
         for (let troopIndex = 0; troopIndex < ordered.length; troopIndex += 1) {
           const troop = ordered[troopIndex];
+          if (manuallyLocked.has(identity(troop))) continue;
           let stageBest = null;
           const cells = stageCells(locked);
           for (let cellIndex = 0; cellIndex < cells.length; cellIndex += 1) {
             if (completed >= total) break;
             if (buildDisposed || runId !== recommendationSequence) return;
-            await waitForRecommendationResume(runId);
+            await waitForRecommendationResume(runId, reconcilePausedFormation);
             if (buildDisposed || runId !== recommendationSequence) return;
+            if (manuallyLocked.has(identity(troop))) break;
             const cell = cells[cellIndex];
             const units = greedyCandidate({
               units: snapshot.units, orderedUnits: ordered, locked, activeUnit: troop, cell
@@ -2012,14 +2150,15 @@ export class WarRoomWindow {
             recommend.setLabel?.(`Stop · ${remainingCount} left`);
             compactRecommend.setLabel?.(`Stop · ${remainingCount} left`);
             safeSetValue(plannerStatus,
-              `Greedy RP ${completed}/${total}: troop ${troopIndex + 1}/${ordered.length}, `
+              `Greedy Sim ${completed}/${total}: troop ${troopIndex + 1}/${ordered.length}, `
               + `${troop.name}, column ${cell.x + 1}, row ${cell.y + 1}.`);
             setPlannerResult(
-              '<b>Greedy Troop-by-Troop RP</b><br>'
+              '<b>Greedy Sim</b><br>'
               + `<span style="color:#005f86">${escapeHtml(name)}</span><br><br>`
               + `${completed}/${total} simulations complete`
               + (stageBest ? `<br>Best RP for this troop: ${Math.round(stageBest.score.research).toLocaleString()}` : '')
             );
+            appliedUnits = units.map((unit) => ({ ...unit }));
             this.hub.applyRecommendedFormation(units);
             // The visible native grid is an intentional part of this mode:
             // users can pause after any candidate, inspect troop pulling and
@@ -2049,18 +2188,35 @@ export class WarRoomWindow {
             }
             completed += 1;
             renderSimulations({ history: false });
-            await waitForRecommendationResume(runId);
+            await waitForRecommendationResume(runId, reconcilePausedFormation);
+            if (manuallyLocked.has(identity(troop))) break;
             if (completed < total) await new Promise((resolve) => setTimeout(resolve, 3100));
           }
+          if (manuallyLocked.has(identity(troop))) continue;
           if (!stageBest) throw new Error(`Every position was rejected for ${troop.name}.`);
           locked.set(identity(troop), stageBest.cell);
           finalBest = stageBest;
+          appliedUnits = stageBest.units.map((unit) => ({ ...unit }));
           this.hub.applyRecommendedFormation(stageBest.units);
           if (completed >= total) break;
         }
-        if (!finalBest) throw new Error('No greedy formation completed.');
-        // Preserve the exact enabled state that produced the displayed result.
-        const finalUnits = finalBest.units.map((unit) => ({ ...unit }));
+        // Preserve manual edits made during a pause. If the last retained edit
+        // changed the formation after the most recent candidate result, run
+        // one final native simulation so the displayed analysis matches it.
+        const finalUnits = appliedUnits.map((unit) => ({ ...unit }));
+        if (!finalUnits.length) throw new Error('No greedy formation completed.');
+        if (!finalBest || formationSignature({ units: finalBest.units }) !== formationSignature({ units: finalUnits })) {
+          const response = await this.hub.simulateFormation(finalUnits);
+          const finalSnapshot = { ...this.hub.snapshot(), units: finalUnits };
+          const analysis = WarRoomCalculator.analyzeNativeSimulation(
+            response, finalSnapshot, 'Greedy Sim retained formation'
+          );
+          const score = scoreMaximumResearch(analysis);
+          finalBest = {
+            units: finalUnits, response, analysis, score,
+            entry: { name: 'Greedy Sim retained formation' }
+          };
+        }
         this.hub.applyRecommendedFormation(finalUnits);
         const recommendation = WarRoomCalculator.recommendFormation(
           { ...snapshot, units: finalUnits }, 'rp'
@@ -2070,19 +2226,19 @@ export class WarRoomWindow {
         showRecommendation({ ...recommendation, grid });
         observedFormation = formationSignature({ units: finalUnits });
         showSimulationResult(finalBest.analysis, {
-          title: 'Greedy Troop-by-Troop Result',
+          title: 'Greedy Sim Result',
           name: finalBest.entry.name,
           note: `${locked.size} troop(s) locked after ${completed} native simulations. The best completed formation is active.`
         });
         renderSimulations();
         safeSetValue(plannerStatus,
-          `Greedy RP complete: ${locked.size} troop(s) locked after ${completed} simulations.`);
+          `Greedy Sim complete: ${locked.size} troop(s) locked after ${completed} simulations.`);
       } catch (error) {
         if (runId === recommendationSequence) {
-          const message = `Greedy simulation failed: ${error?.message ?? error}`;
+          const message = `Greedy Sim failed: ${error?.message ?? error}`;
           safeSetValue(plannerStatus, message);
-          setPlannerResult(`<b>Greedy Troop-by-Troop RP</b><br><span style="color:#a32626">${escapeHtml(message)}</span>`);
-          this.context.logger?.warn?.('War Room greedy troop-by-troop simulation failed.', error);
+          setPlannerResult(`<b>Greedy Sim</b><br><span style="color:#a32626">${escapeHtml(message)}</span>`);
+          this.context.logger?.warn?.('War Room Greedy Sim failed.', error);
         }
       } finally {
         if (runId === recommendationSequence) {
@@ -2100,10 +2256,13 @@ export class WarRoomWindow {
       }
     };
 
-    const waitForRecommendationResume = async (runId) => {
+    const waitForRecommendationResume = async (runId, onResume = null) => {
+      let waited = false;
       while (optimizationPaused && runId === recommendationSequence && !buildDisposed) {
+        waited = true;
         await new Promise((resolve) => setTimeout(resolve, 150));
       }
+      if (waited && runId === recommendationSequence && !buildDisposed) await onResume?.();
     };
 
     const toggleRecommendationPause = () => {
@@ -2113,8 +2272,8 @@ export class WarRoomWindow {
       pauseRecommendation.setLabel?.(caption);
       compactPauseRecommendation.setLabel?.(caption);
       safeSetValue(plannerStatus, optimizationPaused
-        ? 'Best-formation simulation paused after the current candidate.'
-        : 'Best-formation simulation resumed.');
+        ? 'Formation simulation paused after the current candidate. Manual formation edits will be retained on resume.'
+        : 'Formation simulation resumed.');
       return optimizationPaused;
     };
 
@@ -2794,8 +2953,10 @@ export class WarRoomWindow {
         nativeSimulationContentElement = null;
       }
       const targetId = snapshot.target?.id == null ? null : String(snapshot.target.id);
+      const attackerId = snapshot.attacker?.id == null ? null : String(snapshot.attacker.id);
       const formation = formationSignature(snapshot);
-      if (targetId !== observedTargetId) {
+      if (attackerId !== observedAttackerId || targetId !== observedTargetId) {
+        observedAttackerId = attackerId;
         observedTargetId = targetId;
         observedFormation = formation;
         this.nativeSimulation = null;
@@ -2825,6 +2986,9 @@ export class WarRoomWindow {
 
     this.refreshAll = () => {
       syncFromGameTarget();
+      observedAttackerId = String(this.hub.snapshot().attacker?.id ?? '');
+      observedFormation = formationSignature(this.hub.snapshot());
+      queueLiveSimulation();
       void loadFormationPresets(selectedPreset()?.id ?? null);
       void loadNativeReports(true);
     };
@@ -2852,6 +3016,13 @@ export class WarRoomWindow {
     reports.grid.widget.addListener('cellDbltap', (event) => selectReportRow(event.getRow?.(), true));
     refresh.addListener('execute', () => {
       syncFromGameTarget();
+      const refreshedSnapshot = this.hub.snapshot();
+      observedAttackerId = String(refreshedSnapshot.attacker?.id ?? '');
+      observedTargetId = String(refreshedSnapshot.target?.id ?? '');
+      observedFormation = formationSignature(refreshedSnapshot);
+      this.nativeSimulation = null;
+      this.nativeSimulationReplay = null;
+      queueLiveSimulation();
       void loadNativeReports(true);
     });
     reportCategory.addListener('changeSelection', () => {
@@ -3292,8 +3463,9 @@ export class WarRoomWindow {
         }
       })();
     });
-    targetSearch.addListener('execute', () => {
+    targetSearch.addListener('execute', () => { void (async () => {
       try {
+        targetSearch.setEnabled(false);
         setSearchExportEnabled(false);
         const snapshot = this.hub.snapshot();
         const types = Object.entries(targetTypes)
@@ -3306,12 +3478,12 @@ export class WarRoomWindow {
         if (allianceCheck.getValue() && !selectedAlliance) {
           throw new Error('Choose an alliance first.');
         }
-        this.searchResults = this.hub.searchTargets({
+        this.searchResults = await this.hub.searchTargets({
           originCityId: snapshot.attacker?.id,
           minLevel: minLevel.getValue(),
           maxLevel: maxLevel.getValue(),
           cpLimit: maxCp.getValue(),
-          radius: searchRadius,
+          radius: Math.max(41, maxCp.getValue()),
           types,
           allianceId: selectedAlliance?.id ?? null,
           allianceName: selectedAlliance?.name ?? null
@@ -3333,8 +3505,8 @@ export class WarRoomWindow {
       } catch (error) {
         targetStatus.setValue(`Target search failed: ${error?.message ?? error}`);
         this.context.logger?.warn?.('War Room target search failed.', error);
-      }
-    });
+      } finally { targetSearch.setEnabled(true); }
+    })(); });
     search.grid.widget.addListener('cellTap', (event) => {
       const target = this.searchResults?.[event.getRow?.()];
       if (!target) return;
@@ -3364,11 +3536,20 @@ export class WarRoomWindow {
       }
     });
 
-    stack.setSelection([search.page]);
+    stack.setSelection([pages.get('simulator').page]);
+    selectSectionControls('simulator');
     void loadFormationPresets().catch((error) => {
       this.context.logger?.warn?.('War Room formation presets failed to load.', error);
     });
     syncFromGameTarget();
+    {
+      const initialSnapshot = this.hub.snapshot();
+      observedAttackerId = String(initialSnapshot.attacker?.id ?? '');
+      observedTargetId = String(initialSnapshot.target?.id ?? '');
+      observedFormation = formationSignature(initialSnapshot);
+    }
+    this.selectOpeningSearchMode();
+    queueLiveSimulation();
     void loadNativeReports();
     this.companionWindows = { planner: compactPlannerWindow };
     this.setAttackCompanionsVisible = (visible) => {
@@ -3402,9 +3583,32 @@ export class WarRoomWindow {
     this.companionWindows = null;
   }
 
+  dockLeftOfAttackView() {
+    const window = this.record?.window;
+    if (!window || window.isDisposed?.()) return null;
+    const application = globalThis.qx?.core?.Init?.getApplication?.();
+    const root = application?.getDesktop?.() ?? application?.getRoot?.();
+    const view = application?.getPlayArea?.();
+    const rootBounds = root?.getBounds?.() ?? { width: globalThis.innerWidth || 1280, height: globalThis.innerHeight || 720 };
+    const rootLocation = root?.getContentLocation?.() ?? { left: 0, top: 0 };
+    const viewLocation = view?.getContentLocation?.();
+    if (!viewLocation) return null;
+    const bounds = window.getBounds?.() ?? {};
+    const width = Number(bounds.width ?? window.getWidth?.() ?? 900);
+    const height = Number(bounds.height ?? window.getHeight?.() ?? 650);
+    const viewLeft = Number(viewLocation.left || 0) - Number(rootLocation.left || 0);
+    const viewTop = Number(viewLocation.top || 0) - Number(rootLocation.top || 0);
+    const left = Math.max(8, Math.min(rootBounds.width - width - 8, viewLeft - width - 6));
+    const top = Math.max(8, Math.min(rootBounds.height - height - 8, viewTop));
+    window.moveTo?.(left, top);
+    return { left, top };
+  }
+
   async open() {
+    await this.stats?.load?.();
     if (this.record?.window && !this.record.window.isDisposed?.()) {
       this.refreshAll?.();
+      this.selectOpeningSearchMode?.();
       this.record.window.open();
       this.record.window.setActive?.(true);
       return this.record;

@@ -72,6 +72,14 @@ test('WarRoomCalculator creates distinct native-simulation candidates', () => {
     .map((unit) => `${unit.entityId}:${unit.x}:${unit.y}`).sort().join('|'))).size, candidates.length);
 });
 
+test('WarRoomCalculator minimum-force pass includes a rearranged formation', () => {
+  const snapshot = fixture();
+  snapshot.units = snapshot.units.map((unit, index) => ({ ...unit, entityId: index + 10, x: index, y: 0 }));
+  const candidates = WarRoomCalculator.minimumForceFormations(snapshot, 'cy');
+  assert.equal(candidates[0].name, 'Current formation');
+  assert.ok(candidates.some((candidate) => candidate.name === 'Objective-focused formation'));
+});
+
 test('WarRoomCalculator honors explicit best-formation simulation counts', () => {
   const snapshot = fixture();
   snapshot.units = Array.from({ length: 20 }, (_, index) => ({

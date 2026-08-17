@@ -24,11 +24,18 @@ It tells the Framework:
   "id": "example-module",
   "name": "Example Module",
   "version": "0.1.0",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.1.0",
   "hubApiVersion": "1.0.0",
   "author": "Example Author",
   "lastUpdated": "2026-07-29",
   "description": "Demonstrates the Framework module contract.",
+  "manual": {
+    "title": "Example Module",
+    "summary": "Explains how to use Example Module.",
+    "steps": ["Open the module.", "Review its current data."],
+    "controls": [["Refresh", "Reads the current data again."]],
+    "notes": []
+  },
   "dependencies": [],
   "permissions": [
     "events",
@@ -60,6 +67,12 @@ Important validation includes:
 - Valid `YYYY-MM-DD` update date.
 - String arrays for dependencies and permissions.
 - Object-shaped settings.
+
+## Command Manual contribution
+
+Each module owns its Command Manual content through the optional `manual` object. The supported fields are `title`, `summary`, `steps`, `controls`, and `notes`. When detailed content is omitted, the Framework derives a baseline chapter from the module name and description.
+
+The global Command Manual discovers this information from the live module registry. Only installed modules whose lifecycle state is `enabled` appear in its table of contents, search results, related-module links, and module inventory. Disabling or unloading a module removes its chapter immediately.
 
 ## Semantic version format
 

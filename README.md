@@ -2,20 +2,21 @@
 
 CnC-TA-Suite is a modular Chrome extension for Command & Conquer: Tiberium Alliances. It modernizes long-lived community-tool workflows behind shared game-data services and native Qooxdoo interfaces that fit the game client.
 
-Current version: **v1.0.0**
+Current version: **v1.1.0**
 
-Suite Core, the public module API, and the Hub contract are at **v1.0.0**. Individual feature modules currently begin at **v0.1.0** and version independently: one module can advance without changing the framework or any other module.
+Suite Core and the public module API are at **v1.1.0**. The backward-compatible Hub contract remains at **v1.0.0**. Individual feature modules version independently: one module can advance without changing the framework or any other module.
 
 ## Highlights
 
 - Native Module Manager with independently enabled modules, a dashboard, dependency visibility, and a read-only API Inspector for public snapshots and redacted diagnostics.
 - Shared Game Data Hub that keeps ClientLib access out of presentation and calculation code.
-- War Room with target discovery, live target authority, attack planning, formation presets, native simulation, replay, reports, army analysis, and combat history.
-- Scanner for bases, camps, outposts, infected camps, alliance targets, layouts, levels, distance, and CP filters.
-- Base Intelligence, Repair & Collection, Upgrade Manager, Resource Transfer, Layout Optimizer, Next MCV, Alliance Intelligence, Context Actions, Combat Reports, Tactical Map, Support Manager, Communications, and other focused tools.
+- War Room with target discovery, live target authority, attack planning, formation presets, CY-aware best-formation search, native simulation, replay, reports, army analysis, and combat history. Native attack setup automatically places War Room on the left and Formation Controls on the right.
+- Scanner for bases, camps, outposts, player/alliance targets, exact 7T/5C, 6T/6C, and 5T/7C layouts, two-silo Tiberium-touch geometry, persistent saved layouts, and coordinate/CNCOpt export.
+- Player Intelligence for player progression, achievements, every owned base, production, packages, repairs, and support assignments; plus Upgrade Manager, Resource Transfer, Layout Optimizer, Next MCV, Alliance Intelligence, Context Actions, Combat Reports, Tactical Map, Support Manager, Communications, and other focused tools.
+- Private and alliance-shared custom map markers, alliance attack alerts, and enemy-to-member proximity monitoring.
 - Native-style shortcut controls that appear only for enabled modules, plus the searchable Command Manual and contextual `? Help` links.
 
-The generated catalog currently contains **23 modules**. Legacy feature coverage and intentionally excluded automation are tracked in [script_functions.md](script_functions.md).
+The generated catalog currently contains **26 modules**. Legacy feature coverage and intentionally excluded automation are tracked in [script_functions.md](script_functions.md).
 
 ## War Room simulation boundary
 

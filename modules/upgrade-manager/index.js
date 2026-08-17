@@ -22,7 +22,7 @@ const settings = Object.freeze({
 export const upgradeManagerManifest = Object.freeze({
   id: 'upgrade-manager',
   name: 'Upgrade Manager',
-  version: '0.3.0',
+  version: '0.4.1',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Plan, filter, rank, and manually apply upgrades across owned bases.',
@@ -106,7 +106,7 @@ export class UpgradeManagerModule extends Module {
     });
   }
 
-  async upgradeOne(candidate, manual = false) {
+  async upgradeOne(candidate, manual = false, refresh = true) {
     if (!candidate) {
       if (manual) this.window?.addActivity?.('No upgrade candidate selected');
       return false;
@@ -118,7 +118,7 @@ export class UpgradeManagerModule extends Module {
     } else if (manual) {
       this.window?.addActivity?.(`${candidate.base} — ${candidate.name}: ${result.reason}`);
     }
-    this.refresh();
+    if (refresh) this.refresh();
     return result.success;
   }
 
@@ -134,9 +134,13 @@ export class UpgradeManagerModule extends Module {
     }
     let upgraded = 0;
     for (const candidate of eligible) {
-      if (await this.upgradeOne(candidate, false)) upgraded += 1;
+      if (await this.upgradeOne(candidate, false, false)) upgraded += 1;
     }
-    if (!upgraded) this.window?.addActivity?.('No filtered upgrades were currently eligible');
+    if (upgraded) {
+      this.window?.addActivity?.(`Submitted ${upgraded} of ${eligible.length} eligible upgrades`);
+      this.context.notifications?.show?.(`Submitted ${upgraded} upgrade${upgraded === 1 ? '' : 's'}.`);
+    } else this.window?.addActivity?.('No filtered upgrades were currently eligible');
+    this.refresh();
     return upgraded;
   }
 

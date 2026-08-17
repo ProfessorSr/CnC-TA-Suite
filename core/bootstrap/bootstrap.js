@@ -6,7 +6,7 @@ import { Lifecycle } from './lifecycle.js';
 import { createApplication } from './startup.js';
 import { waitForGameUi } from './gameUiReady.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 let applicationPromise = null;
 
 export function bootstrap() {

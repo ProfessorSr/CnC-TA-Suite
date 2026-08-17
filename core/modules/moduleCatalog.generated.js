@@ -4,6 +4,8 @@
  */
 
 import { AllianceModule } from '../../modules/alliance/index.js';
+import { AllianceAttackAlertModule } from '../../modules/alliance-attack-alert/index.js';
+import { AllianceProximityMonitorModule } from '../../modules/alliance-proximity-monitor/index.js';
 import { ApiInspectorModule } from '../../modules/api-inspector/index.js';
 import { BaseIntelligenceModule } from '../../modules/base-intelligence/index.js';
 import { CombatReportsModule } from '../../modules/combat-reports/index.js';
@@ -21,7 +23,6 @@ import { ResearchEtaModule } from '../../modules/research-eta/index.js';
 import { ResourceTransferModule } from '../../modules/resource-transfer/index.js';
 import { ScannerModule } from '../../modules/scanner/scanner-module.js';
 import { SuiteStatusModule } from '../../modules/suite-status/suiteStatus.js';
-import { SuperSimulatorModule } from '../../modules/super-simulator/index.js';
 import { SupportManagerModule } from '../../modules/support-manager/index.js';
 import { TacticalMapModule } from '../../modules/tactical-map/index.js';
 import { UiToolsModule } from '../../modules/ui-tools/index.js';
@@ -31,6 +32,8 @@ import { WorldToolsModule } from '../../modules/world-tools/index.js';
 
 export const registeredModules = Object.freeze([
   AllianceModule,
+  AllianceAttackAlertModule,
+  AllianceProximityMonitorModule,
   ApiInspectorModule,
   BaseIntelligenceModule,
   CombatReportsModule,
@@ -48,7 +51,6 @@ export const registeredModules = Object.freeze([
   ResourceTransferModule,
   ScannerModule,
   SuiteStatusModule,
-  SuperSimulatorModule,
   SupportManagerModule,
   TacticalMapModule,
   UiToolsModule,

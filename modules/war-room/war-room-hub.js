@@ -522,7 +522,7 @@ export class WarRoomHub {
     return modes.includes(Number(current)) && Boolean((snapshot ?? this.snapshot()).target?.id);
   }
 
-  searchTargets(options) {
+  async searchTargets(options) {
     const scanner = this.hub?.scanner;
     if (!scanner?.findTargets) {
       const host = globalThis.window ?? globalThis;
@@ -531,6 +531,7 @@ export class WarRoomHub {
     if (!this.hub?.scanner?.findTargets) {
       throw new Error('The shared Scanner Hub service is unavailable.');
     }
+    if (options?.allianceId && this.hub.scanner.findAllianceTargets) return this.hub.scanner.findAllianceTargets(options);
     return this.hub.scanner.findTargets(options);
   }
 
@@ -621,7 +622,7 @@ export class WarRoomHub {
       const timeout = setTimeout(() => {
         cleanup();
         reject(new Error('Battle simulation timed out.'));
-      }, 12000);
+      }, 30000);
       const receiver = {
         done(status, response) {
           // CommandResult delegates have changed argument order between game
@@ -751,7 +752,7 @@ export class WarRoomHub {
           reportWaitTimeout = setTimeout(complete, 3000);
         }
       };
-      const timeout = setTimeout(() => finish(new Error('Battle simulation timed out.')), 12000);
+      const timeout = setTimeout(() => finish(new Error('Battle simulation timed out.')), 30000);
       try {
         if (useNativeEvents) {
           netUtil.attachNetEvent(api, 'OnSimulateBattleFinished', finishedEventType, this, onFinished);

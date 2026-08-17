@@ -121,13 +121,13 @@ It should be treated as disposable. Make changes in the source directories, then
 `VERSION` contains the Framework's semantic version:
 
 ```text
-1.0.0
+1.1.0
 ```
 
 `PART` contains the release label:
 
 ```text
-v1.0.0-release
+v1.1.0-release
 ```
 
 Module versions do not come from these files. They come from each module's own manifest and module class.

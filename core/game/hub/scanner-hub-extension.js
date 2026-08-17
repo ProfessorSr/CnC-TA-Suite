@@ -294,6 +294,18 @@
     }));
   }
 
+  function simpleCommand(ClientLib, name, payload, timeoutMs = 15000) {
+    const communication = ClientLib?.Net?.CommunicationManager?.GetInstance?.();
+    const delegateFactory = globalThis.webfrontend?.phe?.cnc?.Util?.createEventDelegate
+      ?? globalThis.webfrontend?.Util?.createEventDelegate;
+    if (!communication?.SendSimpleCommand || !delegateFactory) return Promise.reject(new Error('Game command service is unavailable.'));
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`${name} timed out.`)), timeoutMs);
+      const receiver = { done(_status, response) { clearTimeout(timeout); response == null ? reject(new Error(`${name} returned no data.`)) : resolve(response); } };
+      communication.SendSimpleCommand(name, payload, delegateFactory(ClientLib.Net.CommandResult, receiver, receiver.done), null);
+    });
+  }
+
   function install(gameDataHub) {
     if (!gameDataHub || gameDataHub.scanner) return gameDataHub?.scanner;
 
@@ -430,6 +442,35 @@
         return targets.sort((left, right) =>
           left.cp - right.cp || right.level - left.level || left.distance - right.distance
         );
+      },
+
+      async findAllianceTargets(options = {}) {
+        installWorldObjectAccessors(ClientLib);
+        const main = ClientLib.Data.MainData.GetInstance();
+        const own = getOwnCities(main.get_Cities());
+        const origin = own.find((city) => String(city.id) === String(options.originCityId)) || own[0];
+        if (!origin) throw new Error('No player base is available for alliance search.');
+        if (!options.allianceId) throw new Error('Choose an alliance first.');
+        const alliance = await simpleCommand(ClientLib, 'GetPublicAllianceInfo', { id: Number(options.allianceId) || options.allianceId });
+        const members = alliance?.m ?? alliance?.members ?? [];
+        const cpLimit = Number(options.cpLimit ?? 999);
+        const minLevel = Number(options.minLevel ?? 1), maxLevel = Number(options.maxLevel ?? Infinity);
+        const targets = [];
+        for (const member of members) {
+          const playerId = member?.i ?? member?.id ?? member?.Id;
+          if (playerId == null) continue;
+          try {
+            const player = await simpleCommand(ClientLib, 'GetPublicPlayerInfo', { id: playerId });
+            for (const base of player?.c ?? player?.cities ?? []) {
+              const x = Number(base?.x), y = Number(base?.y), level = Number(base?.l ?? base?.level ?? base?.bl ?? 0);
+              if (!Number.isFinite(x) || !Number.isFinite(y) || level < minLevel || level > maxLevel) continue;
+              const cp = Number(origin.raw.CalculateAttackCommandPointCostToCoord(x, y) || 0);
+              if (cp > cpLimit) continue;
+              targets.push({ id: base?.i ?? base?.id ?? `${x}:${y}`, type: 'Base', name: String(base?.n ?? base?.name ?? 'Player Base'), owner: String(member?.n ?? member?.name ?? player?.n ?? 'Unknown player'), level, x, y, cp, distance: Math.hypot(origin.x - x, origin.y - y), allianceId: alliance?.i ?? options.allianceId, alliance: String(alliance?.n ?? options.allianceName ?? ''), relationship: null, attackerId: origin.id, attackerName: origin.name });
+            }
+          } catch { /* One unavailable member must not discard the other results. */ }
+        }
+        return targets.sort((left, right) => left.cp - right.cp || left.owner.localeCompare(right.owner));
       },
 
       async selectTarget(target) {

@@ -51,6 +51,8 @@ const ACTIONS = Object.freeze([
   Object.freeze({ id: 'scanNearby', label: 'Scan Nearby', moduleId: 'scanner', scopes: ['target', 'allied', 'own'] }),
   Object.freeze({ id: 'viewLayout', label: 'View Layout', moduleId: 'scanner', scopes: ['target', 'allied'] }),
   Object.freeze({ id: 'copyCoordinates', label: 'Copy Coordinates', action: 'copy', scopes: ['target', 'allied', 'own'] }),
+  Object.freeze({ id: 'addCustomMarker', label: 'Add Custom Marker', action: 'marker-add', scopes: ['target', 'allied', 'own'], types: ['Base', 'Forgotten Base', 'Camp', 'Outpost'] }),
+  Object.freeze({ id: 'removeCustomMarker', label: 'Remove Custom Marker', action: 'marker-remove', scopes: ['target', 'allied', 'own'], types: ['Base', 'Forgotten Base', 'Camp', 'Outpost'], transient: 'marker-exists' }),
   Object.freeze({ id: 'repairManager', label: 'Repair & Collection', moduleId: 'repair-manager', scopes: ['own'] }),
   Object.freeze({ id: 'upgradeManager', label: 'Upgrade Manager', moduleId: 'upgrade-manager', scopes: ['own'] }),
   Object.freeze({ id: 'layoutOptimizer', label: 'Layout Optimizer', moduleId: 'layout-optimizer', scopes: ['own'] }),
@@ -105,9 +107,29 @@ export class ContextActionsPanel {
   applicable(selection) {
     return ACTIONS.filter((action) => action.scopes.includes(selection.category)
       && (!action.types || action.types.includes(selection.type))
+      && this.setting(action.id)
       && (action.transient === 'undo' ? this.strategicPlanner?.canUndo?.()
         : action.transient === 'reset' ? this.strategicPlanner?.isDirty?.()
-          : this.setting(action.id)));
+          : action.transient === 'marker-exists' ? this.markersAtSelection().length > 0
+            : true));
+  }
+
+  allianceMarkerHub() {
+    return this.context.modules?.get?.('alliance')?.tabs?.hub ?? null;
+  }
+
+  markersAtSelection(hub = this.allianceMarkerHub()) {
+    if (!hub || !this.selection?.validCoordinates) return [];
+    return hub.displaySuiteMarkers?.().filter((marker) =>
+      Number(marker.x) === Number(this.selection.x) && Number(marker.y) === Number(this.selection.y)) ?? [];
+  }
+
+  async ensureMarkerHub() {
+    await this.context.modules?.enable?.('alliance');
+    const hub = this.allianceMarkerHub();
+    if (!hub) throw new Error('Alliance Intelligence marker services are unavailable.');
+    await hub.privateMarkersReady;
+    return hub;
   }
 
   makeRuinForButton(action) {
@@ -153,6 +175,33 @@ export class ContextActionsPanel {
         if (!globalThis.navigator?.clipboard?.writeText) throw new Error('Clipboard access is unavailable.');
         await globalThis.navigator.clipboard.writeText(text);
         this.context.notifications?.show?.(`Copied coordinates ${text}.`);
+        return;
+      }
+      if (action.action === 'marker-add') {
+        if (!this.selection?.validCoordinates) throw new Error('Coordinates are unavailable for this object.');
+        const hub = await this.ensureMarkerHub();
+        const label = globalThis.prompt?.(
+          `Marker label for ${this.selection.x}:${this.selection.y}:`, this.selection.name || 'Custom marker'
+        )?.trim();
+        if (!label) return;
+        const shared = globalThis.confirm?.(
+          'Share this marker with alliance members using CnC-TA Suite?\n\nCancel creates a private marker visible only in this browser.'
+        ) ?? false;
+        const marker = { x: this.selection.x, y: this.selection.y, label, color: shared ? '#45d7ff' : '#ffcc33' };
+        if (shared) await hub.addSharedSuiteMarker(marker); else await hub.addPrivateMarker(marker);
+        this.context.notifications?.show?.(`${shared ? 'Alliance Suite' : 'Private'} marker added at ${marker.x}:${marker.y}.`);
+        this.render(this.selection.raw, this.context?.hub?.game?.services?.tryGet?.('clientLib')?.root ?? globalThis.ClientLib);
+        return;
+      }
+      if (action.action === 'marker-remove') {
+        const hub = await this.ensureMarkerHub();
+        const markers = this.markersAtSelection(hub);
+        if (!markers.length) throw new Error('No Suite marker exists at this location.');
+        const names = markers.map((marker) => `${marker.label} (${marker.scope})`).join('\n');
+        if (!(globalThis.confirm?.(`Remove ${markers.length} marker${markers.length === 1 ? '' : 's'} at ${this.selection.x}:${this.selection.y}?\n\n${names}`) ?? false)) return;
+        for (const marker of markers) await hub.deleteSuiteMarker(marker);
+        this.context.notifications?.show?.(`${markers.length} marker${markers.length === 1 ? '' : 's'} removed.`);
+        this.render(this.selection.raw, this.context?.hub?.game?.services?.tryGet?.('clientLib')?.root ?? globalThis.ClientLib);
         return;
       }
       if (action.action?.startsWith('plan-')) {

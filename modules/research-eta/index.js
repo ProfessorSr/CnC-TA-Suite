@@ -1,14 +1,17 @@
 import { Module } from '../../core/interfaces/module.js';
-import { ResearchEtaWindow } from './research-eta-window.js';
+import { RESEARCH_CATALOGS } from './research-catalog.js';
+
+const CREDIT_ICON = 'a7d2f83e4fe41fc03990192217fd0330.png';
+const ETA_ATTRIBUTE = 'data-cnc-ta-research-credit-eta';
 
 export const researchEtaManifest = Object.freeze({
   id: 'research-eta',
   name: 'Research ETA',
-  version: '0.2.0',
+  version: '0.5.0',
   apiVersion: '1.0.0',
   hubApiVersion: '1.0.0',
   author: 'ProfessorSr',
-  description: 'Adds current resource progress and credit accumulation time to native Research items.',
+  description: 'Adds compact live credit ETAs to the game\'s native Research window.',
   dependencies: Object.freeze([]),
   permissions: Object.freeze(['game', 'notifications', 'windows']),
   settings: Object.freeze({})
@@ -29,19 +32,14 @@ export function parseResourceAmount(value) {
   let digits = match[1].replace(/\s/g, '');
   const suffix = String(match[2] ?? '').toUpperCase();
   if (suffix) {
-    const lastComma = digits.lastIndexOf(',');
-    const lastDot = digits.lastIndexOf('.');
-    const decimalAt = Math.max(lastComma, lastDot);
+    const decimalAt = Math.max(digits.lastIndexOf(','), digits.lastIndexOf('.'));
     digits = decimalAt >= 0
       ? `${digits.slice(0, decimalAt).replace(/[.,]/g, '')}.${digits.slice(decimalAt + 1).replace(/[.,]/g, '')}`
       : digits;
-  } else {
-    digits = digits.replace(/[.,]/g, '');
-  }
+  } else digits = digits.replace(/[.,]/g, '');
   const number = Number(digits);
   if (!Number.isFinite(number)) return null;
-  const multiplier = { K: 1e3, M: 1e6, B: 1e9, T: 1e12, Q: 1e15 }[suffix] ?? 1;
-  return number * multiplier;
+  return number * ({ K: 1e3, M: 1e6, B: 1e9, T: 1e12, Q: 1e15 }[suffix] ?? 1);
 }
 
 export function researchResourceProgress(current, required, growthPerHour = 0) {
@@ -58,6 +56,20 @@ export function researchResourceProgress(current, required, growthPerHour = 0) {
   });
 }
 
+export function formatResearchCreditEta(seconds) {
+  if (seconds === 0) return 'now';
+  if (!Number.isFinite(seconds) || seconds < 0) return '—';
+  let remaining = Math.max(60, Math.ceil(seconds));
+  const days = Math.floor(remaining / 86400);
+  remaining %= 86400;
+  const hours = Math.floor(remaining / 3600);
+  remaining %= 3600;
+  const minutes = Math.max(1, Math.ceil(remaining / 60));
+  if (days) return `${days}d${hours}h`;
+  if (hours) return `${hours}h${minutes}m`;
+  return `${minutes}m`;
+}
+
 export function normalizeResearchFaction(value, enumSources = []) {
   const numeric = Number(value);
   for (const source of enumSources) {
@@ -71,139 +83,17 @@ export function normalizeResearchFaction(value, enumSources = []) {
   const text = String(value ?? '');
   if (/\bnod\b/i.test(text)) return 'nod';
   if (/\bgdi\b/i.test(text)) return 'gdi';
-  // Current ClientLib worlds use 1 for GDI and 2 for NOD. Enum discovery
-  // above remains authoritative when a future build publishes named values.
   if (numeric === 1) return 'gdi';
   if (numeric === 2) return 'nod';
   return 'unknown';
-}
-
-function compact(value) {
-  const number = Number(value) || 0;
-  for (const [size, suffix] of [[1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) {
-    if (Math.abs(number) < size) continue;
-    return `${(number / size).toFixed(number >= size * 100 ? 0 : 1).replace(/\.0$/, '')}${suffix}`;
-  }
-  return Math.round(number).toLocaleString();
-}
-
-function duration(seconds) {
-  if (seconds == null) return 'ETA unavailable';
-  if (seconds <= 0) return 'Ready';
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days) return `${days}d ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  return `${Math.max(1, minutes)}m`;
-}
-
-function shortDuration(seconds) {
-  if (seconds == null) return '?';
-  if (seconds <= 0) return '✓';
-  if (seconds >= 86400) return `${Math.ceil(seconds / 86400)}d`;
-  if (seconds >= 3600) return `${Math.ceil(seconds / 3600)}h`;
-  return `${Math.max(1, Math.ceil(seconds / 60))}m`;
-}
-
-function children(widget) {
-  try { return widget?.getChildren?.() ?? []; } catch { return []; }
-}
-
-function descendants(widget) {
-  const result = [];
-  const queue = [...children(widget)];
-  const seen = new Set();
-  while (queue.length) {
-    const current = queue.shift();
-    if (!current || seen.has(current)) continue;
-    seen.add(current);
-    result.push(current);
-    queue.push(...children(current));
-  }
-  return result;
-}
-
-function widgetText(widget) {
-  try { return plainText(widget?.getValue?.() ?? widget?.getLabel?.() ?? ''); }
-  catch { return ''; }
-}
-
-function widgetSource(widget) {
-  try {
-    return String(widget?.getSource?.() ?? widget?.getIcon?.() ?? widget?.getToolTipText?.() ?? '').toLowerCase();
-  } catch { return ''; }
-}
-
-function resourceKind(label) {
-  let parent = label?.getLayoutParent?.();
-  for (let depth = 0; parent && depth < 4; depth += 1, parent = parent.getLayoutParent?.()) {
-    const siblings = children(parent).filter((widget) => widget !== label && !widget?.__suiteResearchEta);
-    const evidence = siblings.map((widget) => `${widgetSource(widget)} ${widgetText(widget)}`).join(' ').toLowerCase();
-    const credits = /(?:icn_res_dollar|\bcredits?\b|\bgold\b)/.test(evidence);
-    const research = /(?:icn_res_research|research\s*points?|\brp\b)/.test(evidence);
-    if (credits !== research) return { kind: credits ? 'credits' : 'research', parent };
-  }
-  return null;
-}
-
-function widgetTop(widget) {
-  try {
-    const location = widget?.getContentLocation?.();
-    if (Number.isFinite(Number(location?.top))) return Number(location.top);
-    return Number(widget?.getBounds?.()?.top ?? 0);
-  } catch { return 0; }
-}
-
-function researchCostPairs(overlay) {
-  const pairs = [];
-  const claimed = new Set();
-  const numericLabels = descendants(overlay).filter((widget) =>
-    !widget?.__suiteResearchEtaCost
-    && typeof widget?.getValue === 'function'
-    && parseResourceAmount(widget.getValue?.()) > 0
-  );
-  for (const candidate of numericLabels) {
-    if (claimed.has(candidate)) continue;
-    let parent = candidate?.getLayoutParent?.();
-    for (let depth = 0; parent && depth < 7; depth += 1, parent = parent.getLayoutParent?.()) {
-      const subtree = descendants(parent);
-      const hasCardAction = subtree.some((widget) => typeof widget?.execute === 'function');
-      if (!hasCardAction) continue;
-    const amounts = descendants(parent)
-      .filter((widget) => !widget?.__suiteResearchEtaCost && typeof widget?.getValue === 'function')
-      .map((widget) => ({ widget, amount: parseResourceAmount(widget.getValue?.()), top: widgetTop(widget) }))
-      .filter((entry) => entry.amount > 0)
-      .sort((left, right) => left.top - right.top);
-    // The native research card shown by current game builds has exactly two
-      // resource rows: Credits above RP. Requiring exactly two prevents the
-      // account totals in the overlay header from being mistaken for a card.
-      if (amounts.length !== 2 || amounts[0].top === amounts[1].top) continue;
-      pairs.push(amounts);
-      claimed.add(amounts[0].widget);
-      claimed.add(amounts[1].widget);
-      break;
-    }
-  }
-  return pairs;
 }
 
 export class ResearchEtaModule extends Module {
   constructor() {
     super(researchEtaManifest);
     this.context = null;
-    this.timer = null;
-    this.costLabels = new Map();
-    this.window = null;
-  }
-
-  overlay() {
-    const direct = globalThis.webfrontend?.gui?.research?.ResearchOverlay?.getInstance?.();
-    if (direct) return direct;
-    const registry = globalThis.qx?.core?.ObjectRegistry?.getRegistry?.() ?? {};
-    return Object.values(registry).find((widget) =>
-      /ResearchOverlay/i.test(String(widget?.classname ?? widget?.constructor?.classname ?? widget?.constructor?.name ?? ''))
-    ) ?? null;
+    this.observer = null;
+    this.refreshTimer = null;
   }
 
   resources() {
@@ -231,6 +121,10 @@ export class ResearchEtaModule extends Module {
 
   static parseAmount(value) { return parseResourceAmount(value); }
 
+  researchCatalog() {
+    return RESEARCH_CATALOGS[this.factionKind()] ?? RESEARCH_CATALOGS.gdi;
+  }
+
   researchItem(key) {
     try {
       const services = this.context?.hub?.game?.services;
@@ -254,8 +148,7 @@ export class ResearchEtaModule extends Module {
   }
 
   researchState(key) {
-    const record = this.researchItem(key);
-    const item = record?.item;
+    const item = this.researchItem(key)?.item;
     let level = 0;
     for (const name of ['get_CurrentLevel', 'get_Level', 'get_CurrentLvl']) {
       try {
@@ -264,6 +157,21 @@ export class ResearchEtaModule extends Module {
       } catch { /* Guarded game model. */ }
     }
     return { researched: level > 0, available: Boolean(item), level };
+  }
+
+  researchImage(key, fallback = null) {
+    const item = this.researchItem(key)?.item;
+    for (const target of [item, item?.get_MdbUnit?.(), item?.get_Unit?.(), item?.get_Data?.()]) {
+      for (const method of ['get_Icon', 'get_IconPath', 'get_Image', 'get_ImagePath', 'get_Art']) {
+        try {
+          const value = target?.[method]?.();
+          if (typeof value !== 'string' || !value.trim()) continue;
+          const manager = globalThis.qx?.util?.ResourceManager?.getInstance?.();
+          return manager?.toUri?.(value) ?? value;
+        } catch { /* Try the next model field. */ }
+      }
+    }
+    return fallback;
   }
 
   performResearch(key) {
@@ -277,120 +185,82 @@ export class ResearchEtaModule extends Module {
           if (typeof target?.[method] !== 'function') continue;
           argument === undefined ? target[method]() : target[method](argument);
           return true;
-        } catch { /* Try the next supported research action. */ }
+        } catch { /* Try the next supported game-model action. */ }
       }
     }
     return false;
   }
 
-  async prepareNative(category = 'OFFENSE') {
-    let overlay = this.overlay();
-    if (!overlay || overlay.isDisposed?.()) {
-      const registry = globalThis.qx?.core?.ObjectRegistry?.getRegistry?.() ?? {};
-      const researchButton = Object.values(registry).find((widget) =>
-        /^Research$/i.test(String(widget?.getLabel?.() ?? '').replace(/^\(\d+\)\s*/, '').trim())
-        && typeof widget?.execute === 'function'
-      );
-      researchButton?.execute?.();
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      overlay = this.overlay();
-    } else overlay.show?.();
-    if (!overlay) throw new Error('The native Research page is unavailable.');
-    const categoryButton = descendants(overlay).find((widget) =>
-      String(widget?.getLabel?.() ?? '').trim().toUpperCase() === String(category).toUpperCase()
-      && typeof widget?.execute === 'function'
-    );
-    categoryButton?.execute?.();
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    return overlay;
-  }
-
-  decorateCost(label, required, kind, available) {
-    // Keep the native RP row unchanged. The requested contextual addition
-    // belongs only to the Credits requirement row.
-    if (!label || kind !== 'credits' || !(required > 0)) return false;
-    let record = this.costLabels.get(label);
-    if (!record) {
-      record = { original: label.getValue?.(), required, kind, updating: false, display: null, listenerId: null };
-      this.costLabels.set(label, record);
-      label.__suiteResearchEtaCost = kind;
-      record.listenerId = label.addListener?.('changeValue', (event) => {
-        if (record.updating) return;
-        const nativeValue = event.getData?.();
-        if (nativeValue === record.display) return;
-        const nativeRequired = parseResourceAmount(nativeValue);
-        if (!(nativeRequired > 0)) return;
-        record.original = nativeValue;
-        record.required = nativeRequired;
-        // Qooxdoo dispatches changeValue synchronously. Re-applying here means
-        // the native-only value never survives to the next paint, eliminating
-        // the alternating/flashing display.
-        this.decorateCost(label, nativeRequired, kind, this.resources());
-      });
-    }
-    const current = kind === 'credits' ? available.credits : available.research;
-    const progress = researchResourceProgress(
-      current,
-      required,
-      kind === 'credits' ? available.creditGrowthPerHour : 0
-    );
-    // Add remaining Credits and ETA on the left while preserving the exact
-    // native Credit requirement at the far right of the same native label.
-    record.display = `Need ${compact(progress.remaining)} · ${shortDuration(progress.etaSeconds)} · ${plainText(record.original)}`;
-    record.updating = true;
-    try { label.setValue?.(record.display); }
-    finally { record.updating = false; }
-    label.setToolTipText?.(
-      `${kind === 'credits' ? 'Credits' : 'Research Points'}: ${Math.round(progress.current).toLocaleString()} gained / `
-      + `${Math.round(progress.required).toLocaleString()} needed · ${Math.round(progress.remaining).toLocaleString()} remaining`
-      + (kind === 'credits' ? ` · ${duration(progress.etaSeconds)}` : '')
-    );
-    return true;
-  }
-
-  refresh() {
-    const overlay = this.overlay();
-    if (!overlay || overlay.isDisposed?.() || overlay.getVisibility?.() === 'excluded') return;
-    const available = this.resources();
-    for (const [label, record] of [...this.costLabels]) {
-      if (label.isDisposed?.()) {
-        this.costLabels.delete(label);
-        continue;
+  refreshNativeResearchEtas() {
+    const root = globalThis.document;
+    if (!root?.querySelectorAll) return;
+    const { credits, creditGrowthPerHour } = this.resources();
+    for (const icon of root.querySelectorAll(`img[src*="${CREDIT_ICON}"]`)) {
+      if (!icon.closest?.('.qx-tabview-pane')) continue;
+      const width = Number(icon.getAttribute?.('width') ?? icon.width ?? 0);
+      const height = Number(icon.getAttribute?.('height') ?? icon.height ?? 0);
+      if (width !== 23 || height !== 21) continue;
+      const row = icon.parentElement;
+      const amount = row?.querySelector?.('span');
+      if (!row || !amount) continue;
+      row.style.whiteSpace = 'nowrap';
+      const required = parseResourceAmount(amount.textContent);
+      if (required == null) continue;
+      const progress = researchResourceProgress(credits, required, creditGrowthPerHour);
+      const text = formatResearchCreditEta(progress.etaSeconds);
+      let eta = row.querySelector?.(`[${ETA_ATTRIBUTE}]`);
+      if (!eta) {
+        eta = root.createElement('span');
+        eta.setAttribute(ETA_ATTRIBUTE, '');
+        eta.style.cssText = 'margin-left:2px;font-size:8px;font-weight:normal;line-height:21px;vertical-align:middle;color:#3d3d3d;white-space:nowrap;';
+        amount.insertAdjacentElement('afterend', eta);
       }
-      this.decorateCost(label, record.required, record.kind, available);
+      if (eta.textContent !== text) eta.textContent = text;
     }
-    // Pair costs within each individual card. The upper value is always the
-    // native Credit requirement; the lower RP requirement remains untouched.
-    for (const [credits] of researchCostPairs(overlay)) {
-      this.decorateCost(credits.widget, credits.amount, 'credits', available);
+  }
+
+  startNativeResearchEtas() {
+    this.stopNativeResearchEtas();
+    this.refreshNativeResearchEtas();
+    const Observer = globalThis.MutationObserver;
+    if (Observer && globalThis.document?.body) {
+      let queued = false;
+      this.observer = new Observer(() => {
+        if (queued) return;
+        queued = true;
+        queueMicrotask(() => {
+          queued = false;
+          this.refreshNativeResearchEtas();
+        });
+      });
+      this.observer.observe(globalThis.document.body, { childList: true, subtree: true });
     }
+    this.refreshTimer = globalThis.setInterval?.(() => this.refreshNativeResearchEtas(), 5000) ?? null;
+  }
+
+  stopNativeResearchEtas() {
+    this.observer?.disconnect?.();
+    this.observer = null;
+    if (this.refreshTimer != null) globalThis.clearInterval?.(this.refreshTimer);
+    this.refreshTimer = null;
+    globalThis.document?.querySelectorAll?.(`[${ETA_ATTRIBUTE}]`)?.forEach?.((node) => node.remove());
   }
 
   async enable(context) {
     this.context = context;
-    this.window = new ResearchEtaWindow({ context, owner: this });
+    this.context?.windows?.close?.('research-eta');
+    this.startNativeResearchEtas();
   }
 
   async open(context = this.context) {
-    if (!this.window) this.window = new ResearchEtaWindow({ context, owner: this });
-    return this.window.open();
+    this.context = context;
+    this.refreshNativeResearchEtas();
+    return null;
   }
 
   async disable() {
-    clearInterval(this.timer);
-    this.timer = null;
-    for (const [label, record] of this.costLabels) {
-      try {
-        if (!label.isDisposed?.()) {
-          if (record.listenerId) label.removeListenerById?.(record.listenerId);
-          label.setValue?.(record.original);
-        }
-        delete label.__suiteResearchEtaCost;
-      } catch { /* Native Research rows may already be disposed. */ }
-    }
-    this.costLabels.clear();
+    this.stopNativeResearchEtas();
     this.context?.windows?.close?.('research-eta');
-    this.window = null;
     this.context = null;
   }
 

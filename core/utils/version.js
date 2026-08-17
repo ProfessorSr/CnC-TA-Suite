@@ -1,4 +1,4 @@
-export const SUITE_VERSION = '1.0.0';
+export const SUITE_VERSION = '1.1.0';
 
 export function parseVersion(version) {
   const [major = 0, minor = 0, patch = 0] = String(version).split('.').map(Number);

@@ -12,12 +12,21 @@ test('BaseIntelligenceHub derives resource production and time to cap', () => {
     GetResourceCount: (type) => type === 1 ? 500 : 0,
     GetResourceMaxStorage: (type) => type === 1 ? 1000 : 0,
     GetResourceGrowPerHour: (type) => type === 1 ? 100 : 0,
-    GetResourceBonusGrowPerHour: () => 0
+    GetResourceBonusGrowPerHour: (type) => type === 1 ? 20 : 0
   };
-  const client = { root: { Base: { EResourceType: resourceTypes }, Data: { EUnitGroup: {} } }, getMainData: () => ({ get_Cities: () => ({ get_AllCities: () => ({ d: { 1: city } }), get_CurrentOwnCity: () => city }) }), getPlayer: () => ({}) };
+  const player = { get_Faction: () => 2, get_ScorePoints: () => 1234, get_ScorePointsNextLevel: () => 1500, GetCommandPointCount: () => 42.8, GetCommandPointMaxStorage: () => 100 };
+  const client = { root: { Base: { EResourceType: resourceTypes, EFactionType: { GDI: 1, NOD: 2 } }, Data: { EUnitGroup: {} } }, getMainData: () => ({ get_Player: () => player, get_Alliance: () => ({ GetPOIBonusFromResourceType: (type) => type === 1 ? 5 : 0 }), get_Cities: () => ({ get_AllCities: () => ({ d: { 1: city } }), get_CurrentOwnCity: () => city }) }), getPlayer: () => player };
   const hub = new BaseIntelligenceHub({ hub: { game: { services: { tryGet: () => client } }, snapshot: () => ({}) } });
   const snapshot = hub.snapshot();
   assert.equal(snapshot.current.name, 'Genesis');
-  assert.equal(snapshot.current.resources.tiberium.perHour, 100);
-  assert.equal(snapshot.current.resources.tiberium.timeToCapSeconds, 18000);
+  assert.equal(snapshot.current.resources.tiberium.continuousPerHour, 100);
+  assert.equal(snapshot.current.resources.tiberium.packagePerHour, 20);
+  assert.equal(snapshot.current.resources.tiberium.allianceBonusPerHour, 5);
+  assert.equal(snapshot.current.resources.tiberium.totalPerHour, 125);
+  assert.equal(snapshot.current.resources.tiberium.timeToCapSeconds, 14400);
+  assert.equal(snapshot.player.faction, 'NOD');
+  assert.equal(snapshot.player.score, 1234);
+  assert.equal(snapshot.player.nextScore, 1500);
+  assert.equal(snapshot.player.commandPoints, 42.8);
+  assert.equal(snapshot.player.commandPointsMax, 100);
 });

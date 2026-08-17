@@ -44,7 +44,7 @@ const RIGHT_MODULE_GROUPS = Object.freeze([
     Object.freeze({ moduleId: 'upgrade-manager', label: 'Upgrade Manager', icon: suiteIcon('upgrade') }),
     Object.freeze({ moduleId: 'resource-transfer', label: 'Resource Transfer', icon: suiteIcon('transfer') }),
     Object.freeze({ moduleId: 'layout-optimizer', label: 'Layout Optimizer', icon: suiteIcon('layout') }),
-    Object.freeze({ moduleId: 'base-intelligence', label: 'Base Intelligence', icon: suiteIcon('intelligence') })
+    Object.freeze({ moduleId: 'base-intelligence', label: 'Player Intelligence', icon: suiteIcon('intelligence') })
   ]) }),
   Object.freeze({ title: 'World & Combat', modules: Object.freeze([
     Object.freeze({ moduleId: 'scanner', label: 'Scanner', icon: 'webfrontend/ui/icons/efficiency_icons/icon_efficiency_target_range.png' }),
@@ -123,11 +123,16 @@ export class RepairQuickDock {
     this.navigationGroupTitles = new Map();
     this.navigationHost = null;
     this.nextMCVPanel = null;
-    this.shortcutsCollapsed = savedBoolean(SUITE_COLLAPSED_KEY, true);
+    this.destroyed = false;
+    // Start every game load with the large Suite shortcut palette collapsed.
+    // Expanding it remains a session action rather than a startup preference.
+    this.shortcutsCollapsed = true;
+    saveBoolean(SUITE_COLLAPSED_KEY, true);
     this.nextMCVOpen = savedBoolean(NEXT_MCV_OPEN_KEY, true);
   }
 
   build() {
+    if (this.destroyed) return null;
     if (this.container && !this.container.isDisposed?.()) return this.container;
     const qx = globalThis.qx;
     const application = qx?.core?.Init?.getApplication?.();
@@ -312,6 +317,11 @@ export class RepairQuickDock {
   }
 
   installNavigationButtons() {
+    if (this.destroyed || this.navigationPanel?.isDisposed?.()) {
+      this.navigationButtons.clear();
+      this.navigationGroupTitles.clear();
+      this.navigationPanel = null;
+    }
     const anchor = this.findNavigationAnchor();
     if (!anchor) {
       this.navigationPanel?.exclude?.();
@@ -440,7 +450,7 @@ export class RepairQuickDock {
       }
     }
     if (this.navigationEmbed?.parent && !this.navigationEmbed.parent.isDisposed?.()) {
-      this.navigationPanel.show();
+      this.navigationPanel?.show?.();
       this.navigationHost = anchor.hostElement;
       return true;
     }
@@ -449,7 +459,7 @@ export class RepairQuickDock {
       left: Math.round(anchor.rect.left - Number(rootLocation.left || 0)),
       top: Math.round(anchor.rect.bottom - Number(rootLocation.top || 0) + 6)
     });
-    this.navigationPanel.show();
+    this.navigationPanel?.show?.();
     this.navigationHost = anchor.hostElement;
     return true;
   }
@@ -617,6 +627,12 @@ export class RepairQuickDock {
         throw new Error('The Next MCV embedded view is unavailable.');
       }
       this.nextMCVPanel = module.buildEmbedded(this.context);
+      if (!this.nextMCVPanel || !this.nextMCVBody?.add) {
+        this.nextMCVPanel = null;
+        // Keep the requested open state. The Next MCV module can finish
+        // enabling after the dock, and a later refresh will retry embedding it.
+        return;
+      }
       this.nextMCVPanel.set?.({ width: 122, maxWidth: 122, allowGrowX: false });
       this.nextMCVBody.add(this.nextMCVPanel);
       this.nextMCVSection.show?.();
@@ -649,8 +665,9 @@ export class RepairQuickDock {
   }
 
   refresh() {
+    if (this.destroyed) return;
     try {
-      this.build();
+      if (!this.build()) return;
       this.installNavigationButtons();
       const availability = this.hub.actionAvailability();
       const modules = this.context.modules?.snapshot?.() ?? {};
@@ -692,8 +709,8 @@ export class RepairQuickDock {
         const navigationButton = this.navigationButtons.get(definition.availability);
         const enabled = availability[definition.availability]?.available > 0
           && !this.busy.has(definition.action);
-        button.show();
-        button.setEnabled(enabled);
+        button?.show?.();
+        button?.setEnabled?.(enabled);
         navigationButton?.show?.();
         navigationButton?.setEnabled?.(enabled);
       }
@@ -706,6 +723,7 @@ export class RepairQuickDock {
   }
 
   destroy() {
+    this.destroyed = true;
     if (this.windowResizeHandler) {
       globalThis.removeEventListener?.('resize', this.windowResizeHandler);
       this.windowResizeHandler = null;

@@ -6,7 +6,7 @@ import { RepairQuickDock } from './repair-quick-dock.js';
 export const repairManagerManifest = Object.freeze({
   id: 'repair-manager',
   name: 'Repair & Collection Manager',
-  version: '0.3.0',
+  version: '0.4.0',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
   description: 'Automatic and manual repair and resource collection controls for owned bases.',
@@ -62,7 +62,9 @@ export class RepairManagerModule extends Module {
     const now = Date.now();
     if (now - this.lastDockRefreshAt >= 2000) {
       this.lastDockRefreshAt = now;
-      this.quickDock?.refresh?.();
+      // DOM discovery and Qooxdoo layout flushing do not belong in the
+      // central game-state dispatch budget. Defer the dock refresh one turn.
+      globalThis.setTimeout?.(() => this.quickDock?.refresh?.(), 0);
     }
     if (now - this.lastRunAt < interval) return;
     this.lastRunAt = now;

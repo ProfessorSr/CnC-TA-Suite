@@ -15,6 +15,7 @@ import { ObserverRegistry } from '../hooks/observers.js';
 import { ModuleManager } from '../modules/moduleManager.js';
 import { DiagnosticsService } from '../diagnostics/diagnosticsService.js';
 import { registeredModules } from '../modules/moduleCatalog.generated.js';
+import { SUITE_VERSION } from '../utils/version.js';
 
 export async function createApplication({ eventBus, logger }) {
   const storage = new StorageService(logger.child('Storage'));
@@ -100,7 +101,8 @@ export async function createApplication({ eventBus, logger }) {
 
   topBar.registerLink({
     id: 'module-manager',
-    label: 'Module Manager',
+    label: `CnC-TA Suite v${SUITE_VERSION}`,
+    title: 'Open Module Manager',
     order: 10,
     onExecute: () => modules.open('module-manager')
   });

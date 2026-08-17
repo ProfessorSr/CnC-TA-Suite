@@ -1,4 +1,4 @@
-export const SUITE_MODULE_API_VERSION = '1.0.0';
+export const SUITE_MODULE_API_VERSION = '1.1.0';
 
 function major(version) { return Number(String(version).split('.')[0]); }
 

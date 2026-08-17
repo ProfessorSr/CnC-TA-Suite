@@ -10,6 +10,17 @@ function call(target, names, ...args) {
   return null;
 }
 
+function invoke(target, names, ...args) {
+  for (const name of names) {
+    try {
+      if (typeof target?.[name] !== 'function') continue;
+      target[name](...args);
+      return true;
+    } catch { /* Try the next compatible ClientLib action. */ }
+  }
+  return false;
+}
+
 function values(collection) {
   const source = collection?.d ?? collection?.l ?? collection;
   return source ? (Array.isArray(source) ? source : Object.values(source)).filter((item) => item && typeof item === 'object') : [];
@@ -59,14 +70,19 @@ export class BaseIntelligenceHub {
     ]) ?? city.m_SupportDedicatedBaseName ?? city.SupportDedicatedBaseName ?? 'Unassigned');
     const resource = (type) => Number(call(city, ['GetResourceCount'], type) ?? 0);
     const capacity = (type) => Number(call(city, ['GetResourceMaxStorage'], type) ?? 0);
-    const growth = (type) => Number(call(city, ['GetResourceGrowPerHour'], type, false, false) ?? 0)
-      + Number(call(city, ['GetResourceBonusGrowPerHour'], type) ?? 0);
+    const continuousGrowth = (type) => Number(call(city, ['GetResourceGrowPerHour', 'GetResourceProductionPerHour'], type, false, false) ?? 0);
+    const packageGrowth = (type) => Number(call(city, ['GetResourceBonusGrowPerHour'], type, false) ?? 0);
+    const alliance = call(this.main(), ['get_Alliance']);
+    const allianceBonus = (type) => Number(call(alliance, ['GetPOIBonusFromResourceType', 'get_POIBonusFromResourceType'], type) ?? 0);
     const resources = {};
     for (const [key, type] of [['tiberium', types.Tiberium], ['crystal', types.Crystal ?? types.Chrystal], ['power', types.Power], ['credits', types.Gold]]) {
       const current = resource(type);
       const maximum = capacity(type);
-      const perHour = growth(type);
-      resources[key] = Object.freeze({ current, capacity: maximum, perHour, timeToCapSeconds: durationToCap(current, maximum, perHour) });
+      const continuousPerHour = continuousGrowth(type);
+      const packagePerHour = packageGrowth(type);
+      const allianceBonusPerHour = allianceBonus(type);
+      const totalPerHour = continuousPerHour + packagePerHour + allianceBonusPerHour;
+      resources[key] = Object.freeze({ current, capacity: maximum, continuousPerHour, packagePerHour, allianceBonusPerHour, totalPerHour, perHour: totalPerHour, timeToCapSeconds: durationToCap(current, maximum, totalPerHour) });
     }
     const repair = {};
     for (const [key, group, type] of [
@@ -120,13 +136,72 @@ export class BaseIntelligenceHub {
 
   snapshot() {
     const shared = this.context.hub?.snapshot?.() ?? {};
+    const rawPlayer = call(this.main(), ['get_Player']) ?? this.clientLib()?.getPlayer?.();
+    const factionValue = shared.player?.faction ?? call(rawPlayer, ['get_Faction', 'get_FactionId']);
+    const factionEnum = this.root()?.Base?.EFactionType ?? this.root()?.Data?.EFactionType ?? {};
+    const factionName = Object.entries(factionEnum).find(([, value]) => String(value) === String(factionValue))?.[0]
+      ?? ({ 1: 'GDI', 2: 'NOD', 3: 'Forgotten' })[Number(factionValue)]
+      ?? factionValue;
+    const player = Object.freeze({
+      ...(shared.player ?? {}),
+      id: shared.player?.id ?? call(rawPlayer, ['get_Id', 'get_PlayerId', 'GetId']),
+      name: shared.player?.name ?? call(rawPlayer, ['get_Name', 'get_PlayerName', 'GetName']),
+      faction: factionName,
+      allianceName: shared.player?.allianceName ?? call(rawPlayer, ['get_AllianceName']),
+      rank: shared.player?.rank ?? call(rawPlayer, ['get_OverallRank', 'get_Rank', 'get_PlayerRank', 'GetRank', 'GetPlayerRank']),
+      score: shared.player?.score ?? call(rawPlayer, ['get_ScorePoints', 'get_Score', 'GetScorePoints', 'GetScore']),
+      nextScore: call(rawPlayer, ['get_ScorePointsNextLevel', 'get_NextLevelScore', 'get_NextScorePoints', 'get_NextScore', 'GetNextLevelScore', 'GetNextScorePoints']),
+      commandPoints: shared.player?.commandPoints ?? call(rawPlayer, ['GetCommandPointCount', 'get_CommandPointCount', 'GetCommandPoints', 'get_CommandPoints']),
+      commandPointsMax: call(rawPlayer, ['GetCommandPointMaxStorage', 'get_CommandPointMaxStorage', 'GetMaxCommandPoints', 'get_MaxCommandPoints'])
+    });
     const cities = this.cities().map((city) => this.describeCity(city));
     const currentId = String(call(this.currentCity(), ['get_Id', 'get_CityId']) ?? '');
     return Object.freeze({
-      player: shared.player ?? null, world: shared.world ?? null, alliance: shared.alliance ?? null,
+      player, world: shared.world ?? null, alliance: shared.alliance ?? null,
       account: Object.freeze({ host: globalThis.location?.host ?? 'Unknown', language: globalThis.navigator?.language ?? 'Unknown' }),
       currentId, cities: Object.freeze(cities), current: cities.find((city) => city.id === currentId) ?? cities[0] ?? null
     });
+  }
+
+  achievements() {
+    const player = call(this.main(), ['get_Player']) ?? this.clientLib()?.getPlayer?.();
+    const manager = call(player, ['get_Achievements', 'get_AchievementData', 'get_PlayerAchievements']);
+    return values(call(manager, ['get_Achievements', 'get_AllAchievements', 'get_Items']) ?? manager).map((entry) => {
+      const current = Number(call(entry, ['get_CurrentValue', 'get_Value', 'get_Progress']) ?? entry.CurrentValue ?? entry.Value ?? 0);
+      const target = Number(call(entry, ['get_TargetValue', 'get_MaxValue', 'get_RequiredValue']) ?? entry.TargetValue ?? entry.MaxValue ?? 0);
+      return Object.freeze({
+        name: String(call(entry, ['get_Name', 'get_DisplayName', 'get_Title']) ?? entry.Name ?? entry.Title ?? 'Achievement'),
+        description: String(call(entry, ['get_Description', 'get_Text']) ?? entry.Description ?? ''),
+        current,
+        target,
+        complete: Boolean(call(entry, ['get_IsCompleted', 'get_Completed']) ?? entry.Completed ?? (target > 0 && current >= target))
+      });
+    });
+  }
+
+  collectPackages() {
+    let affected = 0;
+    for (const city of this.cities()) {
+      const buildings = call(city, ['get_CityBuildingsData']);
+      if (!call(buildings, ['get_HasCollectableBuildings'])) continue;
+      if (invoke(city, ['CollectAllResources'])) affected += 1;
+    }
+    return affected;
+  }
+
+  repairAll() {
+    const visualModes = this.root()?.Vis?.Mode ?? {};
+    const candidates = [...new Set(['City', 'ArmySetup', 'DefenseSetup', 'Defense']
+      .map((name) => visualModes[name]).filter((value) => value != null))];
+    let affected = 0;
+    for (const city of this.cities()) {
+      if (call(city, ['get_IsGhostMode']) || call(city, ['get_IsLocked'])) continue;
+      const repair = call(city, ['get_CityRepairData']);
+      for (const mode of candidates) {
+        if (call(repair, ['CanRepairAll'], mode) && invoke(repair, ['RepairAll'], mode)) affected += 1;
+      }
+    }
+    return affected;
   }
 
   focus(cityId) {

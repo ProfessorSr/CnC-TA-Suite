@@ -33,6 +33,17 @@ export function findShiftedMember(functionSource, shifts) {
   return null;
 }
 
+export function validPreviewMoveDestination({ from, to, objectAt, sectorAt }) {
+  if (!from || !to || !Number.isFinite(to.x) || !Number.isFinite(to.y)) return false;
+  if (from.x === to.x && from.y === to.y) return false;
+  try {
+    if (!sectorAt(to.x, to.y)) return false;
+    return !objectAt(to.x, to.y);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Preview-only strategic world editor. It deliberately works on ClientLib's
  * local world cache and never invokes a server command.
@@ -456,12 +467,15 @@ export class StrategicMapPlanner {
   planMove(selection) {
     this.cancelMove();
     const root = this.root();
-    const vis = root.Vis.VisMain.GetInstance();
-    const tools = root.Vis.MouseTool;
-    const mouseTool = vis.GetMouseTool(tools.EMouseTool.MoveBase);
+    const vis = root?.Vis?.VisMain?.GetInstance?.();
+    const tools = root?.Vis?.MouseTool;
+    const moveToolType = tools?.EMouseTool?.MoveBase;
+    const mouseTool = vis?.GetMouseTool?.(moveToolType);
     const info = globalThis.webfrontend?.gui?.region?.RegionCityMoveInfo?.getInstance?.();
     const utilities = globalThis.webfrontend?.phe?.cnc?.Util;
-    if (!mouseTool || !info || !utilities) throw new Error('The native move-base preview tool is unavailable.');
+    if (!vis || moveToolType == null || !mouseTool || !info || !utilities) {
+      throw new Error('The native move-base preview tool is unavailable. Open the world map and try again.');
+    }
     const originalHandler = this.moveHandlerName(info, mouseTool);
     if (!originalHandler) throw new Error('The native move-base click handler could not be identified.');
     const cities = this.mainData().get_Cities();
@@ -489,12 +503,23 @@ export class StrategicMapPlanner {
       const x = Math.floor(visX / region.get_GridWidth());
       const y = Math.floor(visY / region.get_GridHeight());
       const result = mouseTool.GetCheckMoveBaseResult(x, y);
-      const ok = result === root.Data.EMoveBaseResult.OK || result === root.Data.EMoveBaseResult.FailCampIsAttacked;
+      const from = this.coordinates(selection);
+      const nativeOk = result === root.Data.EMoveBaseResult.OK
+        || result === root.Data.EMoveBaseResult.FailCampIsAttacked;
+      // Native move validation is bound to the logged-in account's current
+      // own city. For another player's base it therefore reports that *our*
+      // base is too far away. Non-owned moves are local planning only, so
+      // validate the map destination without applying account move range.
+      const previewOk = !isOwned && validPreviewMoveDestination({
+        from, to: { x, y },
+        objectAt: (targetX, targetY) => this.objectAt(targetX, targetY),
+        sectorAt: (targetX, targetY) => this.sectorAt(targetX, targetY)
+      });
+      const ok = nativeOk || previewOk;
       if (!ok) {
         if (result & root.Data.EMoveBaseResult.FailOldBasePosition) vis.SetMouseTool(tools.EMouseTool.SelectRegion, null);
         return;
       }
-      const from = this.coordinates(selection);
       const object = this.selectedWorldObject(selection);
       const owner = this.owner(selection);
       const radius = this.radius(object, selection);

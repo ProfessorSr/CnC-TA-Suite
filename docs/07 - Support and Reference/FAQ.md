@@ -16,7 +16,7 @@ Suite Dashboard, Module Manager, and Suite Status are the Framework's control in
 
 No. Every module has its own version.
 
-## Does Framework 1.0.0 require all modules to be 1.0.0?
+## Does Framework 1.1.0 require all modules to be 1.1.0?
 
 No.
 

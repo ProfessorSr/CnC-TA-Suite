@@ -321,9 +321,17 @@ export class UpgradeManagerHub {
     const shortfall = Object.fromEntries(
       Object.keys(costs).map((resource) => [resource, Math.max(0, costs[resource] - resources[resource])])
     );
+    const production = Object.fromEntries(
+      Object.keys(costs).map((resource) => [resource, this.productionPerHour(this.currentCity(), resource)])
+    );
+    const etaSeconds = Object.fromEntries(Object.keys(costs).map((resource) => {
+      const missing = shortfall[resource];
+      const hourly = production[resource];
+      return [resource, missing <= 0 ? 0 : hourly > 0 ? (missing / hourly) * 3600 : Infinity];
+    }));
     return {
       selected, details, name: String(name ?? 'Selected item'), level, scope, targetLevel,
-      costs, resources, shortfall,
+      costs, resources, shortfall, production, etaSeconds,
       affordable: Object.values(shortfall).every((value) => value <= 0)
     };
   }
@@ -470,6 +478,12 @@ export class UpgradeManagerHub {
   upgrade(candidate) {
     if (!candidate || candidate.locked || candidate.damaged || !candidate.affordable) return { success: false, reason: 'not eligible' };
     if (candidate.category === 'buildings') {
+      const details = call(candidate.entity, ['get_BuildingDetails']);
+      const api = this.root()?.API?.City?.GetInstance?.();
+      if (this.cityId(this.currentCity()) === candidate.cityId && details && typeof api?.UpgradeBuildingToLevel === 'function') {
+        api.UpgradeBuildingToLevel(details, candidate.nextLevel);
+        return { success: true };
+      }
       const manager = this.root()?.Net?.CommunicationManager?.GetInstance?.();
       if (!manager?.SendCommand) return { success: false, reason: 'building upgrade command unavailable' };
       manager.SendCommand('UpgradeBuilding', {

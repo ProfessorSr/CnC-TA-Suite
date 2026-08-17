@@ -46,5 +46,5 @@ jobs:
         run: |
           set -euo pipefail
           test "$(node -p "require('./dist/chrome/manifest.json').version")" = "$(cat VERSION)"
-          test "$(find dist/chrome/modules -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "23"
+          test "$(find dist/chrome/modules -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "24"
           git diff --check

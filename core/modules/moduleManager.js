@@ -44,6 +44,7 @@ export class ModuleManager {
     module.version = manifest.version;
     module.apiVersion = manifest.apiVersion;
     module.dependencies = manifest.dependencies;
+    module.manual = manifest.manual;
     module.manifest = manifest;
     adoptModuleDefinition(module, manifest);
 

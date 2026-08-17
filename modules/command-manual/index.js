@@ -3,9 +3,16 @@ import { buildCommandManual } from './command-manual-window.js';
 
 export const commandManualDefinition = Object.freeze({
   manifest: {
-    id: 'command-manual', name: 'Command Manual', version: '0.4.0', apiVersion: '1.0.0', hubApiVersion: '1.0.0',
+    id: 'command-manual', name: 'Command Manual', version: '0.6.0', apiVersion: '1.1.0', hubApiVersion: '1.0.0',
     author: 'ProfessorSr', description: 'Interactive searchable command center with contextual module help, workflows, FAQ, troubleshooting, release notes, and glossary.',
-    permissions: ['modules', 'windows'], settings: {}
+    permissions: ['modules', 'windows'], settings: {},
+    manual: {
+      title: 'Command Manual',
+      summary: 'Searchable framework help plus documentation contributed by currently enabled modules.',
+      steps: ['Open Command Manual.', 'Search or select a chapter.', 'Enable or disable modules to update their chapters automatically.'],
+      controls: [['Search', 'Filters framework and enabled-module help.'], ['Enabled Modules', 'Shows the live enabled-module inventory.'], ['Previous / Next', 'Moves through visible chapters.']],
+      notes: ['Disabled and uninstalled modules do not appear in the manual.']
+    }
   },
   window: {
     title: 'CnC-TA-Suite Command Manual', icon: 'command-manual', x: 100, y: 55, width: 920, height: 680,

@@ -4,7 +4,7 @@ const BINDS = Object.freeze([
   ['moduleManagerKey', 'Module Manager', 'module-manager', 'Alt+M'],
   ['warRoomKey', 'War Room', 'war-room', 'Alt+W'],
   ['scannerKey', 'Scanner', 'scanner', 'Alt+S'],
-  ['baseInfoKey', 'Base Intelligence', 'base-intelligence', 'Alt+B'],
+  ['baseInfoKey', 'Player Intelligence', 'base-intelligence', 'Alt+B'],
   ['playerDetailsKey', 'Insert Player Details', 'communications', 'Alt+P', 'player-details']
 ]);
 

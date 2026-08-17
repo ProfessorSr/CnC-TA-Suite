@@ -80,11 +80,12 @@ export class UpgradeManagerWindow {
     page.add(toolbar);
 
     this.model = new qx.ui.table.model.Simple();
-    this.model.setColumns(['Base', 'Category', 'Upgrade', 'Level', 'Tiberium', 'Crystal', 'Power', 'Shortfall', 'ETA', 'Status']);
+    this.model.setColumns(['Base', 'Category', 'Upgrade', 'Level', 'Tiberium', 'Crystal', 'Power', 'Shortfall', 'ETA', 'Status', 'Candidate ID']);
     this.table = new qx.ui.table.Table(this.model).set({ statusBarVisible: true });
     [125, 75, 145, 55, 85, 85, 85, 160, 70, 100].forEach((width, index) =>
       this.table.getTableColumnModel().setColumnWidth(index, width)
     );
+    this.table.getTableColumnModel().setColumnVisible(10, false);
     page.add(this.table, { flex: 1 });
     this.overviewStatus = white(qx, 'Loading candidates…');
     page.add(this.overviewStatus);
@@ -93,18 +94,23 @@ export class UpgradeManagerWindow {
 
   selectedCandidate() {
     const row = this.table?.getSelectionModel?.().getLeadSelectionIndex?.() ?? -1;
-    return row >= 0 ? this.filtered?.[row] : null;
+    if (row < 0) return null;
+    const displayed = this.model?.getRowData?.(row) ?? [];
+    return this.filtered?.find((candidate) => candidate.id === displayed[10]) ?? null;
   }
 
   buildFilters(qx) {
-    const page = new qx.ui.tabview.Page('Filters & Strategy').set({ layout: new qx.ui.layout.VBox(8), padding: 10 });
-    const categories = new qx.ui.groupbox.GroupBox('Categories').set({ layout: new qx.ui.layout.HBox(12), padding: 8 });
+    const page = new qx.ui.tabview.Page('Filters & Strategy').set({ layout: new qx.ui.layout.VBox(6), padding: 6 });
+    const content = new qx.ui.container.Composite(new qx.ui.layout.VBox(6)).set({ padding: 4 });
+    const scroll = new qx.ui.container.Scroll();
+    scroll.add(content);
+    const categories = new qx.ui.groupbox.GroupBox('Categories and availability').set({ layout: new qx.ui.layout.Flow(12, 4), padding: 6 });
     categories.add(this.check(qx, 'Buildings', 'categoryBuildings', true));
     categories.add(this.check(qx, 'Defense', 'categoryDefense', true));
     categories.add(this.check(qx, 'Offense', 'categoryOffense', true));
     categories.add(this.check(qx, 'Affordable only', 'affordableOnly'));
     categories.add(this.check(qx, 'Resource-only mode', 'resourceOnly'));
-    page.add(categories);
+    content.add(categories);
 
     const strategyRow = new qx.ui.container.Composite(new qx.ui.layout.HBox(8));
     strategyRow.add(white(qx, 'Ranking strategy', { alignY: 'middle' }));
@@ -121,14 +127,15 @@ export class UpgradeManagerWindow {
     const target = new qx.ui.form.Spinner(1, this.setting('targetLevel', 65), 80).set({ width: 70 });
     target.addListener('changeValue', (event) => void this.setSetting('targetLevel', Number(event.getData())));
     strategyRow.add(target);
-    page.add(strategyRow);
+    content.add(strategyRow);
 
     this.baseBox = new qx.ui.groupbox.GroupBox('Enabled bases').set({ layout: new qx.ui.layout.Flow(12, 6), padding: 8 });
     this.typeBox = new qx.ui.groupbox.GroupBox('Enabled building and unit types').set({ layout: new qx.ui.layout.Flow(12, 6), padding: 8 });
     this.baseTypeBox = new qx.ui.groupbox.GroupBox('Per-base building and unit types').set({ layout: new qx.ui.layout.Flow(12, 6), padding: 8 });
-    page.add(this.baseBox);
-    page.add(this.typeBox, { flex: 1 });
-    page.add(this.baseTypeBox, { flex: 1 });
+    content.add(this.baseBox);
+    content.add(this.typeBox);
+    content.add(this.baseTypeBox);
+    page.add(scroll, { flex: 1 });
     return page;
   }
 
@@ -173,7 +180,7 @@ export class UpgradeManagerWindow {
       item.base, item.category, item.name, `${item.level} → ${item.nextLevel}`,
       number(item.costs.tiberium), number(item.costs.crystal), number(item.costs.power),
       Object.entries(item.shortfall).filter(([, value]) => value > 0).map(([key, value]) => `${key} ${number(value)}`).join(', ') || 'None',
-      eta(item.etaSeconds), item.damaged ? 'Damaged' : item.affordable ? 'Affordable' : 'Waiting'
+      eta(item.etaSeconds), item.damaged ? 'Damaged' : item.affordable ? 'Affordable' : 'Waiting', item.id
     ]));
     if (this.widgetAvailable(this.overviewStatus)) {
       this.overviewStatus.setValue(`${state.filtered.length} candidates · ${state.filtered.filter((item) => item.affordable).length} affordable`);

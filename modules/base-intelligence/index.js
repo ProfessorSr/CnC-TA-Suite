@@ -14,8 +14,8 @@ const settings = Object.freeze({
 });
 
 export const baseIntelligenceManifest = Object.freeze({
-  id: 'base-intelligence', name: 'Base Intelligence', version: '0.4.0', apiVersion: '1.0.0', author: 'ProfessorSr',
-  description: 'Owned-base overview, statistics, resources, repairs, composition, stickers, and region intelligence.',
+  id: 'base-intelligence', name: 'Player Intelligence', version: '0.6.0', apiVersion: '1.0.0', author: 'ProfessorSr',
+  description: 'Player overview, achievements, and intelligence for every owned base.',
   dependencies: Object.freeze([]), permissions: Object.freeze(['events', 'game', 'hooks', 'settings', 'windows']), settings
 });
 
@@ -32,7 +32,12 @@ export class BaseIntelligenceModule extends Module {
     let lastStickerRenderAt = 0;
     context.events.on('game:tick', () => {
       const now = Date.now();
-      this.hooks?.install?.();
+      try { this.hooks?.install?.(); }
+      catch (error) {
+        this.context?.logger?.debug?.('Base Intelligence hooks are waiting for native UI readiness.', {
+          error: error?.message ?? String(error)
+        });
+      }
       if (now - lastWindowRenderAt >= 2000 && this.window?.record?.window?.isVisible?.()) {
         lastWindowRenderAt = now;
         this.window.render();

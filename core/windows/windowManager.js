@@ -136,7 +136,8 @@ export class WindowManager {
     autoHide = false,
     pinnable = true,
     lockable = true,
-    sizeRevision = null
+    sizeRevision = null,
+    showHelp = true
   }) {
     if (!id) {
       throw new Error('[CnC-TA-Suite] Window id is required.');
@@ -220,7 +221,7 @@ export class WindowManager {
 
     const body = this.createContentWidget(content);
     body.set?.({ textColor: '#ffffff' });
-    const helpBar = this.createHelpBar(id);
+    const helpBar = showHelp ? this.createHelpBar(id) : null;
     if (helpBar) {
       const shell = new qx.ui.container.Composite(new qx.ui.layout.VBox(4));
       shell.add(helpBar);

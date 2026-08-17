@@ -90,7 +90,7 @@ A successful first run should produce these results:
 
 ### Framework
 
-- [ ] Framework version displays as `1.0.0`.
+- [ ] Framework version displays as `1.1.0`.
 - [ ] Game integration reports ready.
 - [ ] Compatibility status is visible.
 - [ ] Required services are available.

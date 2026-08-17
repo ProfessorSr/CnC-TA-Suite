@@ -2,7 +2,7 @@
 
 ## Why are there modules in a Framework-only release?
 
-CnC-TA Suite Framework v1.0.0 is designed to work independently from optional gameplay modules. However, the release includes three required control modules so the user can see, manage, and verify the Framework.
+CnC-TA Suite Framework v1.1.0 is designed to work independently from optional gameplay modules. However, the release includes required control modules so the user can see, manage, and verify the Framework.
 
 These are:
 
@@ -116,18 +116,18 @@ A support bundle should still be reviewed before it is shared. Automatic redacti
 
 Even required control modules are versioned independently.
 
-The Framework may remain at `1.0.0` while Suite Dashboard becomes `0.3.0`. That does not make the Framework incomplete. It means the Dashboard changed without requiring a breaking Framework API change.
+The Framework may remain at `1.1.0` while Suite Dashboard changes independently. That does not make the Framework incomplete. It means the Dashboard changed without requiring a Framework API change.
 
 The version relationships look like this:
 
 ```text
-CnC-TA Suite Framework  1.0.0
+CnC-TA Suite Framework  1.1.0
 Suite Dashboard         0.2.0
 Module Manager          0.1.0
 Suite Status            0.2.0
 ```
 
-Each module also declares that it expects Suite API `1.0.0`.
+Each module declares the minimum compatible Suite API it expects. Suite API `1.0.0` modules remain compatible with Framework v1.1.0.
 
 ## What is not included
 
@@ -137,11 +137,15 @@ Examples of separate feature modules may include:
 
 - War Room
 - Scanner
+- Player Intelligence
+- Alliance Intelligence
 - Upgrade Manager
 - Repair and Collection
 - Layout tools
 - Resource tools
 - Alliance tools
 - Report tools
+
+The complete Suite distribution currently includes these feature modules, while the Framework contract continues to treat them as independent packages with their own versions and permissions.
 
 Those modules belong in separate packages or folders and must carry their own documentation.

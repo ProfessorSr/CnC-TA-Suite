@@ -12,9 +12,14 @@ export class ScannerModule {
     this.id = 'scanner';
     this.name = 'Scanner';
     this.title = 'Scanner Overview';
-    this.version = '0.3.0';
+    this.version = '0.6.0';
     this.author = 'ProfessorSr';
-    this.description = 'Scans nearby Camps, Outposts, and Forgotten Bases for selected Tiberium and Crystal layouts.';
+    this.description = 'Scans and filters target layouts, exports CNCOpt links, and persists selected layouts.';
+    this.manual = Object.freeze({
+      id: this.id, title: this.name, summary: this.description,
+      steps: ['Choose target types and ranges.', 'Combine a resource-mix filter with an optional silo-touch filter.', 'Start the scan, open Get Layouts, then select cards to export or save.'],
+      controls: [['Scan', 'Starts target discovery.'], ['Pause / Resume', 'Controls current work.'], ['Get Layouts', 'Shows selectable layout cards.'], ['Export Selected', 'Copies coordinates and CNCOpt mini links.'], ['Save Selected', 'Persists layouts through refreshes.'], ['Saved Layouts', 'Opens or removes stored layouts.'], ['Clear', 'Removes current scan results.']], notes: ['The 2 Touch filters require two separate empty silo positions that each touch at least four or five Tiberium fields.']
+    });
     this.category = 'World';
     this.settingsKey = 'scanner';
     this.controller = null;
@@ -38,7 +43,7 @@ export class ScannerModule {
     }
 
     ROOT.installScannerHubExtension(hub);
-    this.controller = new ROOT.ScannerController(hub, context?.logger);
+    this.controller = new ROOT.ScannerController(hub, context?.logger, context?.storage);
     this.scannerWindow = new ROOT.ScannerWindow(this.controller);
     context?.windows?.attachHelpButton?.(this.scannerWindow.window, 'scanner');
     context?.windows?.attachHelpButton?.(this.scannerWindow.layoutWindow?.window, 'scanner');

@@ -1,13 +1,13 @@
 {
   "id": "scanner",
   "name": "Scanner",
-  "version": "0.3.0",
+  "version": "0.6.0",
   "apiVersion": "1.0.0",
   "hubApiVersion": "1.0.0",
   "author": "ProfessorSr",
-  "lastUpdated": "2026-07-21",
-  "description": "Scans nearby Camps, Outposts, Forgotten Bases, and player targets using the shared Scanner Hub.",
+  "lastUpdated": "2026-08-16",
+  "description": "Scans and filters target layouts, exports CNCOpt links, and persists selected layouts.",
   "dependencies": [],
-  "permissions": ["game", "windows"],
+  "permissions": ["game", "storage", "windows"],
   "settings": {}
 }

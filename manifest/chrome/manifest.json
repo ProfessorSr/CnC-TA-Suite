@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CnC-TA-Suite",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A modular command center and planning suite for Command & Conquer: Tiberium Alliances.",
   "permissions": [
     "storage"

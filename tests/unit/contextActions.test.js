@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeSelection } from '../../modules/context-actions/context-actions-panel.js';
+import { ACTIONS, describeSelection } from '../../modules/context-actions/context-actions-panel.js';
 import { StrategicPlanner } from '../../modules/context-actions/strategic-planner.js';
-import { findShiftedMember } from '../../modules/context-actions/strategic-map-planner.js';
+import { findShiftedMember, validPreviewMoveDestination } from '../../modules/context-actions/strategic-map-planner.js';
 
 const root = {
   Vis: {
@@ -30,9 +30,28 @@ test('Context Actions identifies a Forgotten camp', () => {
   assert.equal(result.type, 'Camp');
 });
 
+test('Context Actions exposes add and remove Suite markers for map targets', () => {
+  const add = ACTIONS.find((action) => action.action === 'marker-add');
+  const remove = ACTIONS.find((action) => action.action === 'marker-remove');
+  assert.deepEqual(add.types, ['Base', 'Forgotten Base', 'Camp', 'Outpost']);
+  assert.equal(remove.transient, 'marker-exists');
+  assert.ok(remove.scopes.includes('own'));
+});
+
 test('Strategic map discovery accepts current minifier member names and hexadecimal shifts', () => {
   assert.equal(findShiftedMember('function(a){this.ab$12=((a >>> 0x12) & 0xf);}', [18]), 'ab$12');
   assert.equal(findShiftedMember('function(a){this.long_member=(a>>17)&15}', [17]), 'long_member');
+});
+
+test('non-owned move planning validates the destination without account distance', () => {
+  const options = {
+    from: { x: 100, y: 100 }, to: { x: 103, y: 100 },
+    sectorAt: () => ({}), objectAt: () => null
+  };
+  assert.equal(validPreviewMoveDestination(options), true);
+  assert.equal(validPreviewMoveDestination({ ...options, to: options.from }), false);
+  assert.equal(validPreviewMoveDestination({ ...options, objectAt: () => ({ Type: 'City' }) }), false);
+  assert.equal(validPreviewMoveDestination({ ...options, sectorAt: () => null }), false);
 });
 
 function plannerContext() {

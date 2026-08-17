@@ -1,13 +1,13 @@
 {
   "id": "alliance",
   "name": "Alliance Intelligence",
-  "version": "0.2.0",
+  "version": "0.17.2",
   "apiVersion": "1.0.0",
   "author": "ProfessorSr",
-  "lastUpdated": "2026-07-20",
-  "description": "Alliance member, score, POI, and tier intelligence in a Suite window.",
+  "lastUpdated": "2026-08-15",
+  "description": "Alliance intelligence, POIs, diplomacy, invitations, shared markers, and browser-private persistent markers.",
   "dependencies": [],
-  "permissions": ["events", "game", "notifications", "settings", "windows"],
+  "permissions": ["events", "game", "notifications", "settings", "storage", "windows"],
   "settings": {
     "refreshSeconds": { "type": "number", "default": 10, "min": 5, "max": 300 }
   }

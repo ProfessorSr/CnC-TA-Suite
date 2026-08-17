@@ -2,6 +2,17 @@ function number(value) {
   return Math.round(Number(value) || 0).toLocaleString();
 }
 
+export function resourceWait(seconds) {
+  if (seconds === Infinity) return 'No production';
+  const total = Math.max(0, Math.ceil(Number(seconds) || 0));
+  if (total === 0) return 'Ready';
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.ceil((total % 3600) / 60);
+  return [days && `${days}d`, hours && `${hours}h`, minutes && `${minutes}m`]
+    .filter(Boolean).join(' ') || '<1m';
+}
+
 const LABELS = Object.freeze({
   buildings: 'Buildings', defense: 'Defense', offense: 'Offense'
 });
@@ -12,6 +23,16 @@ const RESOURCES = Object.freeze([
   Object.freeze({ id: 'credits', label: 'Credits', icon: 'webfrontend/ui/common/icn_res_dollar.png' }),
   Object.freeze({ id: 'power', label: 'Power', icon: 'webfrontend/ui/common/icn_res_power.png' })
 ]);
+
+const RESOURCE_IDS_BY_SCOPE = Object.freeze({
+  buildings: Object.freeze(['tiberium', 'power']),
+  offense: Object.freeze(['crystal', 'power']),
+  defense: Object.freeze(['tiberium', 'crystal', 'power'])
+});
+
+export function resourceIdsForScope(scope) {
+  return RESOURCE_IDS_BY_SCOPE[scope] ?? [];
+}
 
 export class QuickUpgradeWindow {
   constructor({ context, hub }) {
@@ -101,7 +122,7 @@ export class QuickUpgradeWindow {
       });
       row.add(label, { flex: 1 });
       costs.add(row);
-      this.resourceRows.set(resource.id, label);
+      this.resourceRows.set(resource.id, { row, label });
     }
     root.add(costs, { flex: 1 });
 
@@ -172,10 +193,14 @@ export class QuickUpgradeWindow {
         this.selectedUpgrade.setEnabled(false);
         return;
       }
-      this.selectedCosts.setValue(RESOURCES.filter((resource) => plan.costs[resource.id] > 0).map((resource) => {
+      const resourceIds = resourceIdsForScope(plan.scope);
+      this.selectedCosts.setValue(RESOURCES.filter((resource) =>
+        resourceIds.includes(resource.id) && plan.costs[resource.id] > 0
+      ).map((resource) => {
         const sufficient = plan.shortfall[resource.id] <= 0;
-        return `<span style="color:${sufficient ? '#19733a' : '#b32323'}"><b>${resource.label}</b> ${number(plan.costs[resource.id])}</span>`;
-      }).join(' &nbsp; ') || 'No resources required.');
+        return `<span style="color:${sufficient ? '#19733a' : '#b32323'}"><b>${resource.label}</b> ${number(plan.costs[resource.id])}`
+          + `${sufficient ? ' — Ready' : ` — Short ${number(plan.shortfall[resource.id])}<br>Ready in: ${resourceWait(plan.etaSeconds[resource.id])}`}</span>`;
+      }).join('<br>') || 'No resources required.');
       this.selectedUpgrade.setEnabled(plan.affordable && Object.values(plan.costs).some((value) => value > 0));
     } catch (error) {
       this.selectedName?.setValue?.('Selected upgrade information is unavailable.');
@@ -207,14 +232,20 @@ export class QuickUpgradeWindow {
       this.viewKey = `${this.hub.cityId(this.hub.currentCity())}:${plan.scope}`;
       this.heading.setValue(`${plan.city} — Upgrade All ${LABELS[plan.scope]}`);
       this.heading.setTextColor(colors.dark);
+      const resourceIds = resourceIdsForScope(plan.scope);
       for (const resource of RESOURCES) {
+        const widgets = this.resourceRows.get(resource.id);
+        const visible = resourceIds.includes(resource.id);
+        widgets?.row?.setVisibility?.(visible ? 'visible' : 'excluded');
+        if (!visible) continue;
         const needed = plan.costs[resource.id];
         const available = plan.resources[resource.id];
         const sufficient = available >= needed;
         const color = sufficient ? '#19733a' : '#b32323';
-        this.resourceRows.get(resource.id)?.setValue?.(
+        widgets?.label?.setValue?.(
           `<span style="color:${color}"><b>${resource.label}: ${number(needed)}</b><br>`
-          + `Available: ${number(available)}${sufficient ? ' — Ready' : ` — Short ${number(needed - available)}`}</span>`
+          + `Available: ${number(available)}${sufficient ? ' — Ready' : ` — Short ${number(needed - available)}`}`
+          + `${sufficient ? '' : `<br>Ready in: ${resourceWait(plan.etaSeconds[resource.id])}`}</span>`
         );
       }
       const hasCost = Object.values(plan.costs).some((value) => value > 0);
@@ -233,7 +264,7 @@ export class QuickUpgradeWindow {
             : 'Additional resources are required.');
     } catch (error) {
       this.heading?.setValue?.(error?.message ?? String(error));
-      for (const label of this.resourceRows.values()) label.setValue('—');
+      for (const { label } of this.resourceRows.values()) label.setValue('—');
       this.status?.setValue?.('Upgrade data is unavailable for the current view.');
       this.status?.setTextColor?.('#b32323');
       this.upgrade?.setEnabled?.(false);

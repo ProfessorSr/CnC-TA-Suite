@@ -47,6 +47,7 @@ export class AttackControlsPalette {
     this.singleToggleButton = null;
     this.lastSelectionToken = null;
     this.positionReady = false;
+    this.forceAttackDock = false;
     this.positionTimer = null;
     this.pendingActions = new Set();
   }
@@ -221,11 +222,22 @@ export class AttackControlsPalette {
     return { left: Math.max(8, left), top: Math.max(8, top) };
   }
 
-  async restorePosition() {
-    const stored = await this.context.storage?.get?.(POSITION_KEY, null);
-    const position = stored && Number.isFinite(stored.left) && Number.isFinite(stored.top) ? stored : this.defaultPosition();
+  dockRightOfAttackView() {
+    this.build();
+    this.forceAttackDock = true;
+    const position = this.defaultPosition();
     this.widget?.setLayoutProperties?.({ left: position.left, top: position.top });
     this.positionReady = true;
+    return position;
+  }
+
+  async restorePosition() {
+    const stored = await this.context.storage?.get?.(POSITION_KEY, null);
+    const position = !this.forceAttackDock && stored && Number.isFinite(stored.left) && Number.isFinite(stored.top)
+      ? stored : this.defaultPosition();
+    this.widget?.setLayoutProperties?.({ left: position.left, top: position.top });
+    this.positionReady = true;
+    this.forceAttackDock = false;
   }
 
   queuePositionSave() {

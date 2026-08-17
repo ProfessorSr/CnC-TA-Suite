@@ -1,16 +1,17 @@
 import { Module } from '../../core/interfaces/module.js';
 import { AllianceHub } from './alliance-hub.js';
 import { AllianceTabs } from './alliance-tabs.js';
+import { PrivateMarkerOverlay } from './private-marker-overlay.js';
 
 export const allianceManifest = Object.freeze({
   id: 'alliance',
   name: 'Alliance Intelligence',
-  version: '0.3.0',
+  version: '0.17.2',
   apiVersion: '1.0.0',
   author: 'ProfessorSr',
-  description: 'Alliance member, score, POI, and tier intelligence in a Suite window.',
+  description: 'Alliance intelligence, POIs, diplomacy, invitations, shared markers, and browser-private persistent markers.',
   dependencies: Object.freeze([]),
-  permissions: Object.freeze(['events', 'game', 'notifications', 'settings', 'windows']),
+  permissions: Object.freeze(['events', 'game', 'notifications', 'settings', 'storage', 'windows']),
   settings: Object.freeze({
     refreshSeconds: Object.freeze({ type: 'number', default: 10, min: 5, max: 300 })
   })
@@ -27,7 +28,10 @@ export class AllianceModule extends Module {
 
   async enable(context) {
     this.context = context;
-    this.tabs = new AllianceTabs({ context, hub: new AllianceHub(context) });
+    const hub = new AllianceHub(context);
+    this.tabs = new AllianceTabs({ context, hub });
+    this.privateMarkerOverlay = new PrivateMarkerOverlay({ context, hub });
+    this.unsubscribePrivateMarkers = context.eventBus?.on?.('alliance:private-markers-changed', () => this.privateMarkerOverlay?.render?.());
     this.alertedCities = new Set();
     context.events.on('game:tick', () => {
       const now = Date.now();
@@ -39,6 +43,7 @@ export class AllianceModule extends Module {
         this.lastChatRoleScanAt = now;
         this.colorChatRoles();
       }
+      this.privateMarkerOverlay?.render?.();
     });
   }
 
@@ -89,6 +94,10 @@ export class AllianceModule extends Module {
 
   async disable(context = this.context) {
     context?.windows?.close?.('alliance-intelligence');
+    this.unsubscribePrivateMarkers?.();
+    this.unsubscribePrivateMarkers = null;
+    this.privateMarkerOverlay?.destroy?.();
+    this.privateMarkerOverlay = null;
     this.tabs?.destroy();
     this.tabs = null;
     this.context = null;

@@ -4,11 +4,16 @@ export class LauncherModule {
   constructor() {
     this.id = 'launcher';
     this.name = 'Suite Dashboard';
-    this.version = '0.3.0';
+    this.version = '0.4.0';
     this.apiVersion = '1.0.0';
     this.author = 'ProfessorSr';
-    this.lastUpdated = '2026-07-20';
+    this.lastUpdated = '2026-08-12';
     this.description = 'Live dashboard for Suite, module, base, update, and dependency status.';
+    this.manual = Object.freeze({
+      id: this.id, title: this.name, summary: this.description,
+      steps: ['Open the Dashboard.', 'Select a status card or tab.', 'Refresh after module or game-state changes.'],
+      controls: [['Status cards', 'Filter module status.'], ['Refresh', 'Rebuilds live dashboard data.']], notes: []
+    });
     this.permissions = ['game', 'modules', 'windows'];
     this.settingsKey = 'launcher';
   }
