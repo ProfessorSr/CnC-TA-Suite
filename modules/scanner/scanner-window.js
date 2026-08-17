@@ -5,16 +5,17 @@
   const ROOT = (HOST.CnCTA = HOST.CnCTA || {});
 
   class ScannerWindow {
-    constructor(controller) {
+    constructor(controller, version = '') {
       this.controller = controller;
-      this.layoutWindow = new ROOT.ScannerLayoutWindow(controller);
+      this.version = version;
+      this.layoutWindow = new ROOT.ScannerLayoutWindow(controller, version);
       this.options = controller.getOptionsSnapshot();
       this.buildWindow();
       this.unsubscribe = controller.subscribe(state => this.render(state));
     }
 
     buildWindow() {
-      this.window = new qx.ui.window.Window('Scanner Overview').set({
+      this.window = new qx.ui.window.Window(`Scanner Overview${this.version ? ` v${this.version}` : ''}`).set({
         width: 1220,
         height: 590,
         showMinimize: true,

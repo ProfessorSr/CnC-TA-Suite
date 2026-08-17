@@ -44,7 +44,7 @@ export class ScannerModule {
 
     ROOT.installScannerHubExtension(hub);
     this.controller = new ROOT.ScannerController(hub, context?.logger, context?.storage);
-    this.scannerWindow = new ROOT.ScannerWindow(this.controller);
+    this.scannerWindow = new ROOT.ScannerWindow(this.controller, this.version);
     context?.windows?.attachHelpButton?.(this.scannerWindow.window, 'scanner');
     context?.windows?.attachHelpButton?.(this.scannerWindow.layoutWindow?.window, 'scanner');
   }

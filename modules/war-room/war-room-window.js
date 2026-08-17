@@ -195,6 +195,7 @@ export class WarRoomWindow {
   build() {
     if (this.content && !this.content.isDisposed?.()) return this.content;
     const qx = globalThis.qx;
+    const moduleVersion = this.context?.module?.version ?? '0.17.2';
     const root = new qx.ui.container.Composite(new qx.ui.layout.VBox(6));
     root.set({ padding: 6, textColor: '#ffffff' });
     let buildDisposed = false;
@@ -365,7 +366,7 @@ export class WarRoomWindow {
     // Compact companion for the optimizer controls. It deliberately omits the
     // troop grid: the live game attack view remains the visual formation.
     const compactLayout = new qx.ui.layout.VBox(6);
-    compactPlannerWindow = new qx.ui.window.Window('Formation Optimizer').set({
+    compactPlannerWindow = new qx.ui.window.Window(`Formation Optimizer v${moduleVersion}`).set({
       layout: compactLayout,
       padding: 7,
       width: 440,
@@ -452,7 +453,7 @@ export class WarRoomWindow {
     applicationRoot?.add?.(compactPlannerWindow, { left: 12, top: 150 });
     compactPlannerWindow.exclude();
 
-    comparisonWindow = new qx.ui.window.Window('History').set({
+    comparisonWindow = new qx.ui.window.Window(`History v${moduleVersion}`).set({
       layout: new qx.ui.layout.Canvas(),
       appearance: 'window-chat',
       padding: 0,
@@ -545,7 +546,7 @@ export class WarRoomWindow {
       comparisonWindow.open();
     };
 
-    historyWindow = new qx.ui.window.Window('Top 10').set({
+    historyWindow = new qx.ui.window.Window(`Top 10 v${moduleVersion}`).set({
       layout: new qx.ui.layout.Canvas(),
       appearance: 'window-chat',
       padding: 0,
@@ -3615,7 +3616,7 @@ export class WarRoomWindow {
     }
     this.record = await this.context.windows.open({
       id: 'war-room',
-      title: 'War Room v0.13',
+      title: 'War Room',
       content: this.build(),
       x: 120,
       y: 70,

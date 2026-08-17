@@ -18,12 +18,12 @@
   }
 
   class ScannerLayoutWindow {
-    constructor(controller) {
+    constructor(controller, version = '') {
       this.controller = controller;
       this.results = [];
       this.selected = new Set();
       this.showingSaved = false;
-      this.window = new qx.ui.window.Window('Scanner Layout').set({
+      this.window = new qx.ui.window.Window(`Scanner Layout${version ? ` v${version}` : ''}`).set({
         width: 1180,
         height: 610,
         showMinimize: true,

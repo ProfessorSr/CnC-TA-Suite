@@ -15,6 +15,28 @@ const CAPABILITIES = Object.freeze({
   diagnostics: 'diagnostics'
 });
 
+export function moduleWindowTitle(title, version) {
+  const base = String(title ?? '').trim().replace(/\s+v\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?$/i, '');
+  const release = String(version ?? '').trim();
+  return release ? `${base || 'Module'} v${release}` : (base || 'Module');
+}
+
+function versionedWindows(windows, version) {
+  if (!windows) return undefined;
+  return new Proxy(windows, {
+    get(target, property) {
+      if (property === 'open') {
+        return (options = {}) => target.open({
+          ...options,
+          title: moduleWindowTitle(options.title ?? options.id, version)
+        });
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+}
+
 export class ModuleContext {
   constructor(applicationContext, module, { permissions, moduleSettings } = {}) {
     if (!applicationContext) throw new TypeError('Application context is required.');
@@ -47,6 +69,7 @@ export class ModuleContext {
       const allowed = permissions?.allows(module.id, permission) ?? true;
       this[property] = allowed ? applicationContext[property] : undefined;
     }
+    if (this.windows) this.windows = versionedWindows(this.windows, this.module.version);
   }
 
   cleanup() {
