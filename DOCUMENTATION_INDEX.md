@@ -8,11 +8,10 @@ This index identifies the principal maintained documentation and release metadat
 - `CHANGELOG.md` — release history, v1.1.0 scope, and current unreleased changes.
 - `script_functions.md` — legacy coverage, exclusions, and suite-exclusive features.
 - `docs/modules.md` — module contract and feature-module overview.
-- `docs/01 - Project/Roadmap.md` — post-1.0 maintenance direction.
-- `docs/01 - Project/Versioning.md` — release metadata and procedure.
-- `docs/02 - Architecture/Architecture.md` — system boundaries and data flow.
+- `docs/05 - Modules and Compatibility/Versioning and Compatibility.md` — framework, API, Hub, and independent module versioning.
+- `docs/03 - How the Framework Works/Architecture and Data Flow.md` — system boundaries and data flow.
 - `docs/02 - Architecture/Declarative Modules.md` — data-driven module UI contract.
-- `docs/04 - Development/Testing.md` — automated and live validation.
+- `docs/06 - Development/Testing and Release Process.md` — automated/live validation and release procedure.
 - `docs/04 - Development/EA Client Update Workflow.md` — compatibility migration process.
 - `docs/04 - Development/Stability and Performance.md` — diagnostics and performance budgets.
 - `docs/04 - Development/v1.0.0 Release Review.md` — historical v1.0.0 release-readiness record.

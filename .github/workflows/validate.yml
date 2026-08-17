@@ -22,10 +22,9 @@ jobs:
           required=(
             .editorconfig .gitignore CHANGELOG.md CONTRIBUTING.md LICENSE README.md
             SECURITY.md VERSION PART DOCUMENTATION_INDEX.md PROJECT_TREE.md
-            "docs/01 - Project/Versioning.md"
-            "docs/02 - Architecture/Architecture.md"
-            "docs/04 - Development/Testing.md"
-            "docs/04 - Development/Releases.md"
+            "docs/05 - Modules and Compatibility/Versioning and Compatibility.md"
+            "docs/03 - How the Framework Works/Architecture and Data Flow.md"
+            "docs/06 - Development/Testing and Release Process.md"
             manifest/chrome/manifest.json scripts/build/build-extension.mjs
           )
           for path in "${required[@]}"; do
@@ -46,5 +45,5 @@ jobs:
         run: |
           set -euo pipefail
           test "$(node -p "require('./dist/chrome/manifest.json').version")" = "$(cat VERSION)"
-          test "$(find dist/chrome/modules -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "24"
+          test "$(find dist/chrome/modules -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" = "26"
           git diff --check
