@@ -4,7 +4,7 @@ This document inventories capabilities observed in the temporary `oldscripts/` r
 
 Review scope: 68 userscripts and the packaged **TA Attack Optimizer + Live Simulator v1.4**. Duplicate, forked, compact, server-specific, and old/new variants are consolidated into single requirements. Items are checked only after the capability is demonstrably implemented in the current extension.
 
-Current implementation audit: **177 of 193 eligible items complete** as of 2026-08-17. Checked items are supported by current code in Alliance Intelligence, Player Intelligence (module ID `base-intelligence`), Combat Reports, Communications, Context Actions, External Analysis, Hotkeys, Scanner, Support Manager, Tactical Map, War Room, World Map Tools, Base Layout Optimizer, Next MCV, Repair & Collection Manager, Upgrade Manager, Resource Transfer Manager, UI Tools, Module Manager, window/UI services, or shared game integration. Planned, placeholder, partial, and narrower implementations remain unchecked. The 14 red items and one unchecked yellow optional item are excluded from the eligible total.
+Current implementation audit: **177 of 193 eligible legacy items complete** as of 2026-08-17. Checked items are supported by current code in the 26 cataloged modules, shared framework services, or game integration. Planned, placeholder, partial, and narrower implementations remain unchecked. The 14 red items and one unchecked yellow optional item are excluded from the eligible total. Shipped Suite functions that were absent from the legacy checklist are recorded under **Current-extension additions found during cross-reference**.
 
 Status legend: **✅ completed**, **[ ] eligible future work**, **🟡 optional/deferred interoperability**, **🔴 do not implement**.
 
@@ -63,6 +63,7 @@ The following unattended actions are intentionally out of scope until their comp
 - [x] ✅ Enable/disable all units or only infantry, vehicles, or aircraft in the preview.
 - [x] ✅ Enable/disable an individual unit in the preview.
 - [x] ✅ Preserve transporter/garrison identifiers when formations are captured, previewed, moved, saved, and reloaded.
+- [x] ✅ Run a pause/resume-capable troop-by-troop Greedy RP search, retain manual edits made while paused, activate the best completed layout, and automatically save it as the target-scoped **Greedy** preset.
 - [ ] 🟡 **OPTIONAL / DEFERRED** — Import and export formations using CNCTAOpt-compatible links, or replace this with a Suite-owned interchange format.
 - [x] ✅ Mark world targets that have saved formations/layouts.
 
@@ -78,8 +79,8 @@ The following unattended actions are intentionally out of scope until their comp
 - [x] ✅ Compare the live formation with cached alternatives.
 - [x] ✅ Rank simulations by Construction Yard destruction and blocking-column damage.
 - [x] ✅ Rank simulations by Defense Facility destruction and armored-defense damage.
-- [ ] Rank simulations by total defense damage, Command Center damage, loot, repair cost, and battle duration.
-- [x] ✅ Search bounded Quick, Detailed, or Exhaustive candidate sets—including individual troop moves and swaps—and recommend the best result for CY, DF, defense, CC, or research/loot goals.
+- [x] ✅ Rank simulations by total defense damage using native Defensive Units remaining health, and by a specific live target-base building or defensive unit.
+- [x] ✅ Search bounded Quick, Detailed, or Exhaustive candidate sets—including individual troop moves and swaps—and recommend the best result for CY, DF, total defense damage, or research/loot goals.
 - [x] ✅ Show attacker and defender health percentages and absolute damage.
 - [x] ✅ Break defender results into structures, defense, armored defense, and unarmored defense.
 - [x] ✅ Break offense results into infantry, vehicle, and aircraft damage/repair.
@@ -214,6 +215,11 @@ The following unattended actions are intentionally out of scope until their comp
 - [ ] Upgrade designated/special bases.
 - [x] ✅ Share/scan owned base data for alliance coordination.
 
+### Research planning
+
+- [x] ✅ Add live Credit readiness/ETA indicators beside costs in the native Research window without changing research actions or prerequisites.
+- [x] ✅ Add a persistent single-item **Track** checkbox to native research cards and show Next-MCV-style Credit/RP progress, remaining amounts, and Credit ETA in a live tracking window.
+
 ## Alliance and POI tools
 
 ### Members, rankings, and alerts
@@ -283,6 +289,39 @@ The following unattended actions are intentionally out of scope until their comp
 - [ ] Replace prototype monkey-patches with reversible hooks wherever possible.
 - [ ] Remove use of dynamic `eval`/function construction and page-script self-injection.
 - [ ] Ensure automated actions expose explicit enable switches, scopes, limits, status, and stop controls.
+
+## Current-extension additions found during cross-reference
+
+These shipped functions were found by auditing the current catalog, manifests,
+module documentation, UI controls, and tests. They are implemented and checked,
+but they do not change the legacy-feature coverage denominator.
+
+### Scanning, combat, and base tools
+
+- [x] ✅ Filter Scanner results by exact 7T/5C, 6T/6C, and 5T/7C resource layouts.
+- [x] ✅ Find two separate empty silo spots that each touch four or five Tiberium fields, including diagonals.
+- [x] ✅ Save Scanner layouts, reopen or remove them, focus them on the map, and export coordinates with CNCOpt mini links.
+- [x] ✅ Follow the target open in native attack setup and dock War Room on its left with Formation Controls on its right.
+- [x] ✅ Provide compact formation-optimizer and native-simulation comparison windows.
+- [x] ✅ Turn distinct manual formation changes into cached simulation results without interrupting attack setup.
+- [x] ✅ Hide/reveal troops for a minimum-force result only after the CY is destroyed.
+- [x] ✅ Save destination-specific Quick Transfer profiles and send their native transfer commands one at a time.
+- [x] ✅ Provide native-header quick repair controls and a persistent Base Tools shortcut dock.
+- [x] ✅ Rank base-layout choices for resource goals with fixed buildings, storage needs, and move/replacement limits.
+
+### Alliance, context, and framework tools
+
+- [x] ✅ Maintain private and alliance-shared custom world markers.
+- [x] ✅ Find alliance invitation candidates from live rankings and send selected invitations after confirmation.
+- [x] ✅ Alert on attacks against any alliance member and hand the attacked base to native support controls.
+- [x] ✅ Monitor selected enemy alliances for bases near alliance members and export the matches as CSV.
+- [x] ✅ Add configurable Suite actions to native map-object menus.
+- [x] ✅ Provide a searchable Command Manual built from enabled-module help and contextual Help links.
+- [x] ✅ Provide a Suite Dashboard and Suite Status views for modules, dependencies, compatibility, lifecycle, and performance.
+- [x] ✅ Provide a read-only API Inspector with frozen snapshots, examples, and redacted diagnostic export.
+- [x] ✅ Discover modules at build time, enforce manifests/API permissions, resolve dependencies, and manage their lifecycles.
+- [x] ✅ Show enabled tools in a responsive native shortcut dock with open/close controls.
+- [x] ✅ Keep bounded structured diagnostic logs and performance-budget warnings.
 
 ## Development/PTE-only capabilities
 
@@ -390,7 +429,7 @@ IMPLEMENT** entries are policy exclusions and are not included in the eligible
 legacy-feature denominator.
 
 - **Legacy coverage:** 177/193 eligible legacy features complete.
-- **Suite modules:** 23 cataloged modules, and growing.
+- **Suite modules:** 26 cataloged modules, and growing.
 - **Suite-exclusive features:** 12 implemented capabilities with no equivalent
   workflow found in the reviewed legacy ecosystem.
 

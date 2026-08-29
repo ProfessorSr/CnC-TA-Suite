@@ -56,7 +56,7 @@ export class AttackControlsPalette {
     if (this.widget && !this.widget.isDisposed?.()) return this.widget;
     const qx = globalThis.qx;
     const layout = new qx.ui.layout.Grid(4, 4);
-    const panel = new qx.ui.window.Window(`Formation v${this.context?.module?.version ?? '0.17.2'}`).set({
+    const panel = new qx.ui.window.Window(`Formation v${this.context?.module?.version ?? '0.17.3'}`).set({
       layout,
       padding: 5,
       width: PANEL_WIDTH,

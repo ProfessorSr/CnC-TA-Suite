@@ -15,6 +15,41 @@ function values(collection) {
   return source ? (Array.isArray(source) ? source : Object.values(source)).filter(Boolean) : [];
 }
 
+export function planMoveCommands(buildings, changes) {
+  const positions = new Map(buildings.map((building) => [String(building.id), {
+    id: building.id,
+    name: building.name,
+    x: building.x,
+    y: building.y
+  }]));
+  const occupant = new Map([...positions.values()].map((building) => [`${building.x}:${building.y}`, building]));
+  const targets = new Map(changes.map((move) => [String(move.id), { x: move.toX, y: move.toY }]));
+  const commands = [];
+  const pending = () => [...targets].filter(([id, target]) => {
+    const building = positions.get(id);
+    return building && (building.x !== target.x || building.y !== target.y);
+  });
+  while (pending().length) {
+    const [id, target] = pending()[0];
+    const building = positions.get(id);
+    const fromX = building.x;
+    const fromY = building.y;
+    const displaced = occupant.get(`${target.x}:${target.y}`);
+    commands.push({ id: building.id, name: building.name, fromX, fromY, toX: target.x, toY: target.y });
+    occupant.delete(`${fromX}:${fromY}`);
+    if (displaced) {
+      displaced.x = fromX;
+      displaced.y = fromY;
+      occupant.set(`${fromX}:${fromY}`, displaced);
+    }
+    building.x = target.x;
+    building.y = target.y;
+    occupant.set(`${target.x}:${target.y}`, building);
+    if (commands.length > changes.length * 2) throw new Error('Unable to resolve the proposed building arrangement.');
+  }
+  return commands;
+}
+
 export class LayoutOptimizerHub {
   constructor(context) { this.context = context; }
   clientLib() { return this.context?.hub?.game?.services?.tryGet?.('clientLib') ?? null; }
@@ -28,10 +63,31 @@ export class LayoutOptimizerHub {
     const city = this.city();
     if (!city) throw new Error('Select one of your bases first.');
     const production = {};
+    const packageProduction = {};
     const storage = {};
     const types = this.root()?.Base?.EResourceType ?? {};
-    for (const [key, type] of [['tiberium', types.Tiberium], ['crystal', types.Crystal ?? types.Chrystal], ['power', types.Power]]) {
-      production[key] = Number(call(city, ['GetResourceGrowPerHour', 'GetResourceProductionPerHour'], type) ?? 0);
+    for (const [key, type] of [['tiberium', types.Tiberium], ['crystal', types.Crystal ?? types.Chrystal], ['power', types.Power], ['credits', types.Credits ?? types.Gold]]) {
+      if (key === 'credits') {
+        const creditsProduction = call(city, ['get_CityCreditsProduction']);
+        const resourceApi = this.root()?.Base?.Resource;
+        const nativeContinuous = creditsProduction == null ? null
+          : call(resourceApi, ['GetResourceGrowPerHour'], creditsProduction, false);
+        const nativePackage = creditsProduction == null ? null
+          : call(resourceApi, ['GetResourceBonusGrowPerHour'], creditsProduction, false);
+        production[key] = Number(nativeContinuous ?? call(
+          city, ['GetResourceGrowPerHour', 'GetResourceProductionPerHour'], type, false, false
+        ) ?? 0);
+        packageProduction[key] = Number(nativePackage ?? call(
+          city, ['GetResourceBonusGrowPerHour'], type, false, false
+        ) ?? 0);
+      } else {
+        production[key] = Number(call(
+          city, ['GetResourceGrowPerHour', 'GetResourceProductionPerHour'], type, false, false
+        ) ?? 0);
+        packageProduction[key] = Number(call(
+          city, ['GetResourceBonusGrowPerHour'], type, false, false
+        ) ?? 0);
+      }
       storage[key] = Number(call(city, ['GetResourceMaxStorage', 'GetResourceStorageLimit'], type) ?? 0);
     }
     const normalizeCosts = (requirements) => {
@@ -45,7 +101,12 @@ export class LayoutOptimizerHub {
       }
       return result;
     };
-    const buildings = values(call(city, ['get_Buildings'])).map((building) => {
+    const buildingsData = call(city, ['get_CityBuildingsData', 'get_BuildingsData']);
+    const directBuildings = values(call(city, ['get_Buildings']));
+    const buildingList = directBuildings.length
+      ? directBuildings
+      : values(call(buildingsData, ['get_AllBuildings', 'get_Buildings']));
+    const buildings = buildingList.map((building) => {
       const data = call(building, ['get_UnitGameData_Obj', 'get_TechGameData_Obj']);
       const x = Number(call(building, ['get_CoordX', 'get_X']) ?? 0);
       const y = Number(call(building, ['get_CoordY', 'get_Y']) ?? 0);
@@ -70,7 +131,8 @@ export class LayoutOptimizerHub {
     return Object.freeze({
       cityId: String(call(city, ['get_Id', 'get_CityId']) ?? ''),
       cityName: String(call(city, ['get_Name']) ?? 'Current base'),
-      buildings: Object.freeze(buildings), production: Object.freeze(production), storage: Object.freeze(storage),
+      buildings: Object.freeze(buildings), production: Object.freeze(production),
+      packageProduction: Object.freeze(packageProduction), storage: Object.freeze(storage),
       resourceFields: Object.freeze(resourceFields)
     });
   }
@@ -87,29 +149,54 @@ export class LayoutOptimizerHub {
         throw new Error(`Building state changed before moving ${move.name}. Recalculate the layout.`);
       }
     }
-    const submitted = new Set();
-    let count = 0;
-    for (const move of plan.changes) {
-      if (submitted.has(String(move.id))) continue;
-      manager.SendCommand('MoveBuilding', {
-        cityid: snapshot.cityId,
-        buildingid: move.id,
-        posX: move.fromX,
-        posY: move.fromY,
-        newPosX: move.toX,
-        newPosY: move.toY,
-        x: move.toX,
-        y: move.toY
-      }, null, null, true);
-      submitted.add(String(move.id));
-      const inverse = plan.changes.find((candidate) =>
-        candidate.fromX === move.toX && candidate.fromY === move.toY
-        && candidate.toX === move.fromX && candidate.toY === move.fromY
-      );
-      if (inverse) submitted.add(String(inverse.id));
-      count += 1;
-      await new Promise((resolve) => setTimeout(resolve, 150));
+    const commands = planMoveCommands(snapshot.buildings, plan.changes);
+    for (const move of commands) {
+      await this.sendMove(manager, snapshot.cityId, move);
     }
-    return count;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const current = this.snapshot();
+      const complete = plan.changes.every((move) => {
+        const building = current.buildings.find((item) => String(item.id) === String(move.id));
+        return building?.x === move.toX && building?.y === move.toY;
+      });
+      if (complete) return commands.length;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error('The game accepted the moves, but the resulting layout does not match the proposal. Refresh and recalculate before trying again.');
+  }
+
+  sendMove(manager, cityId, move) {
+    return new Promise((resolve, reject) => {
+      try {
+        manager.SendCommand('MoveBuilding', {
+          cityid: cityId,
+          buildingid: move.id,
+          posX: move.fromX,
+          posY: move.fromY,
+          newPosX: move.toX,
+          newPosY: move.toY,
+          x: move.toX,
+          y: move.toY
+        }, null, null, true);
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      let attempts = 0;
+      const verify = () => {
+        const building = this.snapshot().buildings.find((item) => String(item.id) === String(move.id));
+        if (building?.x === move.toX && building?.y === move.toY) {
+          resolve();
+          return;
+        }
+        attempts += 1;
+        if (attempts >= 40) {
+          reject(new Error(`Moving ${move.name} was not reflected by the game. Refresh and recalculate the layout.`));
+          return;
+        }
+        setTimeout(verify, 250);
+      };
+      setTimeout(verify, 250);
+    });
   }
 }

@@ -16,7 +16,7 @@ Suite Core and the public module API are at **v1.1.0**. The backward-compatible 
 - Private and alliance-shared custom map markers, alliance attack alerts, and enemy-to-member proximity monitoring.
 - Native-style shortcut controls that appear only for enabled modules, plus the searchable Command Manual and contextual `? Help` links.
 
-The generated catalog currently contains **26 modules**. Legacy feature coverage and intentionally excluded automation are tracked in [script_functions.md](script_functions.md).
+The generated catalog currently contains **26 modules**. Developers and players can browse the plain-English [complete feature guide](FEATURES.md). Legacy-source coverage, deferred ideas, and intentionally excluded automation are tracked in [script_functions.md](script_functions.md).
 
 ## War Room simulation boundary
 

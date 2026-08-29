@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WarRoomCalculator } from '../../modules/war-room/war-room-calculator.js';
+import {
+  preserveDisabledFormationPositions,
+  WarRoomCalculator
+} from '../../modules/war-room/war-room-calculator.js';
 import { estimatePossibleAttacks } from '../../modules/war-room/war-room-hub.js';
 
 function fixture() {
@@ -72,6 +75,45 @@ test('WarRoomCalculator creates distinct native-simulation candidates', () => {
     .map((unit) => `${unit.entityId}:${unit.x}:${unit.y}`).sort().join('|'))).size, candidates.length);
 });
 
+test('Best Formation leaves disabled troops parked unless an enabled troop claims their cell', () => {
+  const original = [
+    { entityId: 1, name: 'Enabled', enabled: true, x: 0, y: 0 },
+    { entityId: 2, name: 'Parked', enabled: false, x: 3, y: 1 },
+    { entityId: 3, name: 'Also parked', enabled: false, x: 4, y: 1 }
+  ];
+  const untouched = preserveDisabledFormationPositions(original, [
+    { ...original[0], x: 1, y: 0 },
+    { ...original[1], x: 8, y: 3 },
+    { ...original[2], x: 7, y: 3 }
+  ]);
+  assert.deepEqual(untouched.slice(1).map(({ x, y }) => [x, y]), [[3, 1], [4, 1]]);
+
+  const displaced = preserveDisabledFormationPositions(original, [
+    { ...original[0], x: 3, y: 1 },
+    { ...original[1], x: 8, y: 3 },
+    { ...original[2], x: 7, y: 3 }
+  ]);
+  assert.deepEqual([displaced[0].x, displaced[0].y], [3, 1]);
+  assert.deepEqual([displaced[1].x, displaced[1].y], [0, 0]);
+  assert.deepEqual([displaced[2].x, displaced[2].y], [4, 1]);
+});
+
+test('Best Formation candidates never move disabled troops as the initiating unit', () => {
+  const snapshot = fixture();
+  snapshot.units = [
+    { entityId: 1, name: 'Enabled', enabled: true, level: 30, x: 0, y: 0 },
+    { entityId: 2, name: 'Disabled', enabled: false, level: 99, x: 8, y: 3 }
+  ];
+  const candidates = WarRoomCalculator.candidateFormations(snapshot, 'cy', 25);
+  assert.equal(candidates.some((candidate) => /^Move Disabled|^Swap Disabled/.test(candidate.name)), false);
+  for (const candidate of candidates) {
+    const enabled = candidate.units.find((unit) => unit.entityId === 1);
+    const disabled = candidate.units.find((unit) => unit.entityId === 2);
+    if (enabled.x === 8 && enabled.y === 3) continue;
+    assert.deepEqual([disabled.x, disabled.y], [8, 3], candidate.name);
+  }
+});
+
 test('WarRoomCalculator minimum-force pass includes a rearranged formation', () => {
   const snapshot = fixture();
   snapshot.units = snapshot.units.map((unit, index) => ({ ...unit, entityId: index + 10, x: index, y: 0 }));
@@ -115,6 +157,44 @@ test('WarRoomCalculator ranks native simulations by objective destruction', () =
   assert.equal(result.objectivePercent, 0);
   assert.equal(result.blockerPercent, 50);
   assert.ok(Number.isFinite(result.score));
+});
+
+test('WarRoomCalculator ranks Maximum Defense Damage by all Defensive Units remaining', () => {
+  const snapshot = fixture();
+  snapshot.defenseUnits = [
+    { id: 500, name: 'High-level Cannon', level: 30, health: 1, x: 4, y: 8 },
+    { id: 501, name: 'Lower-level Cannon', level: 10, health: 1, x: 5, y: 8 }
+  ];
+  const response = (highRemaining, lowRemaining) => ({
+    d: {
+      s: [],
+      d: [
+        { i: 500, x: 4, y: 8, h: 100, ci: 1 },
+        { i: 501, x: 5, y: 8, h: 100, ci: 2 }
+      ]
+    },
+    e: [
+      { Key: 1, Value: { h: highRemaining } },
+      { Key: 2, Value: { h: lowRemaining } }
+    ]
+  });
+  const moreDefenseDamage = WarRoomCalculator.scoreSimulation(response(1600, 0), snapshot, 'defense');
+  const lessDefenseDamage = WarRoomCalculator.scoreSimulation(response(800, 1600), snapshot, 'defense');
+  assert.equal(moreDefenseDamage.defensePercent, 50);
+  assert.equal(lessDefenseDamage.defensePercent, 75);
+  assert.ok(moreDefenseDamage.score < lessDefenseDamage.score);
+});
+
+test('WarRoomCalculator ranks a selected live defensive unit by its native remaining health', () => {
+  const snapshot = fixture();
+  const response = (health) => ({
+    d: { s: [], d: [{ i: 500, x: 4, y: 8, h: 100, ci: 1 }] },
+    e: [{ Key: 1, Value: { h: health } }]
+  });
+  const moreDamage = WarRoomCalculator.scoreSimulation(response(400), snapshot, 'specific:defense:500');
+  const lessDamage = WarRoomCalculator.scoreSimulation(response(1200), snapshot, 'specific:defense:500');
+  assert.equal(moreDamage.objectivePercent, 25);
+  assert.ok(moreDamage.score < lessDamage.score);
 });
 
 test('WarRoomCalculator ranks Maximum RP candidates by actual native RP first', () => {

@@ -15,11 +15,11 @@ import {
 export const warRoomManifest = Object.freeze({
   id: 'war-room',
   name: 'War Room',
-  version: '0.17.2',
+  version: '0.17.3',
   apiVersion: '1.0.0',
   hubApiVersion: '1.0.0',
   author: 'ProfessorSr',
-  lastUpdated: '2026-08-12',
+  lastUpdated: '2026-08-28',
   description: 'Unified attack planning, native simulation, reports, army, target, and combat analysis.',
   dependencies: Object.freeze([]),
   permissions: Object.freeze([

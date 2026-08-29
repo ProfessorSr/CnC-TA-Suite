@@ -6,6 +6,8 @@ Notable changes to CnC-TA-Suite are recorded here. The project follows semantic 
 
 ### Added
 
+- War Room Formation Search now includes a compact **Specific target** picker populated from the live target base's buildings and defensive units. Searches rank the selected entity's native remaining health.
+- Added persistent **Track** checkboxes to native research cards and a Next-MCV-style Research Tracker with live Credit/RP progress, remaining amounts, Credit ETA, and refresh-persistent selection and window visibility.
 - Added private, refresh-persistent map markers to Alliance Intelligence and optional alliance sharing through the game's native alliance-marker channel. Base, camp, and outpost context menus can add or remove Suite markers.
 - Added Alliance Attack Alert and Alliance Proximity Monitor modules.
 - Added Scanner layout-card selection, coordinate/CNCOpt mini-link export, persistent saved layouts, and combined resource/silo filters for 7T/5C, 6T/6C, 5T/7C and two four- or five-touch Tiberium silo positions.
@@ -13,12 +15,15 @@ Notable changes to CnC-TA-Suite are recorded here. The project follows semantic 
 
 ### Changed
 
+- Formation Search runs over 100 simulations automatically save using the winning objective result; Maximum Defense Damage now ranks aggregate native Defensive Units health. Removed the unused Command Center objective.
+- Advanced War Room to v0.17.3, Research ETA to v0.6.1, and Base Layout Optimizer to v0.2.1.
 - Renamed Base Intelligence to Player Intelligence and rebuilt its overview as a player card covering the complete player and every owned base. Faction names, integer command points, score progress, rank, and alliance data now use player-facing formats.
 - War Room now opens to the left of native attack setup while the Formation Controls palette opens on the right. Best Formation hides troops only after a simulation reaches CY 0, then reveals troops in place beginning with the CY lane and strongest structure attackers.
+- Best Formation now leaves already-disabled troops in place unless an enabled troop needs their occupied cell.
 - Quick Upgrade now shows live resource-ready ETAs for aggregate and selected upgrades and displays only the resources applicable to buildings, offense, or defense.
 - Next MCV retains its open/closed state across refreshes and reopens on startup unless closed; the large Suite shortcut palette starts collapsed.
-- Research ETA now uses faction-specific GDI/NOD research catalogs and Suite-owned artwork while retaining compact resource progress and ETA information.
-- Advanced Alliance Intelligence and War Room to v0.17.2, Player Intelligence and Scanner to v0.6.0, Research ETA to v0.5.0, and Quick Upgrade/Upgrade Manager to v0.4.1.
+- Research ETA now uses faction-specific GDI/NOD research catalogs and Suite-owned artwork while retaining compact resource progress and slightly larger native Credit ETA text.
+- Advanced Alliance Intelligence and War Room to v0.17.2, Player Intelligence, Scanner, and Research ETA to v0.6.0, and Quick Upgrade/Upgrade Manager to v0.4.1.
 
 ### Removed
 

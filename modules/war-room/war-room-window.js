@@ -195,7 +195,7 @@ export class WarRoomWindow {
   build() {
     if (this.content && !this.content.isDisposed?.()) return this.content;
     const qx = globalThis.qx;
-    const moduleVersion = this.context?.module?.version ?? '0.17.2';
+    const moduleVersion = this.context?.module?.version ?? '0.17.3';
     const root = new qx.ui.container.Composite(new qx.ui.layout.VBox(6));
     root.set({ padding: 6, textColor: '#ffffff' });
     let buildDisposed = false;
@@ -292,10 +292,12 @@ export class WarRoomWindow {
     for (const [name, id] of [
       ['Destroy Construction Yard (CY)', 'cy'],
       ['Destroy Defense Facility (DF)', 'df'],
-      ['Destroy Command Center (CC)', 'cc'],
       ['Maximize Defense Damage', 'defense'],
-      ['Maximize Research Points (RP)', 'rp']
+      ['Maximize Research Points (RP)', 'rp'],
+      ['Specific target…', 'specific']
     ]) plannerGoal.add(new qx.ui.form.ListItem(name, null, id));
+    const specificTarget = new qx.ui.form.SelectBox().set({ width: 245, enabled: false });
+    specificTarget.exclude();
     const searchMode = new qx.ui.form.SelectBox().set({ width: 190 });
     searchMode.add(new qx.ui.form.ListItem('Formation search', null, 'formation'));
     searchMode.add(new qx.ui.form.ListItem('Greedy troop-by-troop RP', null, 'greedy'));
@@ -308,6 +310,7 @@ export class WarRoomWindow {
     const searchTimeLabel = label(qx, '1:30', { width: 42 });
     plannerControls.add(label(qx, 'Attack goal'));
     plannerControls.add(plannerGoal);
+    plannerControls.add(specificTarget);
     plannerControls.add(searchMode);
     plannerControls.add(label(qx, 'Sims'));
     plannerControls.add(searchTime);
@@ -386,10 +389,12 @@ export class WarRoomWindow {
     for (const [name, id] of [
       ['Destroy Construction Yard (CY)', 'cy'],
       ['Destroy Defense Facility (DF)', 'df'],
-      ['Destroy Command Center (CC)', 'cc'],
       ['Maximize Defense Damage', 'defense'],
-      ['Maximize Research Points (RP)', 'rp']
+      ['Maximize Research Points (RP)', 'rp'],
+      ['Specific target…', 'specific']
     ]) compactGoal.add(new qx.ui.form.ListItem(name, null, id));
+    const compactSpecificTarget = new qx.ui.form.SelectBox().set({ width: 220, enabled: false });
+    compactSpecificTarget.exclude();
     const compactSearchMode = new qx.ui.form.SelectBox().set({ width: 145 });
     compactSearchMode.add(new qx.ui.form.ListItem('Formation', null, 'formation'));
     compactSearchMode.add(new qx.ui.form.ListItem('Greedy Sim', null, 'greedy'));
@@ -403,6 +408,7 @@ export class WarRoomWindow {
     const compactTop = new qx.ui.container.Composite(new qx.ui.layout.Flow(5, 4));
     compactTop.add(label(qx, 'Goal'));
     compactTop.add(compactGoal, { flex: 1 });
+    compactTop.add(compactSpecificTarget, { flex: 1 });
     compactTop.add(compactSearchMode);
     compactTop.add(compactSearchTime);
     compactTop.add(compactSearchTimeLabel);
@@ -649,12 +655,19 @@ export class WarRoomWindow {
     };
     plannerGoal.addListener('changeSelection', () => syncSelection(plannerGoal, compactGoal));
     compactGoal.addListener('changeSelection', () => syncSelection(compactGoal, plannerGoal));
+    specificTarget.addListener('changeSelection', () => syncSelection(specificTarget, compactSpecificTarget));
+    compactSpecificTarget.addListener('changeSelection', () => syncSelection(compactSpecificTarget, specificTarget));
     const updateSearchModeLabel = () => {
       const greedy = searchMode.getSelection?.()?.[0]?.getModel?.() === 'greedy';
       recommend.setLabel(greedy ? 'Start Greedy Sim' : 'Simulate Best Formation');
       compactRecommend.setLabel(greedy ? 'Greedy Sim' : 'Simulate');
       plannerGoal.setEnabled(!greedy);
       compactGoal.setEnabled(!greedy);
+      const specific = !greedy && plannerGoal.getSelection?.()?.[0]?.getModel?.() === 'specific';
+      if (specific) { specificTarget.show(); compactSpecificTarget.show(); }
+      else { specificTarget.exclude(); compactSpecificTarget.exclude(); }
+      specificTarget.setEnabled(specific && specificTarget.getChildren?.().length > 0);
+      compactSpecificTarget.setEnabled(specific && compactSpecificTarget.getChildren?.().length > 0);
       searchTime.setEnabled(!greedy);
       compactSearchTime.setEnabled(!greedy);
       searchTimeLabel.setEnabled(!greedy);
@@ -1516,7 +1529,52 @@ export class WarRoomWindow {
       ]) button.setEnabled(available);
     };
 
-    const selectedGoal = () => plannerGoal.getSelection?.()?.[0]?.getModel?.() ?? 'cy';
+    const refreshSpecificTargets = () => {
+      const snapshot = this.hub.snapshot();
+      const selected = specificTarget.getSelection?.()?.[0]?.getModel?.();
+      const targets = [
+        ...(snapshot.buildings ?? []).map((item) => ({ item, kind: 'building', group: 'Building' })),
+        ...(snapshot.defenseUnits ?? []).map((item) => ({ item, kind: 'defense', group: 'Defensive unit' }))
+      ];
+      for (const control of [specificTarget, compactSpecificTarget]) control.removeAll();
+      for (const { item, kind, group } of targets) {
+        const id = Number(item.id ?? item.entityId);
+        if (!Number.isFinite(id)) continue;
+        const model = `specific:${kind}:${id}`;
+        const text = `${group}: ${item.name ?? 'Unknown'} · L${Number(item.level) || 0}`;
+        for (const control of [specificTarget, compactSpecificTarget]) control.add(new qx.ui.form.ListItem(text, null, model));
+      }
+      const match = specificTarget.getChildren?.().find((item) => item.getModel?.() === selected)
+        ?? specificTarget.getChildren?.()[0];
+      const compactMatch = compactSpecificTarget.getChildren?.().find((item) => item.getModel?.() === match?.getModel?.())
+        ?? compactSpecificTarget.getChildren?.()[0];
+      if (match) specificTarget.setSelection([match]);
+      if (compactMatch) compactSpecificTarget.setSelection([compactMatch]);
+    };
+    const selectedGoal = () => {
+      const goal = plannerGoal.getSelection?.()?.[0]?.getModel?.() ?? 'cy';
+      return goal === 'specific'
+        ? specificTarget.getSelection?.()?.[0]?.getModel?.() ?? 'cy'
+        : goal;
+    };
+    const formationSearchSaveName = (goal, analysis, result = {}) => {
+      const percent = (value) => `${Math.max(0, Number(value) || 0).toFixed(1)}%`;
+      if (/^specific:/i.test(String(goal))) {
+        const target = specificTarget.getSelection?.()?.[0]?.getLabel?.() ?? 'Specific target';
+        return `${target.replace(/^(?:Building|Defensive unit):\s*/, '')} - ${percent(result.objectivePercent)}`;
+      }
+      if (goal === 'rp') {
+        const research = Math.max(0, Number(analysis?.research) || 0);
+        if (research >= 1_000_000) return `RP - ${(research / 1_000_000).toFixed(3).replace(/\.?0+$/, '')}m`;
+        if (research >= 1_000) return `RP - ${(research / 1_000).toFixed(1).replace(/\.?0+$/, '')}k`;
+        return `RP - ${Math.round(research)}`;
+      }
+      if (goal === 'df') return `DF - ${percent(analysis?.dfRemaining)}`;
+      if (goal === 'defense') {
+        return `Def Units - ${percent(analysis?.defenderBreakdown?.defense?.remainingPercent)}`;
+      }
+      return `CY - ${percent(analysis?.cyRemaining)}`;
+    };
     const showRecommendation = (recommendation, { resetHistory = true } = {}) => {
       if (buildDisposed || !widgetAlive(formationVisual.widget) || !recommendation?.grid) return;
       const snapshot = this.hub.snapshot();
@@ -1917,7 +1975,13 @@ export class WarRoomWindow {
           const result = {
             ...scored,
             oneShot: targetDestroyed || scored.oneShot,
-            score: targetDestroyed ? -1_000_000_000_000_000 + scored.score : scored.score
+            // For Maximum RP, scoreSimulation already ranks by the actual RP
+            // returned by the native battle. A victory must not displace a
+            // higher-RP result simply because it also destroyed the target.
+            // Destruction-oriented goals retain their explicit victory bonus.
+            score: targetDestroyed && goal !== 'rp'
+              ? -1_000_000_000_000_000 + scored.score
+              : scored.score
           };
           cacheSimulation(cacheKey, {
             response, snapshot: liveSnapshot, at: Date.now(), name: candidate.name,
@@ -2054,9 +2118,11 @@ export class WarRoomWindow {
         observedFormation = formationSignature(this.hub.snapshot());
         this.context.eventBus?.emit?.('war-room:show-native-simulation');
         globalThis.ClientLib?.API?.Battleground?.GetInstance?.()?.SimulateBattle?.();
+        const autoSaved = candidates.length > 100;
+        if (autoSaved) await saveCurrentFormationPreset(formationSearchSaveName(goal, analysis, best.result));
         safeSetValue(plannerStatus, canHideTroops
-          ? `Best formation found with minimum force: ${originalActiveCount - removed} of ${originalActiveCount} troops active.`
-          : `Best formation found with all ${originalActiveCount} troops active; CY remained above 0%.`);
+          ? `Best formation found with minimum force: ${originalActiveCount - removed} of ${originalActiveCount} troops active.${autoSaved ? ' Layout auto-saved.' : ''}`
+          : `Best formation found with all ${originalActiveCount} troops active; CY remained above 0%.${autoSaved ? ' Layout auto-saved.' : ''}`);
       } catch (error) {
         safeSetValue(plannerStatus, `Formation simulation failed: ${error?.message ?? error}`);
         setPlannerResult(
@@ -2231,9 +2297,10 @@ export class WarRoomWindow {
           name: finalBest.entry.name,
           note: `${locked.size} troop(s) locked after ${completed} native simulations. The best completed formation is active.`
         });
+        await saveCurrentFormationPreset('Greedy');
         renderSimulations();
         safeSetValue(plannerStatus,
-          `Greedy Sim complete: ${locked.size} troop(s) locked after ${completed} simulations.`);
+          `Greedy Sim complete: ${locked.size} troop(s) locked after ${completed} simulations; best layout saved as Greedy.`);
       } catch (error) {
         if (runId === recommendationSequence) {
           const message = `Greedy Sim failed: ${error?.message ?? error}`;
@@ -3225,10 +3292,11 @@ export class WarRoomWindow {
       loadPreset.setEnabled(available);
       deletePreset.setEnabled(available);
     });
-    const saveCurrentFormationPreset = async () => {
+    const saveCurrentFormationPreset = async (explicitName = '') => {
       if (!this.context.storage?.set) throw new Error('Suite storage is unavailable.');
       const captured = this.hub.captureFormation();
-      const name = presetName.getValue?.()?.trim()
+      const name = String(explicitName).trim()
+        || presetName.getValue?.()?.trim()
         || `Formation ${formationPresets.filter((preset) =>
           String(preset.attackerId) === String(captured.attackerId)
           && String(preset.target?.id) === String(captured.target?.id)
@@ -3302,7 +3370,13 @@ export class WarRoomWindow {
         }
       })();
     });
-    plannerGoal.addListener('changeSelection', renderRecommendation);
+    plannerGoal.addListener('changeSelection', () => {
+      updateSearchModeLabel();
+      if (plannerGoal.getSelection?.()?.[0]?.getModel?.() === 'specific') refreshSpecificTargets();
+      renderRecommendation();
+    });
+    specificTarget.addListener('changeSelection', renderRecommendation);
+    refreshSpecificTargets();
     const playCurrentFormation = () => {
       try {
         const snapshot = this.hub.snapshot();

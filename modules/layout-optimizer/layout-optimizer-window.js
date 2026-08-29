@@ -16,6 +16,12 @@ function code(building) {
   return `${names[kind(building)] ?? 'BLD'}${building.level}`;
 }
 
+function fieldPresentation(type) {
+  if (type === 1) return { label: 'CRY', color: '#3fa9f5', tooltip: 'Crystal field' };
+  if (type === 2) return { label: 'TIB', color: '#30c36b', tooltip: 'Tiberium field' };
+  return { label: 'FIELD', color: '#a99a73', tooltip: 'Terrain field' };
+}
+
 export class LayoutOptimizerWindow {
   constructor({ context, hub, optimize }) {
     this.context = context;
@@ -30,14 +36,15 @@ export class LayoutOptimizerWindow {
 
   weights() {
     const goal = this.goal.getSelection()[0]?.getModel() ?? 'balanced';
-    if (goal === 'tiberium') return { tiberium: 100, crystal: 10, power: 10, storage: 2 };
-    if (goal === 'crystal') return { tiberium: 10, crystal: 100, power: 10, storage: 2 };
-    if (goal === 'power') return { tiberium: 10, crystal: 10, power: 100, storage: 2 };
+    if (goal === 'tiberium') return { tiberium: 100, crystal: 0, power: 0, credits: 0 };
+    if (goal === 'crystal') return { tiberium: 0, crystal: 100, power: 0, credits: 0 };
+    if (goal === 'power') return { tiberium: 0, crystal: 0, power: 100, credits: 0 };
+    if (goal === 'credits') return { tiberium: 0, crystal: 0, power: 0, credits: 100 };
     if (goal === 'custom') return {
       tiberium: this.weightTiberium.getValue(), crystal: this.weightCrystal.getValue(),
-      power: this.weightPower.getValue(), storage: this.weightStorage.getValue()
+      power: this.weightPower.getValue(), credits: this.weightCredits.getValue()
     };
-    return { tiberium: 34, crystal: 33, power: 33, storage: 0 };
+    return { tiberium: 25, crystal: 25, power: 25, credits: 25 };
   }
 
   buildGoals(qx) {
@@ -45,20 +52,17 @@ export class LayoutOptimizerWindow {
     const goalRow = new qx.ui.container.Composite(new qx.ui.layout.HBox(8));
     goalRow.add(white(qx, 'Production goal', { alignY: 'middle' }));
     this.goal = new qx.ui.form.SelectBox().set({ width: 210 });
-    for (const [label, id] of [['Max Tiberium', 'tiberium'], ['Max Crystal', 'crystal'], ['Max Power', 'power'], ['Balanced production', 'balanced'], ['Custom percentage weights', 'custom']]) {
+    for (const [label, id] of [['Max Tiberium', 'tiberium'], ['Max Crystal', 'crystal'], ['Max Power', 'power'], ['Max Credits', 'credits'], ['Balanced production', 'balanced'], ['Custom percentage weights', 'custom']]) {
       this.goal.add(new qx.ui.form.ListItem(label, null, id));
     }
     goalRow.add(this.goal);
-    goalRow.add(white(qx, 'Minimum storage', { alignY: 'middle' }));
-    this.minimumStorage = new qx.ui.form.Spinner(0, 0, 1000000).set({ width: 120 });
-    goalRow.add(this.minimumStorage);
     goalRow.add(white(qx, 'Maximum moves', { alignY: 'middle' }));
     this.maximumMoves = new qx.ui.form.Spinner(0, 12, 72).set({ width: 75 });
     goalRow.add(this.maximumMoves);
     page.add(goalRow);
 
     const custom = new qx.ui.groupbox.GroupBox('Custom weights (%)').set({ layout: new qx.ui.layout.HBox(8), padding: 8 });
-    for (const [title, property, initial] of [['Tiberium', 'weightTiberium', 34], ['Crystal', 'weightCrystal', 33], ['Power', 'weightPower', 33], ['Storage', 'weightStorage', 0]]) {
+    for (const [title, property, initial] of [['Tiberium', 'weightTiberium', 25], ['Crystal', 'weightCrystal', 25], ['Power', 'weightPower', 25], ['Credits', 'weightCredits', 25]]) {
       custom.add(white(qx, title, { alignY: 'middle' }));
       this[property] = new qx.ui.form.Spinner(0, initial, 100).set({ width: 65 });
       custom.add(this[property]);
@@ -81,7 +85,7 @@ export class LayoutOptimizerWindow {
 
   buildLayout(qx) {
     const page = new qx.ui.tabview.Page('Layout Optimizer').set({ layout: new qx.ui.layout.VBox(7), padding: 8 });
-    page.add(white(qx, 'Proposed base grid · coordinates are shown in each cell'));
+    page.add(white(qx, 'Current base layout · calculate to preview optimized alternatives · coordinates are shown in each cell'));
     this.layoutGrid = new qx.ui.container.Composite(new qx.ui.layout.Grid(3, 3)).set({
       width: 456,
       height: 332,
@@ -108,7 +112,7 @@ export class LayoutOptimizerWindow {
     }
     page.add(this.layoutGrid);
     this.productionModel = new qx.ui.table.model.Simple();
-    this.productionModel.setColumns(['Resource', 'Current / hour', 'Proposed / hour', 'Expected gain']);
+    this.productionModel.setColumns(['Resource', 'Continuous / hour', 'Package bonus / hour', 'Current total / hour', 'Proposed continuous / hour', 'Expected gain']);
     this.productionTable = new qx.ui.table.Table(this.productionModel).set({ statusBarVisible: false, height: 135 });
     page.add(this.productionTable);
     this.summary = white(qx, 'Choose goals and calculate a layout.', { textColor: '#d6b85a' });
@@ -141,7 +145,7 @@ export class LayoutOptimizerWindow {
   buildAlternatives(qx) {
     const page = new qx.ui.tabview.Page('Alternative Layouts').set({ layout: new qx.ui.layout.VBox(7), padding: 8 });
     this.alternativeModel = new qx.ui.table.model.Simple();
-    this.alternativeModel.setColumns(['Rank', 'Layout', 'Score', 'Moves', 'Storage score', 'Constraint status']);
+    this.alternativeModel.setColumns(['Rank', 'Layout', 'Score', 'Moves', 'Constraint status']);
     this.alternativeTable = new qx.ui.table.Table(this.alternativeModel).set({ statusBarVisible: true });
     this.alternativeTable.addListener('cellTap', (event) => this.selectAlternative(event.getRow?.()));
     page.add(this.alternativeTable, { flex: 1 });
@@ -173,6 +177,20 @@ export class LayoutOptimizerWindow {
           box.add(checkbox);
         }
       }
+      this.plan = null;
+      this.showCandidate({
+        name: 'Current layout',
+        layout: this.snapshot.buildings,
+        changes: []
+      });
+      this.productionModel.setData(Object.entries(this.snapshot.production).map(([resource, value]) => [
+        resource,
+        number(value),
+        number(this.snapshot.packageProduction?.[resource]),
+        number(value + (this.snapshot.packageProduction?.[resource] ?? 0)),
+        '—',
+        '—'
+      ]));
     } catch (error) {
       this.summary?.setValue?.(`Base data unavailable: ${error?.message ?? error}`);
     }
@@ -182,17 +200,19 @@ export class LayoutOptimizerWindow {
     try {
       this.refreshBase();
       this.plan = this.optimize(this.snapshot, {
-        weights: this.weights(), minimumStorage: this.minimumStorage.getValue(),
+        weights: this.weights(),
         maximumMoves: this.maximumMoves.getValue(), maximumReplacements: this.maximumReplacements.getValue(),
         fixedIds: this.fixedIds, replacementIds: this.replacementIds
       });
       this.showCandidate(this.plan.best);
       this.renderChanges(this.plan.recommendations);
       this.productionModel.setData([
-        ...Object.entries(this.plan.production).map(([resource, values]) => [resource, number(values.current), number(values.proposed), `${values.gain >= 0 ? '+' : ''}${number(values.gain)}`]),
-        ['storage capacity', number(this.plan.storage.current), number(this.plan.storage.proposed), `${this.plan.storage.proposed >= this.plan.storage.current ? '+' : ''}${number(this.plan.storage.proposed - this.plan.storage.current)}`]
+        ...Object.entries(this.plan.production).map(([resource, values]) => {
+          const packageBonus = this.snapshot.packageProduction?.[resource] ?? 0;
+          return [resource, number(values.current), number(packageBonus), number(values.current + packageBonus), number(values.proposed), `${values.gain >= 0 ? '+' : ''}${number(values.gain)}`];
+        }),
       ]);
-      this.alternativeModel.setData(this.plan.ranked.map((item) => [item.rank, item.name, Math.round(item.value), item.changes.length, Math.round(item.totals.storage), item.shortfall ? 'Storage unmet' : 'Valid']));
+      this.alternativeModel.setData(this.plan.ranked.map((item) => [item.rank, item.name, Math.round(item.value), item.changes.length, 'Valid']));
       this.conflicts.setValue(`Conflicts and unmet constraints: ${this.plan.conflicts.join(' • ') || 'None'}`);
     } catch (error) {
       this.summary.setValue(`Optimization failed: ${error?.message ?? error}`);
@@ -209,18 +229,22 @@ export class LayoutOptimizerWindow {
       const building = positions.get(`${entry.x}:${entry.y}`);
       const moved = building && candidate.changes.some((change) => String(change.id) === String(building.id));
       const field = fields.get(`${entry.x}:${entry.y}`);
-      entry.building.setValue(building ? code(building) : field === 1 ? 'TIB' : field === 2 ? 'CRY' : 'EMPTY');
-      entry.building.setTextColor(building ? '#ffffff' : field === 1 ? '#30c36b' : field === 2 ? '#3fa9f5' : '#71818d');
+      const presentation = fieldPresentation(field);
+      entry.building.setValue(building ? code(building) : field ? presentation.label : 'EMPTY');
+      entry.building.setTextColor(building ? '#ffffff' : field ? presentation.color : '#71818d');
       entry.cell.setBackgroundColor(moved ? '#4b6d82' : building ? '#1d3342' : field ? '#162832' : '#111d25');
       entry.cell.setDecorator(new globalThis.qx.ui.decoration.Decorator(
         moved ? 2 : 1,
         'solid',
         moved ? '#f2d15e' : '#60798b'
       ));
-      entry.cell.setToolTipText(building ? `${building.name} level ${building.level}` : 'Empty building slot');
+      entry.cell.setToolTipText(building
+        ? `${building.name} level ${building.level}`
+        : field ? presentation.tooltip : 'Empty building slot');
     }
     this.renderChanges(candidate.changes);
-    this.summary.setValue(`${this.snapshot.cityName} · ${candidate.name} · ${candidate.changes.length} building moves · score ${Math.round(candidate.value)}`);
+    const score = Number.isFinite(candidate.value) ? ` · score ${Math.round(candidate.value)}` : '';
+    this.summary.setValue(`${this.snapshot.cityName} · ${candidate.name} · ${candidate.changes.length} building moves${score}`);
     this.apply.setEnabled(Boolean(EXPERIMENTAL_ONE_CLICK_BUILDING_MOVES_ENABLED && candidate.changes.length));
   }
 

@@ -1,19 +1,24 @@
 import { Module } from '../../core/interfaces/module.js';
 import { RESEARCH_CATALOGS } from './research-catalog.js';
+import { buildResearchTrackerWindow } from './research-tracker-window.js';
 
 const CREDIT_ICON = 'a7d2f83e4fe41fc03990192217fd0330.png';
+const RESEARCH_ICON = 'b868f25a38496e4e29d7a6f74352538c.png';
 const ETA_ATTRIBUTE = 'data-cnc-ta-research-credit-eta';
+const TRACK_ATTRIBUTE = 'data-cnc-ta-research-track';
+const TRACKED_RESEARCH_KEY = 'module:research-eta:tracked-item:v1';
+const TRACKER_OPEN_KEY = 'module:research-eta:tracker-open:v1';
 
 export const researchEtaManifest = Object.freeze({
   id: 'research-eta',
   name: 'Research ETA',
-  version: '0.5.0',
+  version: '0.6.1',
   apiVersion: '1.0.0',
   hubApiVersion: '1.0.0',
   author: 'ProfessorSr',
-  description: 'Adds compact live credit ETAs to the game\'s native Research window.',
+  description: 'Adds live Credit ETAs and a selected-item progress tracker to the native Research window.',
   dependencies: Object.freeze([]),
-  permissions: Object.freeze(['game', 'notifications', 'windows']),
+  permissions: Object.freeze(['game', 'notifications', 'storage', 'windows']),
   settings: Object.freeze({})
 });
 
@@ -56,6 +61,17 @@ export function researchResourceProgress(current, required, growthPerHour = 0) {
   });
 }
 
+export function researchCatalogItems(catalog) {
+  const found = [];
+  for (const pages of Object.values(catalog ?? {})) {
+    for (const page of pages ?? []) for (const entry of page ?? []) {
+      found.push(entry);
+      if (entry?.upgrade) found.push(entry.upgrade);
+    }
+  }
+  return found;
+}
+
 export function formatResearchCreditEta(seconds) {
   if (seconds === 0) return 'now';
   if (!Number.isFinite(seconds) || seconds < 0) return '—';
@@ -94,6 +110,9 @@ export class ResearchEtaModule extends Module {
     this.context = null;
     this.observer = null;
     this.refreshTimer = null;
+    this.trackedResearch = null;
+    this.trackerOpen = false;
+    this.closingForLifecycle = false;
   }
 
   resources() {
@@ -123,6 +142,95 @@ export class ResearchEtaModule extends Module {
 
   researchCatalog() {
     return RESEARCH_CATALOGS[this.factionKind()] ?? RESEARCH_CATALOGS.gdi;
+  }
+
+  matchResearchItem(text) {
+    const normalized = plainText(text).toUpperCase();
+    return researchCatalogItems(this.researchCatalog())
+      .filter((item) => normalized.includes(String(item.name).toUpperCase()))
+      .sort((left, right) => right.name.length - left.name.length)[0] ?? null;
+  }
+
+  async setTrackedResearch(item) {
+    this.trackedResearch = item ? {
+      key: String(item.key), name: String(item.name),
+      credits: Number(item.credits) || 0, research: Number(item.research) || 0
+    } : null;
+    await this.context?.storage?.set?.(TRACKED_RESEARCH_KEY, this.trackedResearch);
+    this.refreshNativeResearchEtas();
+    this.trackerController?.refresh?.();
+  }
+
+  async loadTrackedResearch() {
+    const [stored, open] = await Promise.all([
+      this.context?.storage?.get?.(TRACKED_RESEARCH_KEY, null),
+      this.context?.storage?.get?.(TRACKER_OPEN_KEY, false)
+    ]);
+    if (stored?.key && stored?.name) this.trackedResearch = stored;
+    this.trackerOpen = Boolean(open);
+  }
+
+  async setTrackerOpen(value) {
+    this.trackerOpen = Boolean(value);
+    await this.context?.storage?.set?.(TRACKER_OPEN_KEY, this.trackerOpen);
+  }
+
+  trackerSnapshot() {
+    return { item: this.trackedResearch, resources: this.resources(), updatedAt: Date.now() };
+  }
+
+  async openTracker() {
+    const built = buildResearchTrackerWindow(this.context, this);
+    this.trackerController = built.controller;
+    const record = await this.context.windows.open({
+      id: 'research-eta', title: 'Research Tracker', content: built.content,
+      x: 410, y: 80, width: 360, height: 330,
+      resizable: true, singleton: true, showMinimize: true
+    });
+    await this.setTrackerOpen(true);
+    if (!record.researchTrackerPersistenceInstalled) {
+      record.researchTrackerPersistenceInstalled = true;
+      record.window?.addListener?.('close', () => {
+        if (this.closingForLifecycle) return;
+        void this.setTrackerOpen(false).catch((error) =>
+          this.context?.logger?.warn?.('Research Tracker visibility could not be saved.', error));
+      });
+    }
+    built.controller.refresh();
+    return record;
+  }
+
+  nativeResearchCard(icon) {
+    const pane = icon?.closest?.('.qx-tabview-pane');
+    const origin = icon?.getBoundingClientRect?.();
+    if (!pane || !origin) return null;
+    const catalog = researchCatalogItems(this.researchCatalog());
+    let best = null;
+    for (const node of pane.querySelectorAll?.('span,div') ?? []) {
+      const text = plainText(node.textContent).toUpperCase();
+      if (!text || text.length > 80) continue;
+      const item = catalog
+        .filter((candidate) => text === String(candidate.name).toUpperCase()
+          || text.startsWith(`${String(candidate.name).toUpperCase()} `))
+        .sort((left, right) => right.name.length - left.name.length)[0];
+      if (!item) continue;
+      const rect = node.getBoundingClientRect?.();
+      if (!rect) continue;
+      const dx = Math.abs((rect.left + rect.width / 2) - (origin.left + origin.width / 2));
+      const above = origin.top - rect.top;
+      if (dx > 130 || above < -20 || above > 190) continue;
+      const score = dx + Math.abs(above) * 0.35;
+      if (!best || score < best.score) best = { item, score };
+    }
+    const researchIcons = [...(pane.querySelectorAll?.(`img[src*="${RESEARCH_ICON}"]`) ?? [])];
+    const researchIcon = researchIcons.sort((left, right) => {
+      const a = left.getBoundingClientRect?.() ?? {};
+      const b = right.getBoundingClientRect?.() ?? {};
+      const distance = (rect) => Math.abs((rect.left ?? 0) - origin.left)
+        + Math.abs((rect.top ?? 0) - origin.top);
+      return distance(a) - distance(b);
+    })[0] ?? null;
+    return best ? { node: pane, item: best.item, researchIcon } : null;
   }
 
   researchItem(key) {
@@ -194,6 +302,9 @@ export class ResearchEtaModule extends Module {
   refreshNativeResearchEtas() {
     const root = globalThis.document;
     if (!root?.querySelectorAll) return;
+    for (const control of root.querySelectorAll(`[${TRACK_ATTRIBUTE}]`)) {
+      if (!control.suiteOwnerIcon?.isConnected) control.remove();
+    }
     const { credits, creditGrowthPerHour } = this.resources();
     for (const icon of root.querySelectorAll(`img[src*="${CREDIT_ICON}"]`)) {
       if (!icon.closest?.('.qx-tabview-pane')) continue;
@@ -212,10 +323,64 @@ export class ResearchEtaModule extends Module {
       if (!eta) {
         eta = root.createElement('span');
         eta.setAttribute(ETA_ATTRIBUTE, '');
-        eta.style.cssText = 'margin-left:2px;font-size:8px;font-weight:normal;line-height:21px;vertical-align:middle;color:#3d3d3d;white-space:nowrap;';
+        eta.style.cssText = 'margin-left:2px;font-size:9px;font-weight:normal;line-height:21px;vertical-align:middle;color:#3d3d3d;white-space:nowrap;';
         amount.insertAdjacentElement('afterend', eta);
       }
       if (eta.textContent !== text) eta.textContent = text;
+      const card = this.nativeResearchCard(icon);
+      if (!card) continue;
+      const researchAmount = card.researchIcon?.parentElement?.querySelector?.('span');
+      const tracked = {
+        key: card.item.key,
+        name: card.item.name,
+        credits: required,
+        research: parseResourceAmount(researchAmount?.textContent) ?? Number(card.item.rp) ?? 0
+      };
+      let control = icon.suiteResearchTrackControl;
+      if (control && !control.isConnected) control = null;
+      if (!control) {
+        control = root.createElement('label');
+        control.setAttribute(TRACK_ATTRIBUTE, '');
+        control.title = 'Track this item and open Research Tracker';
+        control.setAttribute('aria-label', 'Track this research item');
+        control.style.cssText = 'position:fixed;z-index:2147483647;display:flex;width:14px;height:14px;align-items:center;justify-content:center;pointer-events:auto;background:rgba(220,225,226,.94);border-radius:2px;box-sizing:border-box;cursor:pointer;';
+        const checkbox = root.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.style.cssText = 'position:relative;z-index:2147483647;display:block;pointer-events:auto;width:12px;height:12px;margin:0;cursor:pointer;';
+        control.append(checkbox);
+        control.suiteOwnerIcon = icon;
+        icon.suiteResearchTrackControl = control;
+        root.body.append(control);
+        for (const eventName of ['pointerdown', 'mousedown']) {
+          control.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          });
+        }
+        control.addEventListener('pointerup', (event) => {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          const checked = String(this.trackedResearch?.key ?? '')
+            !== String(control.suiteTrackedResearch?.key ?? '');
+          checkbox.checked = checked;
+          void this.setTrackedResearch(checked ? control.suiteTrackedResearch : null)
+            .then(() => checked ? this.openTracker() : null)
+            .catch((error) => this.context?.logger?.warn?.('Research tracking selection failed.', error));
+        });
+        control.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        });
+      }
+      const iconRect = icon.getBoundingClientRect?.();
+      if (iconRect) {
+        control.style.left = `${Math.round(iconRect.left + 88)}px`;
+        control.style.top = `${Math.round(iconRect.top + 3)}px`;
+        control.style.display = iconRect.width > 0 && iconRect.height > 0 ? 'flex' : 'none';
+      }
+      control.suiteTrackedResearch = tracked;
+      const checkbox = control.querySelector?.('input');
+      if (checkbox) checkbox.checked = String(this.trackedResearch?.key ?? '') === String(tracked.key);
     }
   }
 
@@ -235,7 +400,9 @@ export class ResearchEtaModule extends Module {
       });
       this.observer.observe(globalThis.document.body, { childList: true, subtree: true });
     }
-    this.refreshTimer = globalThis.setInterval?.(() => this.refreshNativeResearchEtas(), 5000) ?? null;
+    // The native Research window can move without changing its DOM. Refresh
+    // overlay positions once per second so checkboxes stay anchored to cards.
+    this.refreshTimer = globalThis.setInterval?.(() => this.refreshNativeResearchEtas(), 1000) ?? null;
   }
 
   stopNativeResearchEtas() {
@@ -243,24 +410,34 @@ export class ResearchEtaModule extends Module {
     this.observer = null;
     if (this.refreshTimer != null) globalThis.clearInterval?.(this.refreshTimer);
     this.refreshTimer = null;
-    globalThis.document?.querySelectorAll?.(`[${ETA_ATTRIBUTE}]`)?.forEach?.((node) => node.remove());
+    globalThis.document?.querySelectorAll?.(`[${ETA_ATTRIBUTE}],[${TRACK_ATTRIBUTE}]`)?.forEach?.((node) => node.remove());
   }
 
   async enable(context) {
     this.context = context;
+    this.closingForLifecycle = true;
     this.context?.windows?.close?.('research-eta');
+    this.closingForLifecycle = false;
+    await this.loadTrackedResearch();
     this.startNativeResearchEtas();
+    if (this.trackedResearch && this.trackerOpen) {
+      try { await this.openTracker(); }
+      catch (error) { this.context?.logger?.warn?.('Research Tracker could not be restored.', error); }
+    }
   }
 
   async open(context = this.context) {
     this.context = context;
     this.refreshNativeResearchEtas();
-    return null;
+    return this.openTracker();
   }
 
   async disable() {
     this.stopNativeResearchEtas();
+    this.closingForLifecycle = true;
     this.context?.windows?.close?.('research-eta');
+    this.closingForLifecycle = false;
+    this.trackerController = null;
     this.context = null;
   }
 

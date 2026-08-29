@@ -1,8 +1,8 @@
 # Base Layout Optimizer
 
-Base Layout Optimizer v1.0.0 is an in-game, native Qooxdoo workspace for analyzing the currently selected owned base. It does not use CNCOpt or open an external browser page.
+Base Layout Optimizer v0.2.1 is an in-game, native Qooxdoo workspace for analyzing the currently selected owned base. It does not use CNCOpt or open an external browser page.
 
-The module supports maximum Tiberium, Crystal, Power, balanced, and custom weighted goals; minimum storage; fixed buildings; replacement candidates; and move/replacement limits. It renders a compact native base grid inspired by the familiar 9-column attack-optimizer presentation, while using the full building area. Proposed moves are highlighted. It also reports current versus estimated production, expected gains, move/cost details, unmet constraints, and up to five ranked alternatives.
+The module supports maximum Tiberium, Crystal, Power, Credits, balanced, and custom percentage-weighted goals; fixed buildings; replacement candidates; and move/replacement limits. It renders a compact native base grid inspired by the familiar 9-column attack-optimizer presentation, while using the full building area. Proposed moves are highlighted. It also reports current versus estimated production, expected gains, move/cost details, unmet constraints, and up to five ranked alternatives.
 
 Replacement, addition, and upgrade entries are recommendations only. They are never bought, sold, placed, or upgraded automatically.
 

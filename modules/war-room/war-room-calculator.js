@@ -1,3 +1,48 @@
+const formationIdentity = (unit) => String(unit?.entityId ?? unit?.id ?? unit?.mdbId);
+const formationPosition = (unit) => `${Number(unit?.x) || 0}:${Number(unit?.y) || 0}`;
+
+export function preserveDisabledFormationPositions(originalUnits = [], proposedUnits = []) {
+  const proposedById = new Map(proposedUnits.map((unit) => [formationIdentity(unit), { ...unit }]));
+  const enabled = originalUnits.filter((unit) => unit.enabled !== false);
+  const disabled = originalUnits.filter((unit) => unit.enabled === false);
+  const resultById = new Map();
+  const occupied = new Set();
+
+  for (const original of enabled) {
+    const proposed = proposedById.get(formationIdentity(original)) ?? { ...original };
+    resultById.set(formationIdentity(original), proposed);
+    occupied.add(formationPosition(proposed));
+  }
+
+  const enabledOrigins = enabled.map((unit) => ({ x: Number(unit.x) || 0, y: Number(unit.y) || 0 }));
+  const allCells = [];
+  for (let y = 0; y < 4; y += 1) for (let x = 0; x < 9; x += 1) allCells.push({ x, y });
+  const displaced = [];
+  for (const original of disabled) {
+    const position = { x: Number(original.x) || 0, y: Number(original.y) || 0 };
+    if (occupied.has(formationPosition(position))) {
+      displaced.push(original);
+      continue;
+    }
+    const settled = { ...original, x: position.x, y: position.y };
+    resultById.set(formationIdentity(original), settled);
+    occupied.add(formationPosition(settled));
+  }
+  for (const original of displaced) {
+    const proposed = proposedById.get(formationIdentity(original));
+    const originalPosition = { x: Number(original.x) || 0, y: Number(original.y) || 0 };
+    const position = [...enabledOrigins,
+      ...(proposed ? [{ x: Number(proposed.x) || 0, y: Number(proposed.y) || 0 }] : []),
+      ...allCells
+    ].find((cell) => !occupied.has(formationPosition(cell))) ?? originalPosition;
+    const settled = { ...original, x: position.x, y: position.y };
+    resultById.set(formationIdentity(original), settled);
+    occupied.add(formationPosition(settled));
+  }
+
+  return originalUnits.map((unit) => resultById.get(formationIdentity(unit)) ?? { ...unit });
+}
+
 export class WarRoomCalculator {
   static combatProfile(entity) {
     const name = String(entity?.name ?? '').toLowerCase();
@@ -52,6 +97,11 @@ export class WarRoomCalculator {
 
   static objective(snapshot, goal) {
     const buildings = snapshot.buildings ?? [];
+    const specific = /^specific:(building|defense):(\d+)$/i.exec(String(goal));
+    if (specific) {
+      const pool = specific[1].toLowerCase() === 'defense' ? snapshot.defenseUnits ?? [] : buildings;
+      return pool.find((item) => Number(item.id ?? item.entityId) === Number(specific[2])) ?? null;
+    }
     if (goal === 'cy') {
       return buildings.find((item) => /construction|yard|cy\b/i.test(item.name))
         ?? buildings.find((item) => [112, 151, 177].includes(Number(item.id)))
@@ -59,10 +109,6 @@ export class WarRoomCalculator {
     }
     if (goal === 'df') {
       return buildings.find((item) => /defen[cs]e facility|\bdf\b/i.test(item.name))
-        ?? null;
-    }
-    if (goal === 'cc') {
-      return buildings.find((item) => /command center|command centre|\bcc\b/i.test(item.name))
         ?? null;
     }
     if (goal === 'defense') {
@@ -179,7 +225,8 @@ export class WarRoomCalculator {
     const seen = new Set();
     const candidates = [];
     const add = (name, units) => {
-      const normalized = units.map((unit) => ({
+      const settled = preserveDisabledFormationPositions(snapshot.units, units);
+      const normalized = settled.map((unit) => ({
         ...unit,
         x: Math.max(0, Math.min(width - 1, Number(unit.x) || 0)),
         y: Math.max(0, Math.min(height - 1, Number(unit.y) || 0))
@@ -206,8 +253,9 @@ export class WarRoomCalculator {
     for (const moveCount of [1, 2, 3]) {
       const nudged = current.map((unit) => ({ ...unit }));
       const movers = [...nudged]
+        .filter((unit) => unit.enabled !== false)
         .sort((left, right) => right.level - left.level)
-        .slice(0, Math.min(moveCount, nudged.length));
+        .slice(0, Math.min(moveCount, nudged.filter((unit) => unit.enabled !== false).length));
       const occupied = new Set(nudged
         .filter((unit) => !movers.includes(unit))
         .map((unit) => `${unit.x}:${unit.y}`));
@@ -250,7 +298,7 @@ export class WarRoomCalculator {
       Math.abs(left.x - objectiveColumn) - Math.abs(right.x - objectiveColumn)
       || left.y - right.y
     );
-    const orderedUnits = [...current].sort((left, right) =>
+    const orderedUnits = [...current].filter((unit) => unit.enabled !== false).sort((left, right) =>
       Number(right.level || 0) - Number(left.level || 0)
     );
     const moveLimit = requestedCount >= 150 ? orderedUnits.length : requestedCount <= 25 ? 3 : requestedCount >= 100 ? 10 : 7;
@@ -262,10 +310,13 @@ export class WarRoomCalculator {
         ));
       }
     }
-    const swapLimit = requestedCount >= 150 ? orderedUnits.length : requestedCount <= 25 ? 3 : requestedCount >= 100 ? 10 : 6;
-    for (let first = 0; first < Math.min(swapLimit, orderedUnits.length); first += 1) {
-      for (let second = first + 1; second < Math.min(swapLimit, orderedUnits.length); second += 1) {
-        const left = orderedUnits[first], right = orderedUnits[second];
+    const swapPartners = [...current].sort((left, right) =>
+      Number(right.level || 0) - Number(left.level || 0));
+    const swapLimit = requestedCount >= 150 ? swapPartners.length : requestedCount <= 25 ? 3 : requestedCount >= 100 ? 10 : 6;
+    for (const left of orderedUnits.slice(0, swapLimit)) {
+      for (const right of swapPartners.slice(0, swapLimit)) {
+        if (left === right) continue;
+        if (right.enabled !== false && formationIdentity(left) > formationIdentity(right)) continue;
         add(`Swap ${left.name} / ${right.name}`, current.map((item) => {
           if (item === left) return { ...item, x: right.x, y: right.y };
           if (item === right) return { ...item, x: left.x, y: left.y };
@@ -295,7 +346,8 @@ export class WarRoomCalculator {
     const states = new Map((response?.e ?? []).map((entry) => [entry.Key, entry.Value]));
     const buildings = response?.d?.s ?? [];
     const defenders = response?.d?.d ?? [];
-    const objectivePool = goal === 'defense' ? defenders : buildings;
+    const specificDefense = /^specific:defense:/i.test(String(goal));
+    const objectivePool = goal === 'defense' || specificDefense ? defenders : buildings;
     const objectiveRecord = objectivePool.find((record) =>
       (Number(record.x) === Number(objective.x) && Number(record.y) === Number(objective.y))
       || Number(record.i) === Number(objective.id)
@@ -316,6 +368,9 @@ export class WarRoomCalculator {
     const defenderStart = allTargets.reduce((sum, record) => sum + starting(record), 0);
     const defenderEnd = allTargets.reduce((sum, record) => sum + remaining(record), 0);
     const defenderPercent = defenderStart > 0 ? defenderEnd / defenderStart * 100 : 0;
+    const defenseStart = defenders.reduce((sum, record) => sum + starting(record), 0);
+    const defenseEnd = defenders.reduce((sum, record) => sum + remaining(record), 0);
+    const defensePercent = defenseStart > 0 ? defenseEnd / defenseStart * 100 : 100;
     const oneShot = defenderPercent <= 0.05;
     if (goal === 'rp') {
       const analysis = this.analyzeNativeSimulation(response, snapshot, 'Maximum RP candidate');
@@ -328,6 +383,20 @@ export class WarRoomCalculator {
           - Math.max(0, Number(analysis.ownRemaining) || 0),
         research,
         objectivePercent,
+        blockerPercent,
+        defenderPercent,
+        oneShot
+      });
+    }
+    if (goal === 'defense') {
+      return Object.freeze({
+        // Defensive Units is the native outcome metric for this objective;
+        // lower remaining health means more defensive damage was dealt.
+        score: defensePercent * 1_000_000
+          + defenderPercent * 10_000
+          + blockerPercent * 100,
+        objectivePercent: defensePercent,
+        defensePercent,
         blockerPercent,
         defenderPercent,
         oneShot
